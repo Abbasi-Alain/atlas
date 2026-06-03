@@ -1,0 +1,27 @@
+name: ci
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          shellcheck bin/atlas hooks/atlas-skill-loader.sh install.sh \
+                     adapters/*/install.sh
+      - name: bootstrap test
+        run: bash tests/bootstrap.test.sh
+      - name: self-check the example
+        run: |
+          cd examples/sample-project
+          ../../bin/atlas check

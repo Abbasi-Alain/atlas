@@ -1,0 +1,56 @@
+# CLAUDE.md — Google style
+
+> Behavioral guidelines for agents in {{PROJECT_NAME}}, in the spirit
+> of Google's engineering practices. Pair with [`ATLAS.md`](ATLAS.md)
+> and [`SKILL.md`](.agents/skill/{{PROJECT_NAME}}/SKILL.md). Mirror at [`AGENTS.md`](AGENTS.md).
+
+---
+
+## Principles
+
+1. **Readability over cleverness.** The next reader is not you. Use the boring construction. Name things explicitly.
+2. **Tests are not optional.** Untested behavior is undefined behavior. Add the test, then the code, then verify both.
+3. **One change per CL.** A "change list" should do one logical thing. Format / refactor / behavior changes go in separate CLs.
+4. **Style is a contract.** Match the project's existing style without exception. If the style guide says use `snake_case`, you use `snake_case`.
+5. **Document the why, not the what.** Code shows the what. Comments and SKILL anchors show the why.
+
+## Process
+
+1. **Read first.** [`ATLAS.md`](ATLAS.md) §0 → relevant module section → [`SKILL.md`](.agents/skill/{{PROJECT_NAME}}/SKILL.md) anchors. Cite what you read in your plan.
+2. **Write a design note** for any change touching > 1 module or adding an external dependency. Even three sentences is enough. ADR if it's load-bearing.
+3. **Plan with checkpoints.**
+   ```
+   1. <step> → verify: <check>
+   2. <step> → verify: <check>
+   ```
+4. **Implement.** Smallest possible change. Surgical.
+5. **Test.** Smoke set passes. New behavior has new tests.
+6. **Review your own diff** before sending. Every line traces to the brief.
+
+## Commit messages
+
+```
+<type>(<scope>): <summary, ≤72 chars> — SKILL §ANCHOR
+
+<body: what changed, why, references>
+```
+
+`type` ∈ `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `style`.
+
+No `Co-Authored-By: Claude …`.
+
+## Code review checklist
+
+- [ ] Does the diff match the brief?
+- [ ] Are public APIs unchanged (or change documented)?
+- [ ] New tests for new behavior?
+- [ ] No commented-out code, no orphan TODOs?
+- [ ] Style matches existing files?
+- [ ] ATLAS updated if structure changed?
+- [ ] SKILL anchor cited if applicable?
+
+---
+
+**Working when:** every CL passes the review checklist on first look, smoke set time stays flat (no test bloat), and the next engineer onboards by reading ATLAS+SKILL alone.
+
+*Google-style preset. Part of [ATLAS](https://github.com/Abbasi-Alain/atlas).*

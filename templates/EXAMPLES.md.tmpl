@@ -1,0 +1,198 @@
+# EXAMPLES — concrete patterns for {{PROJECT_NAME}}
+
+> Real transformations. Read these once and you'll know how ATLAS,
+> SKILL, and CLAUDE.md are supposed to be used. Steal the patterns;
+> the formats are stable.
+>
+> If you're new here: read [`CLAUDE.md`](CLAUDE.md) first, this file
+> second, then [`ATLAS.md`](ATLAS.md) and [`SKILL.md`](.agents/skill/{{PROJECT_NAME}}/SKILL.md) when you actually need them.
+
+---
+
+## 1. Vague task → concrete goal
+
+The single biggest source of bad agent output is taking a vague brief at face value. The fix is mechanical: rewrite the brief into something with a checkable outcome.
+
+| Vague brief | ❌ Wrong move | ✅ Concrete goal |
+|---|---|---|
+| "Add validation to the user form" | Spray `if (!x) throw` everywhere | "Write tests covering empty, oversized, malformed inputs; make them pass. Update §3 in ATLAS if a new validation module is born." |
+| "Fix the bug" | Patch the symptom | "Write a failing test that reproduces the bug. Fix root cause. Test goes green. Add SKILL anchor if non-obvious." |
+| "Refactor the auth module" | Rename + restructure | "Existing tests pass before and after. Public API unchanged. List which conventions changed in the commit message." |
+| "Improve perf" | Sprinkle caches | "Benchmark before. Commit shows ≥30% reduction on endpoint X. No correctness regression in test suite." |
+| "Clean up the codebase" | _(reject)_ | _Ask: "Clean up what? Pick one of: unused imports / dead exports / long functions / typos. I'll do one."_ |
+| "Make it work" | _(reject)_ | _Ask: "Make what work? Cite the failing test or the specific symptom."_ |
+| "Add observability" | Add 50 log lines | "Add structured logs at the 3 happy-path checkpoints; emit one metric per request; add 1 dashboard. Update ATLAS §O." |
+
+---
+
+## 2. Writing a SKILL anchor
+
+A SKILL anchor is **a warning to the next agent**. If you wouldn't warn anyone, don't add one.
+
+### ❌ Bad anchor *(too abstract, no pointer, no symptom)*
+
+```markdown
+<a id="be-careful-with-dates"></a>
+### §BE-CAREFUL-WITH-DATES — handle dates carefully
+
+Dates are tricky. Make sure to handle timezones and DST correctly.
+```
+
+**Why it's bad:** "be careful" isn't actionable. No symptom, no pointer, no commit. The next agent learns nothing they didn't already suspect.
+
+### ✅ Good anchor
+
+```markdown
+<a id="raw-utc-render"></a>
+### §RAW-UTC-RENDER — TZ change must re-shift the whole history
+
+**Symptom.** Change the TZ dropdown → x-axis labels on already-rendered data stay in the OLD timezone until the next incoming envelope.
+
+**Root cause.** Panels stored **pre-shifted Date objects** in their buffers. Once stored, they're immutable to the original TZ.
+
+**Do NOT.** Pre-shift dates into JS buffers; cache Date instances.
+
+**Do.** Store **raw UTC seconds** (numbers). Convert at render time via `proximaPanelUtil.tzShiftedDates(arr)`. Register `__tz_changed__` → `render` so the dropdown triggers an immediate re-render.
+
+**Where.** `static/cvd-panel.js`, `static/indicators-pane.js`, `static/imbalance.js`.
+
+**Shipped in.** `c294bd0`.
+```
+
+**Why it works:** symptom is specific and observable, root cause is unambiguous, the do/do-not pair is mechanically applicable, the pointer is precise, the SHA lets future agents read the patch.
+
+### Trigger checklist — add an anchor when:
+
+- [ ] You spent more than 30 minutes debugging it.
+- [ ] The fix touches **Do NOT** territory (something that looks right but isn't).
+- [ ] Root cause is not obvious from reading the code post-fix.
+- [ ] An external API has a non-obvious gotcha.
+- [ ] The bug could plausibly recur.
+
+If **none** apply: skip the anchor. Bloat hurts more than absence.
+
+---
+
+## 3. Writing an ATLAS entry
+
+An ATLAS entry is a *pointer*, not content. Three columns: `Node | Role | Talks-to`.
+
+### ❌ Bad entry *(too vague, no edges)*
+
+```markdown
+| [`auth.py`](src/auth.py) | Handles authentication | — |
+```
+
+**Why it's bad:** "handles authentication" tells me nothing I couldn't learn from the filename. No `Talks-to` means the graph is broken — no agent can navigate from here.
+
+### ✅ Good entry
+
+```markdown
+| [`auth.py`](src/auth.py) | OAuth2 token exchange + JWT validation. **`verify_token()` is the single source of truth** — every protected route calls it. SKILL §JWT-CLOCK-SKEW. | [`users.py`](src/users.py), [`config.py::JWT_SECRET`](src/config.py), [external: `pyjwt`](https://pyjwt.readthedocs.io) |
+```
+
+**Why it works:** the role names the specific responsibility, the bolded clause flags the canonical entry point, the SKILL pointer hooks the gotcha, the `Talks-to` lists every dependency (internal + external) so the graph stays walkable.
+
+### Pattern: bold the canonical entry point
+
+If a file has one function every other file depends on, **bold** it in the Role column. Saves a grep:
+
+```markdown
+| [`registry.rs`](src/registry.rs) | Layer registry — **`LayerRegistry::build_default()`** is the canonical wiring of all 10 memory layers. | [`memory/`](src/memory/) |
+```
+
+---
+
+## 4. A commit message that uses ATLAS+SKILL+CLAUDE.md
+
+### ❌ Bad message
+
+```
+fix bug
+```
+
+### ✅ Good message
+
+```
+fix(live): prevent CVD freeze in pre-market — SKILL §LEE-READY-LEADING-ZERO-ONLY
+
+Symptom: CVD line flat at zero 04:00→09:30 ET on AAPL, MSFT, TSLA.
+Root cause: leading-zero run of Lee-Ready tick test had no intra-bar
+fallback (see §LEE-READY-INTRABAR for related context).
+
+Fix:
+- microstructure.py::lee_ready_direction now restricts the intra-bar
+  fallback to the leading zero-run (preserves mid-series ffill
+  semantics).
+- indicators.py::obv takes optional open_= for the same fallback path.
+- paper_runner.py::on_bar computes direction with the fallback before
+  emitting CVD.
+
+Smoke: 52 passed, 1 skipped (uv run pytest test_microstructure.py
+test_indicators.py test_live.py -m 'not slow').
+
+ATLAS: no structural change.
+SKILL: §LEE-READY-LEADING-ZERO-ONLY shipped; §LEE-READY-INTRABAR
+       appendix row updated to point at this SHA.
+```
+
+**Why it works:** title summarises the *outcome* and cites the anchor; body restates symptom → root cause → fix with file pointers; closes with smoke evidence and explicit ATLAS+SKILL bookkeeping. Future agents searching `git log --grep '§LEE-READY'` find this immediately.
+
+---
+
+## 5. A "what I did NOT change" report
+
+When you finish a task, naming your boundaries is as valuable as listing your changes.
+
+### ✅ Good closing report
+
+```
+## What changed
+- live/ops.py: replay op now sleeps bar_sec/speed between emits (executor-safe).
+- live/paper_runner.py: no change.
+
+## What I did NOT change (and why)
+- multi_runner.py: out of scope. Hot-attach is per-symbol; the multi-symbol
+  parallel-runner refactor is task #105.
+- the `Any` import error in cli.py: pre-existing, predates this branch.
+
+## Smoke
+56 passed, 1 skipped, 1 warning in 1.68s
+
+## New SKILL anchor (if any)
+- §REPLAY-WALL-CLOCK — implementation pointer + commit SHA recorded in appendix.
+
+## Open items
+- live verification against a real Alpaca/IBKR session — needs creds.
+```
+
+The "did NOT change" block prevents the next agent from undoing your scope decisions or treating an unfixed issue as fresh.
+
+---
+
+## 6. A bad PR I'd reject
+
+Pattern recognition. Spot the smells:
+
+```
+diff --git a/src/auth.py b/src/auth.py
++ # Renamed verify_token → validate_token for clarity (no behavior change)
++ # Also fixed some typos in nearby comments
++ # Added type hints to neighbouring functions
++ # Extracted a constant for the default expiry
++ # Switched from f-string to .format() to match the rest of the codebase
++ # (Then the actual one-line bug fix)
+```
+
+**Why it's bad:**
+- Six unrelated changes in one PR. Each violates CLAUDE.md §3 (surgical).
+- Renames break inbound callers + cited SKILL anchors silently.
+- "Switched to .format()" is style cosplay, not a bug fix.
+
+**The reviewer's question:** *"Does every changed line trace to the user's request?"* — five out of six don't.
+
+**The fix:** make the one-line bug fix in this PR; open separate PRs for each cleanup if any of them genuinely matter.
+
+---
+
+*Part of the [ATLAS](https://github.com/Abbasi-Alain/atlas) standard. The patterns above are stable across versions; the specific examples evolve with the project.*

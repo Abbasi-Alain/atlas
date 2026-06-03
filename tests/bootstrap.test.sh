@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# tests/bootstrap.test.sh — smoke tests for the public atlas CLI.
+
+set -u  # NOT -e or -o pipefail — we deliberately run failing commands.
+
+ATLAS_HOME="$(cd "$(dirname "$0")/.." && pwd)"
+export ATLAS_HOME
+CLI="$ATLAS_HOME/bin/atlas"
+
+PASS=0; FAIL=0
+_pass() { echo "  PASS: $*"; PASS=$((PASS+1)); }
+_fail() { echo "  FAIL: $*" >&2; FAIL=$((FAIL+1)); }
+_cleanup() { [[ -n "${TMP:-}" && -d "$TMP" ]] && rm -rf "$TMP"; }
+trap _cleanup EXIT
+
+TMP="$(mktemp -d)"
+cd "$TMP"
+git init -q -b main 2>/dev/null || true
+
+# --- core ----------------------------------------------------------------
+
+# version
+if NO_COLOR=1 "$CLI" version | grep -qE 'atlas v[0-9]+\.[0-9]+\.[0-9]+'; then _pass "version prints"; else _fail "version"; fi
+
+# init (default style)
+"$CLI" init >/dev/null
+[[ -f "$TMP/ATLAS.md" ]]     && _pass "init wrote ATLAS.md"     || _fail "no ATLAS.md"
+[[ -f "$TMP/CLAUDE.md" ]]    && _pass "init wrote CLAUDE.md"    || _fail "no CLAUDE.md"
+[[ -f "$TMP/AGENTS.md" ]]    && _pass "init wrote AGENTS.md"    || _fail "no AGENTS.md"
+[[ -f "$TMP/EXAMPLES.md" ]]  && _pass "init wrote EXAMPLES.md"  || _fail "no EXAMPLES.md"
+if diff -q "$TMP/CLAUDE.md" "$TMP/AGENTS.md" >/dev/null 2>&1; then
+  _pass "AGENTS.md mirrors CLAUDE.md"
+else
+  _fail "AGENTS.md != CLAUDE.md"
+fi
+skill_count=$(find "$TMP/.agents/skill" -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')
+[[ "$skill_count" == "1" ]] && _pass "init wrote SKILL.md" || _fail "no SKILL.md (count=$skill_count)"
+
+# overwrite refused
+init_out="$("$CLI" init 2>&1)"
+echo "$init_out" | grep -q "skip" && _pass "init refuses overwrite" || _fail "init overwrote"
+
+# check passes
+if "$CLI" check >/dev/null 2>&1; then _pass "check passes on fresh init"; else _fail "check failed"; fi
+
+# anchors
+anchors_out="$("$CLI" anchors 2>&1)"
+echo "$anchors_out" | grep -q "no-coauthor"      && _pass "anchors lists §NO-COAUTHOR"    || _fail "missing §NO-COAUTHOR"
+echo "$anchors_out" | grep -q "atlas-is-index"   && _pass "anchors lists §ATLAS-IS-INDEX" || _fail "missing §ATLAS-IS-INDEX"
+
+# anchor add
+"$CLI" anchor add TEST-ANCHOR "one-line test" >/dev/null
+"$CLI" anchors | grep -q "test-anchor" && _pass "anchor add inserts" || _fail "anchor add"
+
+# duplicate detection
+"$CLI" anchor add TEST-ANCHOR "one-line test" >/dev/null
+check_out="$("$CLI" check 2>&1)"; check_rc=$?
+if [[ $check_rc -ne 0 ]] && echo "$check_out" | grep -q "duplicate"; then
+  _pass "check flags duplicate anchors"
+else
+  _fail "duplicates not detected"
+fi
+
+# --- public style presets ------------------------------------------------
+echo ""
+echo "-- style presets --"
+
+"$CLI" styles | grep -q "karpathy" && _pass "styles lists karpathy" || _fail "missing karpathy"
+"$CLI" styles | grep -q "strict"   && _pass "styles lists strict"   || _fail "missing strict"
+"$CLI" styles | grep -q "minimal"  && _pass "styles lists minimal"  || _fail "missing minimal"
+"$CLI" styles | grep -q "google"   && _pass "styles lists google"   || _fail "missing google"
+
+# unknown style rejected
+TMP2="$(mktemp -d)"; pushd "$TMP2" >/dev/null
+"$CLI" init --style bogus >/dev/null 2>&1; rc=$?
+[[ $rc -ne 0 ]] && _pass "unknown --style rejected (rc=$rc)" || _fail "unknown style accepted"
+popd >/dev/null; rm -rf "$TMP2"
+
+# karpathy preset
+TMP3="$(mktemp -d)"; pushd "$TMP3" >/dev/null
+git init -q -b main 2>/dev/null
+"$CLI" init --style karpathy >/dev/null
+grep -q "Don't assume" CLAUDE.md && _pass "karpathy preset writes mantra" || _fail "no mantra"
+popd >/dev/null; rm -rf "$TMP3"
+
+# minimal preset is short
+TMP4="$(mktemp -d)"; pushd "$TMP4" >/dev/null
+git init -q -b main 2>/dev/null
+"$CLI" init --style minimal >/dev/null
+lines=$(wc -l < ATLAS.md | tr -d ' ')
+[[ $lines -lt 60 ]] && _pass "minimal ATLAS is short ($lines lines)" || _fail "too long ($lines)"
+popd >/dev/null; rm -rf "$TMP4"
+
+# --- mirror --------------------------------------------------------------
+echo ""
+echo "-- mirror --"
+
+TMP10="$(mktemp -d)"; pushd "$TMP10" >/dev/null
+git init -q -b main 2>/dev/null
+"$CLI" mirror init >/dev/null 2>&1
+[[ -f .atlas/mirror.allow ]]                       && _pass "mirror init writes .atlas/mirror.allow"     || _fail "no mirror.allow"
+[[ -f .github/workflows/atlas-promote.yml ]]       && _pass "mirror init writes GH action (staged)"      || _fail "no atlas-promote.yml"
+grep -q "refs/heads/main:refs/heads/public" .atlas/mirror.allow && _pass "staged default: main→public"  || _fail "wrong staged refspec"
+
+"$CLI" mirror push --remote origin >/dev/null 2>&1; rc=$?
+[[ $rc -ne 0 ]] && _pass "mirror push refuses remote='origin'" || _fail "didn't refuse origin"
+
+status_out="$("$CLI" mirror status 2>&1)"
+echo "$status_out" | grep -q "allowed refspecs"  && _pass "mirror status prints allowlist"   || _fail "status missing allowlist"
+echo "$status_out" | grep -q "atlas-promote.yml" && _pass "mirror status detects GH action"  || _fail "status missing workflow"
+
+REMOTE="$(mktemp -d)"; git init -q --bare "$REMOTE"
+git remote add public "$REMOTE"
+echo hi > README.md && git add README.md && git -c user.email=t@t -c user.name=t commit -q -m i
+"$CLI" mirror push >/dev/null 2>&1
+git --git-dir="$REMOTE" branch | grep -q public && _pass "mirror push lands main on remote 'public' branch" || _fail "main didn't land"
+rm -rf "$REMOTE"
+
+"$CLI" mirror init --direct --force >/dev/null 2>&1
+grep -q "refs/heads/main:refs/heads/main" .atlas/mirror.allow && _pass "--direct: main→main refspec" || _fail "wrong direct refspec"
+
+"$CLI" mirror init --dual-repo --force >/dev/null 2>&1; rc=$?
+[[ $rc -ne 0 ]] && _pass "--dual-repo requires --public-repo" || _fail "didn't refuse missing --public-repo"
+
+"$CLI" mirror init --dual-repo --public-repo "git@github.com:y/p.git" --force >/dev/null 2>&1
+grep -q "DUAL-REPO" .atlas/mirror.allow                && _pass "--dual-repo writes DUAL-REPO config"          || _fail "no DUAL-REPO"
+[[ -f .github/workflows/atlas-promote-to-public.yml ]] && _pass "--dual-repo writes cross-repo workflow"       || _fail "no cross-repo workflow"
+grep -q "PUBLIC_REPO_DEPLOY_KEY" .github/workflows/atlas-promote-to-public.yml && _pass "dual-repo needs deploy key" || _fail "missing deploy key reference"
+popd >/dev/null; rm -rf "$TMP10"
+
+# --- auth (read-only + ssh sandboxed via fake HOME) ---------------------
+echo ""
+echo "-- auth --"
+
+auth_out="$("$CLI" auth status 2>&1)"
+echo "$auth_out" | grep -q "vendor CLIs" && _pass "auth status prints vendor section" || _fail "missing vendor section"
+echo "$auth_out" | grep -q "SSH keys"     && _pass "auth status prints SSH section"    || _fail "missing SSH section"
+
+FAKE_HOME="$(mktemp -d)"
+HOME="$FAKE_HOME" "$CLI" auth login --method ssh --email "t@t" >/dev/null 2>&1
+[[ -f "$FAKE_HOME/.ssh/id_ed25519_github" ]]     && _pass "auth login creates github key"  || _fail "no github key"
+[[ -f "$FAKE_HOME/.ssh/id_ed25519_gitlab" ]]     && _pass "auth login creates gitlab key"  || _fail "no gitlab key"
+grep -q "atlas-auth:start" "$FAKE_HOME/.ssh/config" && _pass "auth login adds marker block" || _fail "no marker block"
+HOME="$FAKE_HOME" "$CLI" auth login --method ssh --email "t@t" >/dev/null 2>&1; rc=$?
+[[ $rc -eq 0 ]] && _pass "auth login --method ssh is idempotent" || _fail "re-run failed"
+n=$(grep -c "atlas-auth:start" "$FAKE_HOME/.ssh/config")
+[[ "$n" == "1" ]] && _pass "auth login doesn't duplicate marker on re-run" || _fail "marker duplicated ($n)"
+rm -rf "$FAKE_HOME"
+
+# --- runtime adapters ---------------------------------------------------
+echo ""
+echo "-- runtime adapters --"
+
+TMP_ADAPT="$(mktemp -d)"; pushd "$TMP_ADAPT" >/dev/null
+
+PROJECT_DIR="$PWD" "$ATLAS_HOME/adapters/cursor/install.sh" >/dev/null 2>&1
+[[ -f .cursor/rules/atlas.mdc ]] && _pass "cursor adapter writes .cursor/rules/atlas.mdc" || _fail "no cursor rule"
+grep -q "alwaysApply: true" .cursor/rules/atlas.mdc && _pass "cursor rule has alwaysApply" || _fail "no alwaysApply"
+
+PROJECT_DIR="$PWD" "$ATLAS_HOME/adapters/copilot/install.sh" >/dev/null 2>&1
+[[ -f .github/copilot-instructions.md ]] && _pass "copilot adapter writes .github/copilot-instructions.md" || _fail "no copilot instructions"
+PROJECT_DIR="$PWD" "$ATLAS_HOME/adapters/copilot/install.sh" >/dev/null 2>&1
+n=$(grep -c "atlas-bootstrap:start" .github/copilot-instructions.md)
+[[ "$n" == "1" ]] && _pass "copilot adapter idempotent (marker count=1)" || _fail "copilot duplicated ($n)"
+
+PROJECT_DIR="$PWD" ZED_CFG="$PWD/.fake-zed-cfg" "$ATLAS_HOME/adapters/zed/install.sh" >/dev/null 2>&1
+[[ -f .zed/atlas.md ]] && _pass "zed adapter writes .zed/atlas.md" || _fail "no zed hint"
+[[ -f .fake-zed-cfg/agents.md ]] && _pass "zed adapter writes user-level agents.md" || _fail "no zed user-level"
+
+popd >/dev/null; rm -rf "$TMP_ADAPT"
+
+TMP_GEM="$(mktemp -d)"
+GEMINI_DIR="$TMP_GEM" "$ATLAS_HOME/adapters/gemini/install.sh" >/dev/null 2>&1
+[[ -f "$TMP_GEM/GEMINI.md" ]] && _pass "gemini adapter writes GEMINI.md" || _fail "no GEMINI.md"
+GEMINI_DIR="$TMP_GEM" "$ATLAS_HOME/adapters/gemini/install.sh" >/dev/null 2>&1
+n=$(grep -c "atlas-bootstrap:start" "$TMP_GEM/GEMINI.md")
+[[ "$n" == "1" ]] && _pass "gemini adapter idempotent (marker count=1)" || _fail "gemini duplicated ($n)"
+rm -rf "$TMP_GEM"
+
+echo ""
+echo "=== $PASS passed, $FAIL failed ==="
+[[ $FAIL -eq 0 ]] || exit 1

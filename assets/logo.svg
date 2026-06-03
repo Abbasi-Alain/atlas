@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="ATLAS">
+  <title>ATLAS</title>
+  <desc>Bold triangular A with nested rotated triangles (parallax / mirror), corner-dot halos, a central focal glow, and scattered accent stars.</desc>
+
+  <defs>
+    <!-- Triangle stroke gradients -->
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+    <linearGradient id="gMid" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="gInner" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="gCore" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#e0e7ff"/>
+      <stop offset="100%" stop-color="#67e8f9"/>
+    </linearGradient>
+
+    <!-- Corner dots -->
+    <radialGradient id="dotCyan" cx="50%" cy="50%" r="60%">
+      <stop offset="0%"  stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </radialGradient>
+    <radialGradient id="dotGold" cx="50%" cy="50%" r="60%">
+      <stop offset="0%"  stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#ca8a04"/>
+    </radialGradient>
+
+    <!-- Focal glow behind the centroid -->
+    <radialGradient id="focal" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#22d3ee" stop-opacity="0.45"/>
+      <stop offset="55%" stop-color="#3b82f6" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0b1220" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Background subtle vignette -->
+    <radialGradient id="bgVig" cx="50%" cy="50%" r="80%">
+      <stop offset="0%"  stop-color="#162033"/>
+      <stop offset="100%" stop-color="#070b15"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded-square background with vignette -->
+  <rect width="256" height="256" rx="48" ry="48" fill="url(#bgVig)"/>
+
+  <!-- Constellation: tiny accent stars scattered around the mark -->
+  <g fill="#67e8f9">
+    <circle cx="32"  cy="56"  r="1.4" opacity="0.55"/>
+    <circle cx="224" cy="48"  r="1.6" opacity="0.65"/>
+    <circle cx="56"  cy="36"  r="1"   opacity="0.4"/>
+    <circle cx="200" cy="72"  r="1.2" opacity="0.45"/>
+    <circle cx="36"  cy="160" r="1.3" opacity="0.45"/>
+    <circle cx="218" cy="160" r="1"   opacity="0.4"/>
+    <circle cx="128" cy="226" r="1.3" opacity="0.5"/>
+    <circle cx="20"  cy="124" r="1.1" opacity="0.35"/>
+    <circle cx="238" cy="124" r="1.1" opacity="0.35"/>
+    <circle cx="76"  cy="232" r="1"   opacity="0.4"/>
+    <circle cx="180" cy="232" r="1"   opacity="0.4"/>
+  </g>
+
+  <!-- Focal glow behind centroid -->
+  <circle cx="128" cy="149" r="78" fill="url(#focal)"/>
+
+  <!-- ============================================================
+       Nested triangles — alternating small rotations around the
+       centroid (128, 149) create a kaleidoscope/mirror shimmer.
+       ============================================================ -->
+
+  <!-- Outer A — no rotation, full bold -->
+  <path d="M 128 48 L 216 200 L 40 200 Z"
+        fill="none" stroke="url(#g)" stroke-width="14"
+        stroke-linejoin="round"/>
+
+  <!-- Triangle 2 — 78% scale, rotated +6° -->
+  <path d="M 128 70 L 197 188 L 59 188 Z"
+        fill="none" stroke="url(#gMid)" stroke-width="9"
+        stroke-linejoin="round" opacity="0.78"
+        transform="rotate(6 128 149)"/>
+
+  <!-- Triangle 3 — 56% scale, rotated -10° -->
+  <path d="M 128 92 L 178 177 L 78 177 Z"
+        fill="none" stroke="url(#gInner)" stroke-width="6"
+        stroke-linejoin="round" opacity="0.6"
+        transform="rotate(-10 128 149)"/>
+
+  <!-- Triangle 4 — 35% scale, rotated +18° -->
+  <path d="M 128 113 L 159 167 L 97 167 Z"
+        fill="none" stroke="url(#gInner)" stroke-width="4"
+        stroke-linejoin="round" opacity="0.45"
+        transform="rotate(18 128 149)"/>
+
+  <!-- Triangle 5 — innermost, 18% scale, rotated -26° -->
+  <path d="M 128 131 L 144 158 L 112 158 Z"
+        fill="none" stroke="url(#gCore)" stroke-width="2.5"
+        stroke-linejoin="round" opacity="0.55"
+        transform="rotate(-26 128 149)"/>
+
+  <!-- Core dot at centroid -->
+  <circle cx="128" cy="149" r="3" fill="#e0e7ff" opacity="0.85"/>
+  <circle cx="128" cy="149" r="6" fill="#67e8f9" opacity="0.18"/>
+
+  <!-- ============================================================
+       Three corner anchors, each with a soft halo for depth.
+       ============================================================ -->
+
+  <!-- Apex (gold anchor) -->
+  <circle cx="128" cy="48" r="24" fill="#facc15" opacity="0.15"/>
+  <circle cx="128" cy="48" r="18" fill="#facc15" opacity="0.22"/>
+  <circle cx="128" cy="48" r="14" fill="url(#dotGold)"/>
+  <circle cx="128" cy="48" r="4"  fill="#fffbeb" opacity="0.9"/>
+
+  <!-- Base-left (cyan node) -->
+  <circle cx="40" cy="200" r="22" fill="#22d3ee" opacity="0.12"/>
+  <circle cx="40" cy="200" r="16" fill="#22d3ee" opacity="0.2"/>
+  <circle cx="40" cy="200" r="12" fill="url(#dotCyan)"/>
+  <circle cx="40" cy="200" r="3"  fill="#e0f7ff" opacity="0.85"/>
+
+  <!-- Base-right (cyan node) -->
+  <circle cx="216" cy="200" r="22" fill="#22d3ee" opacity="0.12"/>
+  <circle cx="216" cy="200" r="16" fill="#22d3ee" opacity="0.2"/>
+  <circle cx="216" cy="200" r="12" fill="url(#dotCyan)"/>
+  <circle cx="216" cy="200" r="3"  fill="#e0f7ff" opacity="0.85"/>
+</svg>

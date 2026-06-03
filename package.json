@@ -1,0 +1,47 @@
+{
+  "name": "@atlas-agents/cli",
+  "version": "0.1.0",
+  "description": "ATLAS — the project-map standard for agentic codebases. Graph index + error-pattern playbook your sub-agents read first.",
+  "license": "MIT",
+  "homepage": "https://github.com/Abbasi-Alain/atlas",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Abbasi-Alain/atlas.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Abbasi-Alain/atlas/issues"
+  },
+  "bin": {
+    "atlas": "./bin/atlas-node"
+  },
+  "files": [
+    "bin/",
+    "templates/",
+    "adapters/",
+    "hooks/",
+    "docs/SPEC.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "ai",
+    "agents",
+    "claude",
+    "claude-code",
+    "codex",
+    "opencode",
+    "hermes",
+    "llm",
+    "documentation",
+    "project-map",
+    "subagents",
+    "skill",
+    "atlas"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "scripts": {
+    "test": "bash tests/bootstrap.test.sh"
+  }
+}
