@@ -1,0 +1,30 @@
+name: release-deb
+
+# Builds atlas_<version>_all.deb on every published release and uploads
+# it as a release asset. Lets users curl the .deb directly from the
+# release page or via the latest/download/ shortcut.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Build .deb
+        run: |
+          bash packaging/debian/build-deb.sh
+          ls -lh dist/
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" dist/atlas_*.deb --clobber

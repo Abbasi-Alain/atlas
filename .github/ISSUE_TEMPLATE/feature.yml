@@ -1,0 +1,47 @@
+name: ✨ Feature request
+description: A new subcommand, flag, or behavior that fits the ATLAS spec.
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: One paragraph. Concrete scenario, ideally with a real project.
+      placeholder: |
+        When I run `atlas init` inside a Cargo workspace, it can't tell which
+        sub-crate is the entry point and the §0 quick-orientation row points
+        at the workspace root instead of the bin crate.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What does the command, flag, or behavior look like?
+      placeholder: |
+        `atlas init --entry crates/cli` writes §0 with `crates/cli/src/main.rs`
+        as the "Run the project" row.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      placeholder: e.g. auto-detection from Cargo.toml workspace.default-members
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - CLI subcommand or flag
+        - New style preset
+        - New runtime adapter
+        - Template change (ATLAS / SKILL / CLAUDE / EXAMPLES)
+        - Spec change (docs/SPEC.md)
+        - Other
+    validations:
+      required: true

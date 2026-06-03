@@ -1,0 +1,61 @@
+name: release-aur
+
+# On every GitHub release, bump the PKGBUILD in the AUR repo (aur.archlinux.org/atlas.git)
+# with the new pkgver + sha256sums, regenerate .SRCINFO, and push.
+#
+# Requires:
+#   - AUR account created at https://aur.archlinux.org/register
+#   - The empty AUR repo cloned + first PKGBUILD pushed (one-time;
+#     see packaging/aur/README.md)
+#   - Secrets:
+#       AUR_USERNAME      your AUR username
+#       AUR_EMAIL         email associated with that username
+#       AUR_SSH_PRIVATE_KEY  the ed25519 private key paired with the
+#                         public key uploaded to your AUR account
+#                         (https://aur.archlinux.org/account/ → "Edit Account"
+#                          → "SSH Public Key")
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  bump-aur:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Compute release tarball SHA256
+        id: sha
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARBALL="https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+          for i in 1 2 3 4 5 6; do
+            SHA=$(curl -sL "$TARBALL" | sha256sum | awk '{print $1}')
+            [ -n "$SHA" ] && break
+            sleep 10
+          done
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "sha=$SHA"          >> $GITHUB_OUTPUT
+
+      - name: Update PKGBUILD with new pkgver + sha
+        run: |
+          sed -i -E "s|^pkgver=.*$|pkgver=${{ steps.sha.outputs.version }}|" packaging/aur/PKGBUILD
+          sed -i -E "s|^pkgrel=.*$|pkgrel=1|" packaging/aur/PKGBUILD
+          sed -i -E "s|^sha256sums=.*$|sha256sums=('${{ steps.sha.outputs.sha }}')|" packaging/aur/PKGBUILD
+          echo "=== updated PKGBUILD ==="
+          cat packaging/aur/PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: atlas
+          pkgbuild: packaging/aur/PKGBUILD
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "atlas v${{ steps.sha.outputs.version }}"
+          allow_empty_commits: false
+          updpkgsums: true

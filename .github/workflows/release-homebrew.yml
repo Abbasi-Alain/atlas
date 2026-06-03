@@ -1,0 +1,70 @@
+name: release-homebrew
+
+# On every GitHub release, bump the Formula in the Abbasi-Alain/homebrew-atlas
+# tap with the new version + url + sha256, then commit + push.
+#
+# Requires:
+#   - The tap repo exists at github.com/Abbasi-Alain/homebrew-atlas
+#     (one-time setup; see packaging/homebrew/README.md)
+#   - Formula/atlas.rb exists in that tap repo (push the initial one once)
+#   - Secret HOMEBREW_TAP_TOKEN: a PAT (fine-grained or classic) with
+#     `Contents: read+write` scope on the homebrew-atlas repo.
+#     Generate: https://github.com/settings/tokens/new
+#     Then:     repo Settings → Secrets and variables → Actions → New secret
+#               Name: HOMEBREW_TAP_TOKEN
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  bump-tap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute release tarball SHA256
+        id: sha
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARBALL="https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+          # Retry up to 60s — GitHub takes a moment to make the tarball available after a release.
+          for i in 1 2 3 4 5 6; do
+            SHA=$(curl -sL "$TARBALL" | sha256sum | awk '{print $1}')
+            if [ "$SHA" != "$(echo -n '' | sha256sum | awk '{print $1}')" ]; then
+              break
+            fi
+            sleep 10
+          done
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "url=$TARBALL" >> $GITHUB_OUTPUT
+          echo "✅ v${VERSION}  sha256=${SHA}"
+
+      - name: Checkout the tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: Abbasi-Alain/homebrew-atlas
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Update Formula/atlas.rb
+        run: |
+          cd tap
+          F=Formula/atlas.rb
+          # Replace the three lines that change per-release.
+          sed -i -E "s|^(\s*url\s+\").*(\".*)$|\1${{ steps.sha.outputs.url }}\2|" "$F"
+          sed -i -E "s|^(\s*sha256\s+\")[0-9a-f]+(\".*)$|\1${{ steps.sha.outputs.sha }}\2|" "$F"
+          sed -i -E "s|^(\s*version\s+\")[^\"]+(\".*)$|\1${{ steps.sha.outputs.version }}\2|" "$F"
+          echo "=== diff ==="
+          git --no-pager diff "$F" || true
+
+      - name: Commit + push to tap
+        run: |
+          cd tap
+          if git diff --quiet Formula/atlas.rb; then
+            echo "no changes (formula already up to date)"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/atlas.rb
+          git commit -m "atlas v${{ steps.sha.outputs.version }}"
+          git push origin HEAD:main

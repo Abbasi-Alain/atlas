@@ -1,0 +1,58 @@
+name: release
+
+# Orchestrator: when a tag like v0.2.0 is pushed, this creates the GitHub
+# release with auto-generated notes. The release-npm / release-deb /
+# release-homebrew / release-aur workflows then fire on `release: published`
+# and run in parallel.
+#
+# User flow:
+#   npm version minor          # bumps package.json + creates tag
+#   git push origin main --tags
+#   # → GH Release created
+#   # → npm publish (release-npm.yml)
+#   # → .deb built + uploaded   (release-deb.yml)
+#   # → homebrew tap bumped     (release-homebrew.yml)
+#   # → AUR PKGBUILD bumped     (release-aur.yml)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract CHANGELOG entry for this tag
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Extract the block from CHANGELOG.md between this version header
+          # and the next H2 header.
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { f=1; print; next }
+            f && /^## \[/ { exit }
+            f { print }
+          ' CHANGELOG.md > /tmp/release-notes.md
+          # Fall back to "see CHANGELOG.md" if extraction returned empty.
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for changes." > /tmp/release-notes.md
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }} — ATLAS v${{ steps.changelog.outputs.version }}
+          body_path: /tmp/release-notes.md
+          draft: false
+          prerelease: false
+          generate_release_notes: false

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions — ideas, questions, show & tell
+    url: https://github.com/Abbasi-Alain/atlas/discussions
+    about: For open-ended discussion, design ideas, or showing what you built with ATLAS.
+  - name: 📖 Spec
+    url: https://github.com/Abbasi-Alain/atlas/blob/main/docs/SPEC.md
+    about: Before filing a spec-change request, read the v0.1 spec.
+  - name: 🔐 Security
+    url: https://github.com/Abbasi-Alain/atlas/security/advisories/new
+    about: Report a security vulnerability privately (do NOT file a public issue).

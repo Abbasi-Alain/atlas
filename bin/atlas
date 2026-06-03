@@ -1,0 +1,1848 @@
+#!/usr/bin/env bash
+# atlas — CLI for the ATLAS project-map standard.
+#
+# Subcommands:
+#   atlas init [--style <preset>] [--stack <a,b,c>] [--force]
+#                                     bootstrap ATLAS.md + SKILL.md + CLAUDE.md
+#                                     + AGENTS.md + EXAMPLES.md (+ style seeds)
+#                                     + stack-specific docs in cwd.
+#                                     --style: default | minimal | strict |
+#                                              karpathy | google
+#                                     --stack: requires a style with stacks/ subdir
+#                                              (comma-separated; pick any subset)
+#   atlas check                       lint files, verify anchors unique
+#   atlas anchors                     list every SKILL anchor (machine-readable)
+#   atlas anchor add NAME "summary"   append a stub anchor to SKILL.md
+#   atlas critique <topic> [--with-codex|--with-claude]
+#                                     append CRITICS.md row stub + print the
+#                                     brutal-honest prompt template. Optional
+#                                     flags pipe the prompt to a real CLI
+#                                     (codex / claude) for an actual second
+#                                     opinion. Defaults to print-only.
+#   atlas gap-to-article <gap-id> [--writer <path>]
+#                                     scaffold an article dir for a resolved
+#                                     novel implementation gap.
+#                                     --writer (default: agent-scientific-ai-writer/)
+#   atlas cost                        parse ATLAS §C + §GPU; emit current-state
+#                                     summary: idle $, components not at $0,
+#                                     stale price-audits.
+#   atlas mirror init [--staged|--direct] [--remote NAME]
+#                                     scaffold .atlas/mirror.allow + (if
+#                                     staged) a GitHub Action that promotes
+#                                     public -> main on push. Default: staged.
+#   atlas mirror push [--remote NAME] [--dry-run]
+#                                     push only allowlisted refs to the public
+#                                     remote. Refuses if remote is 'origin'.
+#                                     Enforces SKILL §GITLAB-PRIVATE-GITHUB-PUBLIC.
+#   atlas mirror status [--remote NAME]
+#                                     show config + what would be pushed.
+#   atlas adr add "<title>"           create docs/adr/NNNN-<slug>.md from
+#                                     the template (auto-numbered). Updates
+#                                     ATLAS.md §A3 index if present.
+#   atlas adr list                    list every ADR in docs/adr/ with status.
+#   atlas research add "<topic>"      create research/NNN-<slug>.md from
+#                                     the schema in research/README.md.
+#   atlas research list               list every research note.
+#   atlas auth login [--method ssh|vendor] [--email <email>]
+#                                     log in to GitHub + GitLab. ssh = generate
+#                                     per-host keys + ~/.ssh/config. vendor =
+#                                     brew-install gh+glab and run their auth
+#                                     flows. No --method = interactive picker.
+#   atlas auth status                 show what's authenticated (keys, gh
+#                                     status, glab status, ssh -T tests).
+#   atlas repo create [--github|--gitlab] [--public|--private] [options]
+#                                     wrap gh/glab repo create. Creates the
+#                                     remote, adds it as `origin` (or
+#                                     --remote NAME), pushes main + tags.
+#                                     Defaults: --github --public, name=cwd
+#                                     basename, description auto-pulled from
+#                                     the first README quote-block.
+#   atlas install --runtime <name>    wire ATLAS into an agent runtime
+#                                     <claude-code|codex|opencode|hermes|generic>
+#   atlas styles                      list available --style presets
+#   atlas stacks                      list --stack add-ons per style
+#   atlas version                     print version
+#   atlas help                        show this message
+#
+# The CLI looks up its template + adapter assets relative to its install
+# location (resolved through symlinks).
+
+set -euo pipefail
+
+ATLAS_VERSION="0.1.0"
+
+# --- color + logo --------------------------------------------------------
+# Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
+_c_enabled() {
+  [[ -z "${NO_COLOR:-}" ]] && [[ -t 1 ]] && [[ "${ATLAS_NO_COLOR:-0}" != "1" ]]
+}
+_c() {
+  # _c <code> <text>   — wrap text in an ANSI color, no-op when disabled.
+  if _c_enabled; then printf '\033[%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi
+}
+_c_red()    { _c 31 "$1"; }
+_c_green()  { _c 32 "$1"; }
+_c_yellow() { _c 33 "$1"; }
+_c_blue()   { _c 34 "$1"; }
+_c_cyan()   { _c 36 "$1"; }
+_c_dim()    { _c 2  "$1"; }
+_c_bold()   { _c 1  "$1"; }
+
+# ASCII logo + tagline. Use printf so escapes render even when piped.
+_logo() {
+  if _c_enabled; then
+    local C=$'\033[36m' B=$'\033[1;36m' D=$'\033[2m' Y=$'\033[33m' R=$'\033[0m'
+    printf '%s   _   _____ _      _    ____  %s\n' "$B" "$R"
+    printf '%s  / \\ |_   _| |    / \\  / ___| %s\n' "$B" "$R"
+    printf '%s / _ \\  | | | |   / _ \\ \\___ \\ %s\n' "$B" "$R"
+    printf '%s/ ___ \\ | | | |__/ ___ \\ ___) |%s\n' "$B" "$R"
+    printf '%s\\_/   \\_\\|_| |____/_/   \\_\\____/%s   %s🗺  atlas v%s%s\n' "$B" "$R" "$Y" "$ATLAS_VERSION" "$R"
+    printf '\n'
+    printf '  %sthe project-map standard for agentic codebases%s ⭐\n' "$C" "$R"
+    printf '  %shttps://github.com/Abbasi-Alain/atlas%s\n' "$D" "$R"
+  else
+    cat <<EOF
+   _   _____ _      _    ____
+  / \\ |_   _| |    / \\  / ___|
+ / _ \\  | | | |   / _ \\ \\___ \\
+/ ___ \\ | | | |__/ ___ \\ ___) |
+\\_/   \\_\\|_| |____/_/   \\_\\____/   atlas v${ATLAS_VERSION}
+
+  the project-map standard for agentic codebases
+  https://github.com/Abbasi-Alain/atlas
+EOF
+  fi
+}
+
+# Resolve to the real install dir (follow symlinks).
+_resolve_self() {
+  local src="${BASH_SOURCE[0]}"
+  local dir
+  while [[ -L "$src" ]]; do
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")/.." && pwd
+}
+ATLAS_HOME="${ATLAS_HOME:-$(_resolve_self)}"
+TEMPLATES="$ATLAS_HOME/templates"
+ADAPTERS="$ATLAS_HOME/adapters"
+# HOOKS is exported for adapters that source us; silence shellcheck SC2034.
+# shellcheck disable=SC2034
+HOOKS="$ATLAS_HOME/hooks"
+
+# --- helpers --------------------------------------------------------------
+
+_die()  { echo "$(_c_red '❌ atlas:') $*" >&2; exit 1; }
+_say()  { echo "$(_c_dim '   atlas:') $*"; }
+_warn() { echo "$(_c_yellow '⚠️  atlas:') $*" >&2; }
+_ok()   { echo "$(_c_green '   ✅') $*"; }
+_fail() { echo "$(_c_red '   ❌') $*"; }
+_banner() {
+  # _banner <emoji> <title>
+  if _c_enabled; then
+    printf "\n\033[1;36m%s %s\033[0m\n" "$1" "$2"
+  else
+    printf "\n%s %s\n" "$1" "$2"
+  fi
+}
+_have() { command -v "$1" >/dev/null 2>&1; }
+
+_project_name() {
+  local n
+  n="$( { git config --get remote.origin.url 2>/dev/null || true; } \
+       | sed -E 's#.*/##; s#\.git$##' )"
+  [[ -z "$n" ]] && n="$(basename "$PWD")"
+  echo "$n"
+}
+
+_render() {
+  local in="$1" out="$2" force="${3:-0}"
+  if [[ -e "$out" && "$force" != "1" ]]; then
+    _say "$out exists — skip (--force to overwrite)"
+    return 0
+  fi
+  mkdir -p "$(dirname "$out")"
+
+  local project src_dir build_file test_cmd date_now
+  project="$(_project_name)"
+  src_dir="src"
+  if [[ -d "src" ]]; then
+    local subs
+    subs="$(find src -mindepth 1 -maxdepth 1 -type d \
+            ! -name '__pycache__' ! -name 'node_modules' 2>/dev/null)"
+    [[ "$(echo "$subs" | wc -l | tr -d ' ')" == "1" && -n "$subs" ]] && src_dir="$subs"
+  elif [[ -d "lib" ]]; then src_dir="lib"
+  elif [[ -d "pkg" ]]; then src_dir="pkg"
+  fi
+  build_file="(none)"
+  for f in Cargo.toml pyproject.toml package.json go.mod build.gradle pom.xml CMakeLists.txt Makefile; do
+    [[ -f "$f" ]] && { build_file="$f"; break; }
+  done
+  test_cmd="# (set me — e.g. cargo test / pytest / npm test / go test ./...)"
+  if   [[ -f "Cargo.toml"      ]]; then test_cmd="cargo test --all"
+  elif [[ -f "pyproject.toml"  ]]; then test_cmd="pytest -m 'not slow'"
+  elif [[ -f "package.json"    ]]; then test_cmd="npm test"
+  elif [[ -f "go.mod"          ]]; then test_cmd="go test ./..."
+  fi
+  date_now="$(date +%Y-%m-%d)"
+
+  sed -e "s|{{PROJECT_NAME}}|${project}|g" \
+      -e "s|{{SRC_DIR}}|${src_dir}|g" \
+      -e "s|{{PRIMARY_BUILD_FILE}}|${build_file}|g" \
+      -e "s|{{TEST_CMD}}|${test_cmd}|g" \
+      -e "s|{{DATE}}|${date_now}|g" \
+      "$in" > "$out"
+  _say "wrote $out"
+}
+
+# --- subcommands -----------------------------------------------------------
+
+cmd_init() {
+  local force=0 style="default" stacks=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force|-f)  force=1; shift ;;
+      --style)     style="${2:-default}"; shift 2 ;;
+      --style=*)   style="${1#--style=}"; shift ;;
+      --stack)     stacks="${2:-}"; shift 2 ;;
+      --stack=*)   stacks="${1#--stack=}"; shift ;;
+      *) shift ;;
+    esac
+  done
+  local project; project="$(_project_name)"
+
+  # Resolve per-template source by style. A style may override only some
+  # files; missing ones fall back to the default template root.
+  _src() {
+    local base="$1"
+    if [[ "$style" != "default" && -f "$TEMPLATES/styles/$style/$base" ]]; then
+      echo "$TEMPLATES/styles/$style/$base"
+    else
+      echo "$TEMPLATES/$base"
+    fi
+  }
+
+  # Validate the style exists (or is "default").
+  if [[ "$style" != "default" && ! -d "$TEMPLATES/styles/$style" ]]; then
+    _die "unknown --style '$style' (try: atlas styles)"
+  fi
+
+  _banner "🚀" "atlas init  $(_c_dim "(style=$style)")"
+  _render "$(_src ATLAS.md.tmpl)"    "$PWD/ATLAS.md"                                   "$force"
+  _render "$(_src SKILL.md.tmpl)"    "$PWD/.agents/skill/${project}/SKILL.md"          "$force"
+  _render "$(_src CLAUDE.md.tmpl)"   "$PWD/CLAUDE.md"                                  "$force"
+  _render "$(_src EXAMPLES.md.tmpl)" "$PWD/EXAMPLES.md"                                "$force"
+  # AGENTS.md is a content mirror of CLAUDE.md so Codex/OpenCode auto-discover.
+  if [[ -f "$PWD/CLAUDE.md" ]]; then
+    if [[ -e "$PWD/AGENTS.md" && "$force" != "1" ]]; then
+      _say "$PWD/AGENTS.md exists — skip (--force to overwrite)"
+    else
+      cp "$PWD/CLAUDE.md" "$PWD/AGENTS.md"
+      _say "wrote $PWD/AGENTS.md (mirror of CLAUDE.md)"
+    fi
+  fi
+  # Optional per-style seed files (extra documents shipped beyond the trio).
+  # Some styles ship ARCHITECTURE.md / GAPS.md / CRITICS.md / STATUS.md /
+  # TODO.md / docs/adr/ / docs/gaps/ / research/ / benchmarks/ — each is a
+  # separate seed that's rendered iff the style provides it AND the file
+  # doesn't already exist (or --force was passed).
+  local seeds_dir="$TEMPLATES/styles/$style/seeds"
+  if [[ -d "$seeds_dir" ]]; then
+    while IFS= read -r seed; do
+      local rel="${seed#"$seeds_dir"/}"
+      _render "$seed" "$PWD/$rel" "$force"
+    done < <(find "$seeds_dir" -type f)
+  fi
+  # Optional per-stack docs (<style> --stack <names>). Each stack
+  # directory ships one or more STACK-*.md files that drop into docs/stacks/.
+  if [[ -n "$stacks" ]]; then
+    local stacks_root="$TEMPLATES/styles/$style/stacks"
+    if [[ ! -d "$stacks_root" ]]; then
+      _say "WARNING: style '$style' has no --stack support — ignoring --stack=$stacks"
+    else
+      IFS=',' read -ra stack_list <<< "$stacks"
+      for s in "${stack_list[@]}"; do
+        s="$(echo "$s" | tr -d '[:space:]')"
+        local sdir="$stacks_root/$s"
+        if [[ ! -d "$sdir" ]]; then
+          _say "WARNING: unknown --stack '$s' (try: atlas stacks)"
+          continue
+        fi
+        while IFS= read -r stackfile; do
+          local rel
+          rel="docs/stacks/$(basename "$stackfile")"
+          _render "$stackfile" "$PWD/$rel" "$force"
+        done < <(find "$sdir" -type f -name '*.md')
+      done
+    fi
+  fi
+  echo ""
+  _say "project: ${project}"
+  _say "style:   ${style}"
+  [[ -n "$stacks" ]] && _say "stacks:  ${stacks}"
+  _say "next:    fill in §-sections of ATLAS.md, then 'atlas check'"
+}
+
+cmd_check() {
+  _banner "🔍" "atlas check"
+  local atlas="$PWD/ATLAS.md"
+  local project; project="$(_project_name)"
+  local skill="$PWD/.agents/skill/${project}/SKILL.md"
+  local skill_glob; skill_glob=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+  [[ -n "$skill_glob" ]] && skill="$skill_glob"
+
+  local errs=0
+  if [[ ! -f "$atlas" ]]; then
+    _fail "missing ATLAS.md (run 'atlas init')"; errs=$((errs+1))
+  else
+    _ok "ATLAS.md present"
+    grep -q "^## 0\." "$atlas" || { _fail "ATLAS.md missing §0 quick-orientation"; errs=$((errs+1)); }
+  fi
+  if [[ ! -f "$skill" ]]; then
+    _fail "missing SKILL.md (run 'atlas init')"; errs=$((errs+1))
+  else
+    _ok "SKILL.md present at $skill"
+    grep -q "^## Table of contents" "$skill" || { _fail "SKILL.md missing Table of contents"; errs=$((errs+1)); }
+    local anchors dups
+    anchors=$(grep -Eo '<a id="[a-z0-9-]+"></a>' "$skill" | sort)
+    dups=$(echo "$anchors" | uniq -d)
+    if [[ -n "$dups" ]]; then
+      _fail "duplicate anchors:"
+      while IFS= read -r line; do
+        printf '      %s\n' "$line"
+      done <<< "$dups"
+      errs=$((errs+1))
+    else
+      local n; n=$(echo "$anchors" | grep -c . || true)
+      _ok "$n unique anchors"
+    fi
+  fi
+  if [[ $errs -gt 0 ]]; then exit 1; fi
+  echo "$(_c_green 'atlas:') ok"
+}
+
+cmd_anchors() {
+  local project; project="$(_project_name)"
+  local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+  [[ -z "$skill" ]] && _die "no SKILL.md found"
+  # Extract: anchor id + section title.
+  awk '
+    /<a id="[a-z0-9-]+"><\/a>/ {
+      match($0, /id="[a-z0-9-]+"/); id = substr($0, RSTART+4, RLENGTH-5);
+    }
+    id && /^### §/ {
+      sub(/^### /, "");
+      print id "\t" $0;
+      id = "";
+    }
+  ' "$skill"
+}
+
+cmd_anchor() {
+  local op="${1:-}"; shift || true
+  case "$op" in
+    add)
+      local name="${1:-}"; shift || true
+      local summary="${*:-}"
+      [[ -z "$name" || -z "$summary" ]] && _die "usage: atlas anchor add NAME \"summary\""
+      local project; project="$(_project_name)"
+      local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+      [[ -z "$skill" ]] && _die "no SKILL.md (run 'atlas init')"
+      local upper lower
+      upper="$(echo "$name" | tr '[:lower:]' '[:upper:]' | tr ' _' '--')"
+      lower="$(echo "$upper" | tr '[:upper:]' '[:lower:]')"
+      cat >> "$skill" <<EOF
+
+---
+
+<a id="${lower}"></a>
+### §${upper} — ${summary}
+
+**Symptom.** _(what the user/agent observes)_
+
+**Root cause.** _(why it happens)_
+
+**Do NOT.** _(anti-patterns)_
+
+**Do.** _(correct pattern with code/steps)_
+
+**Where.** \`path/to/file.ext::function_name\`
+
+**Shipped in.** \`<commit sha>\`.
+EOF
+      _say "appended §${upper} stub to $skill"
+      _say "add a ToC line manually: - [§${upper} — ${summary}](#${lower})"
+      ;;
+    *)
+      _die "usage: atlas anchor add NAME \"summary\""
+      ;;
+  esac
+}
+
+cmd_stacks() {
+  # List --stack add-ons available for the the style (and any future
+  # style that ships stacks/).
+  for style_dir in "$TEMPLATES/styles"/*/; do
+    local s
+    s="$(basename "$style_dir")"
+    [[ -d "$style_dir/stacks" ]] || continue
+    echo "style $s ships these --stack add-ons:"
+    for sd in "$style_dir/stacks"/*/; do
+      [[ -d "$sd" ]] && echo "  $(basename "$sd")"
+    done | sort -u
+  done
+}
+
+# ---------------------------------------------------------------------------
+# critique <topic> [--with-codex | --with-claude]
+#
+# Appends a CRITICS.md row stub and prints the brutal-honest prompt template
+# the user can paste into ChatGPT 5.5 Extended Thinking (or pipe through
+# 'codex' / 'claude' CLIs). Default behavior is print-only.
+# ---------------------------------------------------------------------------
+cmd_critique() {
+  local topic="" with=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --with-codex)  with="codex";  shift ;;
+      --with-claude) with="claude"; shift ;;
+      --*)           shift ;;
+      *)             [[ -z "$topic" ]] && topic="$1"; shift ;;
+    esac
+  done
+  [[ -z "$topic" ]] && _die "usage: atlas critique <topic> [--with-codex | --with-claude]"
+
+  local critics="$PWD/CRITICS.md"
+  local date_now; date_now="$(date +%Y-%m-%d)"
+
+  if [[ ! -f "$critics" ]]; then
+    _say "no CRITICS.md in $PWD (run 'atlas init' first (style must scaffold this file))"
+  else
+    # Append a stub row to CRITICS.md.
+    cat >> "$critics" <<EOF
+
+### ${date_now} — ${topic}
+**Critic:** $( [[ -n "$with" ]] && echo "$with (auto)" || echo "_(ChatGPT 5.5 Extended Thinking — manual paste)_" )
+**Topic:** ${topic}
+**Inputs they had:** research/<file>, ARCHITECTURE.md, ADR-draft, GAPS-Implementation.md row(s)
+
+| # | Critique | Severity | Disposition | ADR/GAPS link |
+|---|---|---|---|---|
+| 1 | _(paste verbatim)_ | high/med/low | accepted / rejected / deferred | _(ADR-NNNN / GAPS G00N)_ |
+
+EOF
+    _say "appended CRITICS.md row for: ${topic}"
+  fi
+
+  # Build the prompt.
+  local atlas_blurb="(no ATLAS.md found in $PWD)"
+  [[ -f "$PWD/ATLAS.md" ]] && atlas_blurb="ATLAS.md is at $PWD/ATLAS.md — read §0, §A2 (rationale), §A3 (ADRs), §I (idea trail)."
+  local prompt
+  prompt="You are a hostile reviewer for the project at $PWD.
+
+Topic under review: ${topic}
+
+Context to read (in this order):
+1. ${atlas_blurb}
+2. .agents/skill/*/SKILL.md — anchors are stable; treat them as load-bearing constraints
+3. ARCHITECTURE.md — the proposed shape
+4. docs/adr/ — past decisions
+5. research/<topic>.md — what the field already does
+6. CRITICS.md — prior objections (do NOT repeat them)
+
+Your job: bring me the strongest objections, not the most polite ones.
+
+For EACH critique you produce:
+  - One-line summary (the objection itself).
+  - Severity: high | medium | low.
+  - Rationale (2-3 sentences with concrete failure mode).
+  - WHEN this would break (load, scale, edge case, time horizon).
+  - WHY it would break (root cause, not symptom).
+  - HOW to fix or mitigate (concrete pattern, library, or pattern name).
+  - Suggested disposition: accept | reject (with reason) | defer (with GAPS link).
+
+Rules:
+  - NO polite endorsements. If you can't find an objection, the prompt is wrong — re-ask.
+  - Hostile-reviewer voice: assume reviewer is at a conference Q&A.
+  - At 10x scale, what breaks? At 100x cost, what fires? At adversarial input?
+  - Cite SKILL §ANCHORS where applicable.
+  - Output as Markdown rows compatible with the CRITICS.md table.
+
+End with 'Top 3 things to do BEFORE locking the ADR' as a bullet list."
+
+  echo ""
+  echo "================================================================"
+  echo "PROMPT (paste into ChatGPT 5.5 Extended Thinking, or use --with-codex):"
+  echo "================================================================"
+  echo ""
+  echo "$prompt"
+  echo ""
+
+  if [[ "$with" == "codex" ]]; then
+    if ! _have codex; then
+      _die "'codex' CLI not found on PATH (https://github.com/openai/codex)"
+    fi
+    local codex_model="${CODEX_MODEL:-gpt-5}"
+    echo "================================================================"
+    echo "running: codex exec (model: $codex_model)"
+    echo "================================================================"
+    CODEX_MODEL="$codex_model" codex exec --model "$codex_model" "$prompt"
+  elif [[ "$with" == "claude" ]]; then
+    if ! _have claude; then
+      _die "'claude' CLI not found on PATH"
+    fi
+    echo "================================================================"
+    echo "running: claude --print  (model: \${ANTHROPIC_MODEL:-opus})"
+    echo "================================================================"
+    claude --print "$prompt"
+  else
+    _say "(print-only; pass --with-codex or --with-claude to invoke a CLI)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# gap-to-article <gap-id> [--writer <path>]
+#
+# Scaffolds an article directory for a resolved + novel implementation gap.
+# Refuses to scaffold if the gap is not yet marked resolved+novel in
+# docs/gaps/GAPS-Implementation.md (best-effort grep; user can --force).
+# ---------------------------------------------------------------------------
+cmd_gap_to_article() {
+  local gap_id="" writer="agent-scientific-ai-writer" force=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --writer)    writer="$2"; shift 2 ;;
+      --writer=*)  writer="${1#--writer=}"; shift ;;
+      --force|-f)  force=1; shift ;;
+      *)           [[ -z "$gap_id" ]] && gap_id="$1"; shift ;;
+    esac
+  done
+  [[ -z "$gap_id" ]] && _die "usage: atlas gap-to-article <gap-id> [--writer <path>] [--force]"
+
+  local gaps_impl="$PWD/docs/gaps/GAPS-Implementation.md"
+  if [[ ! -f "$gaps_impl" ]]; then
+    _die "no docs/gaps/GAPS-Implementation.md in $PWD (run 'atlas init' first (style must scaffold this file))"
+  fi
+
+  # Best-effort check: gap line should be in the Shipped table with Novel=yes.
+  if ! grep -qE "\\b${gap_id}\\b" "$gaps_impl"; then
+    _die "gap '${gap_id}' not found in $gaps_impl (use --force to scaffold anyway)"
+  fi
+  if [[ $force -ne 1 ]]; then
+    local line; line=$(grep -E "\\b${gap_id}\\b" "$gaps_impl" | head -1)
+    if ! echo "$line" | grep -qiE "(yes|novel)"; then
+      _say "WARNING: '${gap_id}' is not marked novel in GAPS-Implementation.md"
+      _say "         Articles are only for novel resolved gaps."
+      _say "         Use --force to scaffold anyway."
+      exit 1
+    fi
+  fi
+
+  local date_now project slug count next_n art_dir
+  date_now="$(date +%Y_%m_%d)"
+  project="$(_project_name)"
+  # Slug from the gap line — take whatever's after the gap id, slugify.
+  slug=$(grep -E "\\b${gap_id}\\b" "$gaps_impl" | head -1 \
+         | sed -E "s/.*${gap_id}[^a-zA-Z0-9]+//; s/[|].*//; s/[^a-zA-Z0-9]+/-/g; s/^-+//; s/-+$//; s/(.{40}).*/\\1/")
+  [[ -z "$slug" ]] && slug="novel-result"
+  # Next article number: count existing Article_NNNN_ dirs and add one.
+  count=0
+  if [[ -d "$writer" ]]; then
+    count=$(find "$writer" -maxdepth 1 -type d -name '*_Article_*' 2>/dev/null | wc -l | tr -d ' ')
+  fi
+  next_n=$(printf "%04d" $((count + 1)))
+  art_dir="${writer}/${date_now}_Article_${next_n}_${slug}"
+
+  mkdir -p "$art_dir"/{figures,code}
+
+  cat > "$art_dir/STATUS.md" <<EOF
+# STATUS — Article ${next_n} (${slug})
+
+- **Source gap:** ${gap_id} in [\`docs/gaps/GAPS-Implementation.md\`]($PWD/docs/gaps/GAPS-Implementation.md)
+- **Project:** ${project}
+- **Created:** ${date_now}
+
+## Pipeline
+- [ ] REPORT.md drafted from the gap row
+- [ ] Figures extracted from benchmarks/results/
+- [ ] Code excerpted into code/
+- [ ] Critic pass (CRITICS.md — \`atlas critique ${gap_id}\`)
+- [ ] Cross-reference SKILL anchors + ADR numbers
+- [ ] Submit / publish
+EOF
+
+  cat > "$art_dir/REPORT.md" <<EOF
+# Article ${next_n} — ${slug}
+
+> Draft. Source: ${gap_id} (see [\`docs/gaps/GAPS-Implementation.md\`]($PWD/docs/gaps/GAPS-Implementation.md)).
+
+## TL;DR
+_(3-5 lines)_
+
+## Background
+_(field context — pull from \`research/\` notes)_
+
+## Method
+_(what we did — pull from ADR + SKILL anchors)_
+
+## Results
+_(figures from \`figures/\`; reproducible from \`code/\`; benchmark JSONs from \`$PWD/benchmarks/results/\`)_
+
+## Comparison
+_(rows referencing \`docs/gaps/GAPS-Landscape-Github.md\` and \`-Papers.md\`)_
+
+## Limitations & future work
+_(open items → new GAPS rows)_
+
+## References
+- SKILL anchors: §...
+- ADRs: docs/adr/NNNN-...
+- Code: \`code/\` in this dir; canonical at \`$PWD/...\`
+EOF
+
+  cat > "$art_dir/CODE.md" <<EOF
+# CODE — Article ${next_n}
+
+- **Canonical implementation:** \`$PWD/...\`  *(fill in path + SHA)*
+- **Extracted (reproducible):** \`code/\` in this dir
+
+## Reproducibility
+\`\`\`bash
+cd code/
+# (commands to reproduce the headline result)
+\`\`\`
+EOF
+
+  _say "scaffolded article dir: $art_dir"
+  _say "next:"
+  _say "  1. flesh out REPORT.md"
+  _say "  2. pull figures from $PWD/benchmarks/results/"
+  _say "  3. run 'atlas critique ${gap_id}' for a brutal pass"
+}
+
+# ---------------------------------------------------------------------------
+# cost
+#
+# Parse ATLAS.md §C and §GPU tables; emit current-state summary.
+# Flag: components NOT at $0 idle, missing verification dates, stale GPU
+# price audits (> 14 days).
+# ---------------------------------------------------------------------------
+cmd_cost() {
+  local atlas="$PWD/ATLAS.md"
+  [[ -f "$atlas" ]] || _die "no ATLAS.md in $PWD"
+
+  echo "atlas cost — $(date +%Y-%m-%d)"
+  echo "==================================="
+  echo ""
+
+  # Extract §C (Cost & scaling) and §GPU sections via awk between headings.
+  local c_block gpu_block
+  c_block=$(awk '/^## C\. /{flag=1; next} /^## [A-Z]/{flag=0} flag' "$atlas" || true)
+  gpu_block=$(awk '/^## GPU\. /{flag=1; next} /^## [A-Z]/{flag=0} flag' "$atlas" || true)
+
+  if [[ -z "$c_block" ]]; then
+    echo "  (no §C section found in ATLAS.md — Cost & scaling section not in this style)"
+  else
+    echo "### §C — Cost & scaling"
+    echo ""
+    echo "$c_block" | grep -E '^\|' || true
+    echo ""
+    echo "Flags:"
+    local flagged=0
+    # Only inspect REAL data rows: start with '|', have ≥4 cells, not separator,
+    # not header, not placeholder (cells starting with `_(`).
+    while IFS= read -r row; do
+      [[ "$row" =~ ^\|[[:space:]]*---  ]] && continue
+      [[ "$row" =~ ^\|[[:space:]]*Component[[:space:]]*\| ]] && continue
+      [[ "$row" =~ ^\|[[:space:]]*\_\( ]] && continue
+      local n_pipes; n_pipes=$(echo "$row" | tr -cd '|' | wc -c | tr -d ' ')
+      [[ "$n_pipes" -lt 4 ]] && continue
+      # col 3 = at-rest cost ; col 5 = verified date
+      local cost ver
+      cost=$(echo "$row" | awk -F'|' '{ gsub(/^ +| +$/, "", $3); print $3 }')
+      ver=$(echo  "$row" | awk -F'|' '{ gsub(/^ +| +$/, "", $5); print $5 }')
+      # Idle cost not $0?
+      if [[ -n "$cost" && ! "$cost" =~ ^\$0 && ! "$cost" =~ ^_\( ]]; then
+        echo "  ! non-zero idle cost row: $row"
+        flagged=$((flagged+1))
+      fi
+      # Missing verified date (or still placeholder)?
+      if [[ -z "$ver" || "$ver" =~ ^_\( ]]; then
+        echo "  ! missing verified date: $row"
+        flagged=$((flagged+1))
+      fi
+    done <<< "$c_block"
+    [[ $flagged -eq 0 ]] && echo "  ok — no flags."
+  fi
+
+  echo ""
+  if [[ -z "$gpu_block" ]]; then
+    echo "  (no §GPU section in ATLAS.md — skip if this project doesn't use GPU)"
+  else
+    echo "### §GPU — GPU sourcing"
+    echo ""
+    echo "$gpu_block" | grep -E '^\|' || true
+    echo ""
+    echo "Reminders:"
+    echo "  - Run 'sky show-gpus --cloud all' weekly to refresh."
+    echo "  - If any provider beats the primary by >20%, update §GPU rows."
+    echo "  - SKILL §GPU-PRICE-AUDIT enforces this."
+  fi
+
+  echo ""
+}
+
+# ---------------------------------------------------------------------------
+# mirror — enforce SKILL §GITLAB-PRIVATE-GITHUB-PUBLIC.
+#
+# Subcommands:
+#   atlas mirror init    scaffold .atlas/mirror.allow (+ optional GH Action)
+#   atlas mirror push    push allowlisted refs to the public remote
+#   atlas mirror status  show config + what would be pushed
+#
+# Defaults:
+#   remote name = "public"  (never "origin" — origin is canonical/private)
+#   pattern     = staged     (push to a 'public' branch on the remote, a
+#                              GitHub Action promotes to main + deletes the
+#                              staging branch)
+#
+# Config file: .atlas/mirror.allow — one git refspec per line.
+#   refs/heads/main:refs/heads/public          # default staged
+#   refs/tags/v*:refs/tags/v*                  # tags pass through
+#   refs/heads/release/*:refs/heads/release/*  # release branches
+# ---------------------------------------------------------------------------
+
+_mirror_allow_path() { echo "$PWD/.atlas/mirror.allow"; }
+
+_mirror_assert_safe_remote() {
+  local remote="$1"
+  if [[ "$remote" == "origin" ]]; then
+    _die "refusing to mirror to 'origin' — origin is reserved for the canonical (private) remote (SKILL §GITLAB-PRIVATE-GITHUB-PUBLIC)"
+  fi
+  if ! git remote get-url "$remote" >/dev/null 2>&1; then
+    _die "remote '$remote' not configured. Add it first:
+    git remote add $remote git@github.com:you/project.git"
+  fi
+}
+
+cmd_mirror() {
+  local sub="${1:-help}"; shift || true
+  case "$sub" in
+    init)    cmd_mirror_init    "$@" ;;
+    push)    cmd_mirror_push    "$@" ;;
+    status)  cmd_mirror_status  "$@" ;;
+    help|"") cat <<'HELP'
+atlas mirror — enforce SKILL §GITLAB-PRIVATE-GITHUB-PUBLIC
+
+  atlas mirror init [--staged | --direct | --dual-repo] [--remote NAME] [--public-repo URL] [--force]
+      Scaffold .atlas/mirror.allow.
+
+      --staged    (default) push to a 'public' branch on ONE GitHub repo;
+                  Action promotes 'public' → 'main' + auto-deletes the
+                  staging branch. Renders .github/workflows/atlas-promote.yml.
+                  Public repo at rest shows only 'main' + tags.
+
+      --direct    push straight to 'main' on ONE GitHub repo. No staging,
+                  no Action. Trust your allowlist.
+
+      --dual-repo MAX PARANOIA: two GitHub repos. Push lands on a PRIVATE
+                  staging repo ('--remote staging' by default). An Action
+                  there pushes only 'main' + tags to the PUBLIC release
+                  repo at '--public-repo URL' (required).
+                  Renders .github/workflows/atlas-promote-to-public.yml
+                  for the cross-repo push. Needs a deploy key.
+
+      --remote NAME      default: 'public' (or 'staging' under --dual-repo).
+                          MUST NOT be 'origin'.
+      --public-repo URL  required with --dual-repo. Git URL of the PUBLIC repo.
+
+  atlas mirror push [--remote NAME] [--dry-run]
+      Push every allowlisted refspec to the public remote.
+
+  atlas mirror status [--remote NAME]
+      Show config + what would be pushed.
+
+Auth setup: see docs at https://github.com/Abbasi-Alain/atlas#auth
+HELP
+      ;;
+    *) _die "unknown 'mirror' subcommand: $sub (try 'atlas mirror help')" ;;
+  esac
+}
+
+cmd_mirror_init() {
+  local pattern="staged" remote="public" force=0
+  local public_repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --staged)      pattern="staged";   shift ;;
+      --direct)      pattern="direct";   shift ;;
+      --dual-repo)   pattern="dual";     shift ;;
+      --remote)      remote="$2"; shift 2 ;;
+      --remote=*)    remote="${1#--remote=}"; shift ;;
+      --public-repo) public_repo="$2"; shift 2 ;;
+      --public-repo=*) public_repo="${1#--public-repo=}"; shift ;;
+      --force|-f)    force=1; shift ;;
+      *) shift ;;
+    esac
+  done
+  [[ "$remote" == "origin" ]] && _die "remote name 'origin' is reserved for the canonical/private remote"
+  if [[ "$pattern" == "dual" ]]; then
+    # dual-repo defaults: remote is named 'staging' (the private GH repo);
+    # the CI later pushes to a 'public' repo (URL = $public_repo, required).
+    [[ "$remote" == "public" ]] && remote="staging"
+    [[ -z "$public_repo" ]] && _die "usage: --dual-repo requires --public-repo <git-url>"
+  fi
+
+  local allow; allow="$(_mirror_allow_path)"
+  mkdir -p "$(dirname "$allow")"
+
+  if [[ -f "$allow" && $force -ne 1 ]]; then
+    _say "$allow exists — skip (--force to overwrite)"
+  else
+    case "$pattern" in
+      staged)
+        cat > "$allow" <<EOF
+# .atlas/mirror.allow — mirror push allowlist
+#
+# One git refspec per line: <local-ref>:<remote-ref>
+# Lines starting with # are comments.
+# 'atlas mirror push' refuses any push that isn't in this file.
+#
+# Default: STAGED pattern.
+#   local 'main' goes to a 'public' staging branch on the remote.
+#   A GitHub Action (.github/workflows/atlas-promote.yml) runs release
+#   gates, fast-forwards 'main' from 'public', then deletes the
+#   staging branch. At rest, your public repo only shows 'main' and tags.
+
+refs/heads/main:refs/heads/public
+refs/tags/v*:refs/tags/v*
+EOF
+        _say "wrote $allow (staged pattern)"
+        ;;
+      direct)
+        cat > "$allow" <<EOF
+# .atlas/mirror.allow — mirror push allowlist
+#
+# One git refspec per line: <local-ref>:<remote-ref>
+# 'atlas mirror push' refuses any push that isn't in this file.
+#
+# DIRECT pattern: local 'main' goes straight to remote 'main'.
+# No staging branch, no GitHub Action. Trust your allowlist.
+
+refs/heads/main:refs/heads/main
+refs/tags/v*:refs/tags/v*
+EOF
+        _say "wrote $allow (direct pattern)"
+        ;;
+      dual)
+        cat > "$allow" <<EOF
+# .atlas/mirror.allow — mirror push allowlist (DUAL-REPO pattern)
+#
+# One git refspec per line: <local-ref>:<remote-ref>
+# 'atlas mirror push' refuses any push that isn't in this file.
+#
+# DUAL-REPO pattern (maximum paranoia):
+#   - 'atlas mirror push' lands on the private '${remote}' GitHub repo.
+#   - A GitHub Action there pushes only main + tags to the PUBLIC repo:
+#       ${public_repo}
+#   - The public repo never sees branches, PRs, or any other refs.
+#
+# This is two repos. The staging one is private; the public one only
+# ever receives 'main' and tags.
+
+refs/heads/main:refs/heads/main
+refs/tags/v*:refs/tags/v*
+refs/heads/release/*:refs/heads/release/*
+EOF
+        _say "wrote $allow (dual-repo pattern)"
+        ;;
+    esac
+  fi
+
+  # Drop the dual-repo cross-repo promote action (separate workflow file).
+  if [[ "$pattern" == "dual" ]]; then
+    local wf="$PWD/.github/workflows/atlas-promote-to-public.yml"
+    mkdir -p "$(dirname "$wf")"
+    if [[ -f "$wf" && $force -ne 1 ]]; then
+      _say "$wf exists — skip (--force to overwrite)"
+    else
+      cat > "$wf" <<YAML
+# atlas-promote-to-public.yml — generated by 'atlas mirror init --dual-repo'.
+#
+# This file lives in the PRIVATE STAGING GitHub repo. It fires on push to
+# main / release/* / v*. It runs release gates, then pushes ONLY main + tags
+# to the PUBLIC repo:
+#
+#     ${public_repo}
+#
+# The PUBLIC repo never sees feature branches, PRs, or any other refs.
+#
+# Required secrets in the staging GH repo:
+#   PUBLIC_REPO_DEPLOY_KEY    SSH private key with write access to ${public_repo}
+#                              (generate a deploy key; ed25519; upload public
+#                               half to public repo with 'write' permission)
+
+name: atlas-promote-to-public
+
+on:
+  push:
+    branches: [main, "release/**"]
+    tags:     ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ─── Release gates ────────────────────────────────────────────
+      - name: atlas check
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/Abbasi-Alain/atlas/main/install.sh | bash
+          ~/.local/bin/atlas check
+
+      # ─── Configure SSH for the public repo push ───────────────────
+      - name: Setup deploy key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: \${{ secrets.PUBLIC_REPO_DEPLOY_KEY }}
+
+      # ─── Push allowed refs to the public repo ─────────────────────
+      - name: Push main + tags to public repo
+        run: |
+          git remote add public ${public_repo}
+          # main goes straight to main on the public repo
+          if [ "\${{ github.ref }}" = "refs/heads/main" ]; then
+            git push public HEAD:refs/heads/main
+          fi
+          # tags pass through unchanged
+          if [[ "\${{ github.ref }}" == refs/tags/v* ]]; then
+            git push public "\${{ github.ref }}"
+          fi
+          # release/* branches mirror through
+          if [[ "\${{ github.ref }}" == refs/heads/release/* ]]; then
+            git push public "\${{ github.ref }}":"\${{ github.ref }}"
+          fi
+YAML
+      _say "wrote $wf"
+    fi
+  fi
+
+  # Drop the GitHub Action only for the staged pattern.
+  if [[ "$pattern" == "staged" ]]; then
+    local wf="$PWD/.github/workflows/atlas-promote.yml"
+    mkdir -p "$(dirname "$wf")"
+    if [[ -f "$wf" && $force -ne 1 ]]; then
+      _say "$wf exists — skip (--force to overwrite)"
+    else
+      cat > "$wf" <<'YAML'
+# atlas-promote.yml — generated by 'atlas mirror init --staged'.
+#
+# Fires when 'public' (the mirror staging branch) is pushed. Runs release
+# gates, fast-forwards 'main' to 'public', then deletes 'public' so the
+# repo only shows 'main' + tags at rest.
+
+name: atlas-promote
+
+on:
+  push:
+    branches: [public]
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout public
+        uses: actions/checkout@v4
+        with:
+          ref: public
+          fetch-depth: 0
+
+      # ─── Release gates ────────────────────────────────────────────
+      # Replace these with your project's real gates (atlas check is the
+      # baseline; add tests/lint/secret-scan as needed).
+      - name: atlas check
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/Abbasi-Alain/atlas/main/install.sh | bash
+          ~/.local/bin/atlas check
+
+      # ─── Promote ──────────────────────────────────────────────────
+      - name: Fast-forward main from public
+        run: |
+          git config user.name  "atlas-bot"
+          git config user.email "atlas-bot@users.noreply.github.com"
+          git fetch origin main:main || git checkout -b main
+          git checkout main
+          git merge --ff-only public
+          git push origin main
+
+      # ─── Auto-delete the staging branch ──────────────────────────
+      - name: Delete the public staging branch
+        run: |
+          git push origin --delete public
+YAML
+      _say "wrote $wf"
+    fi
+  fi
+
+  _say ""
+  _say "next:"
+  if [[ "$pattern" == "dual" ]]; then
+    _say "  1. create the PRIVATE staging GitHub repo + add as '${remote}' remote:"
+    _say "       git remote add ${remote} git@github.com:you/${PWD##*/}-staging.git"
+    _say "  2. create the PUBLIC release GitHub repo at: ${public_repo}"
+    _say "  3. generate a deploy key with WRITE access to the public repo:"
+    _say "       ssh-keygen -t ed25519 -f /tmp/deploy_key -C 'atlas-promote' -N ''"
+    _say "       cat /tmp/deploy_key.pub      # add to public repo deploy keys (write enabled)"
+    _say "       cat /tmp/deploy_key          # add as PUBLIC_REPO_DEPLOY_KEY secret in staging repo"
+    _say "  4. atlas mirror status            # see what would be pushed"
+    _say "  5. atlas mirror push              # push to the staging repo"
+    _say "  6. (GitHub Action takes over and pushes main/tags to the public repo)"
+  else
+    _say "  1. git remote add ${remote} git@github.com:you/project.git"
+    _say "  2. atlas mirror status            # see what would be pushed"
+    _say "  3. atlas mirror push              # actually push"
+  fi
+  _say ""
+  _say "auth: 'atlas auth login' wires up SSH or vendor CLIs for both GitHub + GitLab"
+}
+
+cmd_mirror_push() {
+  local remote="public" dry=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --remote)    remote="$2"; shift 2 ;;
+      --remote=*)  remote="${1#--remote=}"; shift ;;
+      --dry-run|-n) dry=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  local allow; allow="$(_mirror_allow_path)"
+  [[ -f "$allow" ]] || _die "no .atlas/mirror.allow — run 'atlas mirror init' first"
+  _mirror_assert_safe_remote "$remote"
+
+  local n_pushed=0 n_failed=0
+  while IFS= read -r line; do
+    # strip whitespace + comments + blank lines
+    line="$(echo "$line" | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]+|[[:space:]]+$//g')"
+    [[ -z "$line" || "${line:0:1}" == "#" ]] && continue
+    # MUST be a refspec (contain ':' between two refs)
+    if [[ "$line" != *":"* ]]; then
+      _say "WARNING: bad line in $allow (no ':'): $line"
+      continue
+    fi
+    if [[ "$dry" == "1" ]]; then
+      echo "  would: git push $remote '$line'"
+    else
+      echo "  push:  git push $remote '$line'"
+      if git push "$remote" "$line"; then
+        n_pushed=$((n_pushed+1))
+      else
+        n_failed=$((n_failed+1))
+        _say "WARNING: refspec '$line' failed (may be no matching local refs)"
+      fi
+    fi
+  done < "$allow"
+
+  if [[ "$dry" == "1" ]]; then
+    _say "dry-run — no refs pushed"
+  else
+    _say "done — pushed $n_pushed refspec(s), $n_failed failed"
+    [[ $n_failed -gt 0 ]] && exit 1
+  fi
+}
+
+cmd_mirror_status() {
+  local remote="public"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --remote)   remote="$2"; shift 2 ;;
+      --remote=*) remote="${1#--remote=}"; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  local allow; allow="$(_mirror_allow_path)"
+  echo "atlas mirror status"
+  echo "==================="
+  echo ""
+  echo "config:     $allow"
+  if [[ ! -f "$allow" ]]; then
+    echo "  (none — run 'atlas mirror init')"
+    return 0
+  fi
+  echo "remote:     $remote"
+  if git remote get-url "$remote" >/dev/null 2>&1; then
+    echo "  url:      $(git remote get-url "$remote")"
+  else
+    echo "  url:      (not configured — git remote add $remote ...)"
+  fi
+  if git remote get-url origin >/dev/null 2>&1; then
+    echo "origin:     $(git remote get-url origin)  (canonical / never mirrored)"
+  fi
+  echo ""
+  echo "allowed refspecs:"
+  grep -vE '^[[:space:]]*(#|$)' "$allow" | sed 's/^/  /' || true
+  echo ""
+  echo "GH action:"
+  if [[ -f "$PWD/.github/workflows/atlas-promote.yml" ]]; then
+    echo "  .github/workflows/atlas-promote.yml present (staged pattern)"
+  else
+    echo "  (none — direct pattern or not configured)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# adr — manage Architecture Decision Records.
+#
+# atlas adr add "<title>"   scaffold docs/adr/NNNN-<slug>.md from
+#                            docs/adr/0000-template.md (auto-numbered).
+#                            Append a row to ATLAS.md §A3 ADR index if
+#                            present (best-effort; falls back to printing
+#                            the row to paste manually).
+# atlas adr list             list every NNNN-*.md in docs/adr/ with status.
+# ---------------------------------------------------------------------------
+
+_slugify() {
+  echo "$1" | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+    | cut -c1-50
+}
+
+cmd_adr() {
+  local sub="${1:-help}"; shift || true
+  case "$sub" in
+    add)  cmd_adr_add "$@" ;;
+    list) cmd_adr_list "$@" ;;
+    help|"") cat <<'HELP'
+atlas adr — manage Architecture Decision Records.
+
+  atlas adr add "<title>"
+      Auto-numbers (reads docs/adr/ for last NNNN).
+      Renders docs/adr/0000-template.md → docs/adr/NNNN-<slug>.md.
+      Pre-fills title, date, status=Proposed.
+      Appends a row to ATLAS.md §A3 ADR index (best-effort).
+
+  atlas adr list
+      List every NNNN-*.md with status.
+HELP
+      ;;
+    *) _die "unknown 'adr' subcommand: $sub" ;;
+  esac
+}
+
+cmd_adr_add() {
+  local title="${1:-}"
+  [[ -z "$title" ]] && _die 'usage: atlas adr add "<title>"'
+
+  local adr_dir="$PWD/docs/adr"
+  local template="$adr_dir/0000-template.md"
+  [[ -d "$adr_dir" ]] || _die "no $adr_dir — run 'atlas init' first (style must scaffold this file)"
+  [[ -f "$template" ]] || _die "no $template (the ADR template from the current style)"
+
+  # Next number: max existing NNNN (excluding 0000-template) + 1.
+  # Use a glob + bash string comparison — shellcheck SC2010-clean.
+  local max_n=""
+  local f base n
+  shopt -s nullglob
+  for f in "$adr_dir"/[0-9][0-9][0-9][0-9]-*.md; do
+    [[ -f "$f" ]] || continue
+    base="$(basename "$f")"
+    n="${base:0:4}"
+    [[ "$n" == "0000" ]] && continue
+    if [[ -z "$max_n" || "$n" > "$max_n" ]]; then max_n="$n"; fi
+  done
+  shopt -u nullglob
+  local next_n
+  if [[ -z "$max_n" ]]; then
+    next_n="0001"
+  else
+    next_n=$(printf "%04d" $((10#$max_n + 1)))
+  fi
+
+  local slug; slug="$(_slugify "$title")"
+  local out="$adr_dir/${next_n}-${slug}.md"
+  local date_now; date_now="$(date +%Y-%m-%d)"
+
+  # Render from template: replace ADR-0000 + Template + date placeholders.
+  sed \
+    -e "s|^# ADR-0000 — Template|# ADR-${next_n} — ${title}|" \
+    -e "s|^- \*\*Status:\*\* Proposed \\| Accepted \\| Deprecated \\| Superseded.*|- **Status:** Proposed|" \
+    -e "s|^- \*\*Date:\*\* YYYY-MM-DD|- **Date:** ${date_now}|" \
+    "$template" > "$out"
+
+  _say "wrote $out"
+
+  # Best-effort: append a row to ATLAS.md §A3 ADR index. Find the line
+  # '| _(fill in)_ | | | |' inside §A3 and insert before it.
+  local atlas="$PWD/ATLAS.md"
+  if [[ -f "$atlas" ]] && grep -q '^### A3\. ADR index' "$atlas"; then
+    local row="| ${next_n} | ${title} | Proposed | ${date_now} |"
+    # Try to insert before the '_(fill in)_' placeholder row in §A3.
+    if grep -q '^| _(fill in)_ | | | |' "$atlas"; then
+      # macOS-safe in-place sed
+      sed -i.bak "/^| _(fill in)_ | | | |/i\\
+$row
+" "$atlas" && rm "$atlas.bak"
+      _say "updated ATLAS.md §A3 with new row"
+    else
+      _say "ATLAS.md §A3 present but no '(fill in)' placeholder — add this row manually:"
+      echo "  $row"
+    fi
+  else
+    _say "(no ATLAS.md §A3 ADR index found — skip)"
+  fi
+
+  _say ""
+  _say "next:"
+  _say "  1. fill in Context / Options / Decision / Consequences in $out"
+  _say "  2. run 'atlas critique \"$title\"' for a hostile review BEFORE locking"
+  _say "  3. flip Status: Proposed → Accepted in the same commit it ships"
+}
+
+cmd_adr_list() {
+  local adr_dir="$PWD/docs/adr"
+  [[ -d "$adr_dir" ]] || _die "no $adr_dir"
+  printf "%-6s %-10s %s\n" "#" "Status" "Title"
+  printf "%-6s %-10s %s\n" "----" "------" "-----"
+  for f in "$adr_dir"/[0-9][0-9][0-9][0-9]-*.md; do
+    [[ -f "$f" ]] || continue
+    local base; base="$(basename "$f" .md)"
+    local n="${base:0:4}"
+    [[ "$n" == "0000" ]] && continue
+    local title; title=$(grep -m1 '^# ADR-' "$f" 2>/dev/null \
+      | sed -E 's/^# ADR-[0-9]{4} — //')
+    local status; status=$(grep -m1 '^- \*\*Status:\*\*' "$f" 2>/dev/null \
+      | sed -E 's/.*Status:\*\* //; s/ .*//')
+    printf "%-6s %-10s %s\n" "$n" "$status" "$title"
+  done
+}
+
+# ---------------------------------------------------------------------------
+# research — manage deep-research notes.
+#
+# atlas research add "<topic>"  scaffold research/NNN-<slug>.md following the
+#                                schema documented in research/README.md.
+# atlas research list            list every NNN-*.md in research/.
+# ---------------------------------------------------------------------------
+
+cmd_research() {
+  local sub="${1:-help}"; shift || true
+  case "$sub" in
+    add)  cmd_research_add "$@" ;;
+    list) cmd_research_list "$@" ;;
+    help|"") cat <<'HELP'
+atlas research — manage deep-research notes.
+
+  atlas research add "<topic>"
+      Auto-numbers (reads research/ for last NNN).
+      Renders a fresh research/NNN-<slug>.md with TL;DR / SOTA /
+      Approaches / Open questions / References sections.
+
+  atlas research list
+      List every NNN-*.md in research/.
+HELP
+      ;;
+    *) _die "unknown 'research' subcommand: $sub" ;;
+  esac
+}
+
+cmd_research_add() {
+  local topic="${1:-}"
+  [[ -z "$topic" ]] && _die 'usage: atlas research add "<topic>"'
+
+  local research_dir="$PWD/research"
+  [[ -d "$research_dir" ]] || _die "no $research_dir — run 'atlas init' first (style must scaffold this file)"
+
+  # Next number: max NNN in research/ + 1. Use a glob — SC2010-clean.
+  local max_n=""
+  local f base n
+  shopt -s nullglob
+  for f in "$research_dir"/[0-9][0-9][0-9]-*.md; do
+    [[ -f "$f" ]] || continue
+    base="$(basename "$f")"
+    n="${base:0:3}"
+    if [[ -z "$max_n" || "$n" > "$max_n" ]]; then max_n="$n"; fi
+  done
+  shopt -u nullglob
+  local next_n
+  if [[ -z "$max_n" ]]; then
+    next_n="001"
+  else
+    next_n=$(printf "%03d" $((10#$max_n + 1)))
+  fi
+
+  local slug; slug="$(_slugify "$topic")"
+  local out="$research_dir/${next_n}-${slug}.md"
+  local date_now; date_now="$(date +%Y-%m-%d)"
+
+  cat > "$out" <<EOF
+# Research ${next_n} — ${topic}
+
+- **Date:** ${date_now}
+- **Source:** _(ChatGPT 5.5 Extended Thinking | Claude Opus 4.x | manual | other)_
+- **Prompts:** _(one-line summary or link to the saved prompt)_
+
+## TL;DR
+_(3-5 lines — the headline result)_
+
+## State of the art
+_(what exists, who built it, what's the gap)_
+
+## Approaches
+
+| # | Approach | Pros | Cons | Sources |
+|---|---|---|---|---|
+| 1 | _(approach)_ | | | |
+| 2 | _(approach)_ | | | |
+
+## Open questions
+_(unresolved — these become CRITICS.md rows or docs/gaps/ rows)_
+
+## Decision pointer
+- If this informs a decision → write \`docs/adr/NNNN-<slug>.md\`.
+- If this surfaces a gap → add a row to \`docs/gaps/GAPS-Landscape-{Github,Papers}.md\`.
+- If this enables an implementation → add a row to \`docs/gaps/GAPS-Implementation.md\`.
+
+## References
+- _(arXiv:NNNN.NNNNN — Title)_
+- _(github.com/org/repo — what it does)_
+- _(blog/talk/video — link)_
+EOF
+
+  _say "wrote $out"
+  _say ""
+  _say "next:"
+  _say "  1. fill in TL;DR + State of the art (paste from ChatGPT 5.5)"
+  _say "  2. run 'atlas critique \"$topic\"' for a hostile review of the approaches"
+  _say "  3. follow the 'Decision pointer' section to GAPS / ADR / impl"
+}
+
+cmd_research_list() {
+  local research_dir="$PWD/research"
+  [[ -d "$research_dir" ]] || _die "no $research_dir"
+  printf "%-5s %-12s %s\n" "#" "Date" "Topic"
+  printf "%-5s %-12s %s\n" "---" "------" "-----"
+  for f in "$research_dir"/[0-9][0-9][0-9]-*.md; do
+    [[ -f "$f" ]] || continue
+    local base; base="$(basename "$f" .md)"
+    local n="${base:0:3}"
+    local title; title=$(grep -m1 '^# Research ' "$f" 2>/dev/null \
+      | sed -E 's/^# Research [0-9]{3} — //')
+    local date_; date_=$(grep -m1 '^- \*\*Date:\*\*' "$f" 2>/dev/null \
+      | sed -E 's/.*Date:\*\* //')
+    printf "%-5s %-12s %s\n" "$n" "$date_" "$title"
+  done
+}
+
+# ---------------------------------------------------------------------------
+# auth — log in to GitHub + GitLab side-by-side.
+#
+# Two methods:
+#   ssh     — generate ~/.ssh/id_ed25519_{github,gitlab} + ~/.ssh/config.
+#             Best for CI / multi-machine / headless.
+#   vendor  — brew install gh + glab + run their auth flows (browser-based).
+#             Best for one-machine convenience.
+#
+# Both are idempotent: re-running detects what's done and skips.
+# ---------------------------------------------------------------------------
+
+cmd_auth() {
+  local sub="${1:-help}"; shift || true
+  case "$sub" in
+    login)  cmd_auth_login  "$@" ;;
+    status) cmd_auth_status "$@" ;;
+    help|"") cat <<'HELP'
+atlas auth — log in to GitHub + GitLab.
+
+  atlas auth login [--method ssh|vendor] [--email <email>]
+      Without --method, asks interactively.
+      --method ssh     generate ed25519 keys, configure ~/.ssh/config
+                       (idempotent; preserves existing config).
+      --method vendor  brew install gh + glab, then `gh auth login`
+                       and `glab auth login` (browser flow).
+      --email          email for SSH key comments (ssh method only).
+
+  atlas auth status
+      Show what's authenticated:
+        - gh / glab installed + logged in?
+        - SSH keys present + ~/.ssh/config configured?
+        - ssh -T github.com / gitlab.com results.
+HELP
+      ;;
+    *) _die "unknown 'auth' subcommand: $sub" ;;
+  esac
+}
+
+_auth_pick_method() {
+  echo "atlas auth — pick a method:"
+  echo ""
+  echo "  1) SSH        (per-host ed25519 keys + ~/.ssh/config)"
+  echo "     pros: works in CI, one-time setup, more secure for shared machines"
+  echo "     cons: more steps to generate + upload keys to each host"
+  echo ""
+  echo "  2) Vendor CLI (brew install gh + glab; browser-based login)"
+  echo "     pros: 60-second setup, tokens stored in OS keychain"
+  echo "     cons: requires gh + glab installed; one-machine convenience"
+  echo ""
+  printf "Choose [1 = ssh, 2 = vendor]: "
+  read -r choice
+  case "$choice" in
+    1|ssh)    echo "ssh" ;;
+    2|vendor) echo "vendor" ;;
+    *) _die "invalid choice: $choice" ;;
+  esac
+}
+
+cmd_auth_login() {
+  local method="" email=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --method)   method="$2"; shift 2 ;;
+      --method=*) method="${1#--method=}"; shift ;;
+      --email)    email="$2"; shift 2 ;;
+      --email=*)  email="${1#--email=}"; shift ;;
+      *) shift ;;
+    esac
+  done
+  [[ -z "$method" ]] && method="$(_auth_pick_method)"
+  case "$method" in
+    ssh)    _auth_login_ssh    "$email" ;;
+    vendor) _auth_login_vendor ;;
+    *) _die "unknown --method '$method' (try: ssh | vendor)" ;;
+  esac
+}
+
+# ---------- vendor (brew + gh + glab) ----------
+
+_auth_brew_install() {
+  if _have brew; then
+    _say "brew is installed"
+  else
+    cat <<'EOF'
+
+atlas auth: 'brew' is not on PATH.
+
+On macOS or Linuxbrew:
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+On Debian/Ubuntu without brew:
+  sudo apt install gh                            # GitHub CLI
+  # glab via official deb:
+  curl -sLO https://gitlab.com/gitlab-org/cli/-/releases/permalink/latest/downloads/glab_amd64.deb
+  sudo apt install ./glab_amd64.deb
+
+On Windows:
+  winget install --id GitHub.cli
+  winget install --id GitLab.glab
+
+After installing brew (or your platform's equivalent), re-run 'atlas auth login --method vendor'.
+EOF
+    exit 1
+  fi
+  if ! _have gh;   then _say "installing gh   (brew install gh)";   brew install gh   || _die "brew install gh failed"; fi
+  if ! _have glab; then _say "installing glab (brew install glab)"; brew install glab || _die "brew install glab failed"; fi
+}
+
+_auth_login_vendor() {
+  _auth_brew_install
+  echo ""
+  if gh auth status >/dev/null 2>&1; then
+    _say "gh: already authenticated ($(gh auth status 2>&1 | grep -m1 'account' || echo 'logged in'))"
+  else
+    _say "gh: launching 'gh auth login' (browser flow)"
+    gh auth login
+  fi
+  echo ""
+  if glab auth status >/dev/null 2>&1; then
+    _say "glab: already authenticated"
+  else
+    _say "glab: launching 'glab auth login' (browser flow)"
+    glab auth login
+  fi
+  echo ""
+  _say "done. Now add remotes with HTTPS URLs:"
+  _say "  git remote add origin https://gitlab.com/you/project.git"
+  _say "  git remote add public https://github.com/you/project.git"
+  _say ""
+  _say "verify: atlas auth status"
+}
+
+# ---------- ssh (per-host keys + ~/.ssh/config) ----------
+
+_auth_login_ssh() {
+  local email="$1"
+  if [[ -z "$email" ]]; then
+    printf "atlas auth (ssh): email for key comments (e.g. you@example.com): "
+    read -r email
+  fi
+  [[ -z "$email" ]] && _die "email is required (--email <email>)"
+
+  mkdir -p "$HOME/.ssh"
+  chmod 700 "$HOME/.ssh"
+
+  local gh_key="$HOME/.ssh/id_ed25519_github"
+  local gl_key="$HOME/.ssh/id_ed25519_gitlab"
+
+  # Generate keys idempotently.
+  if [[ ! -f "$gh_key" ]]; then
+    _say "generating GitHub key: $gh_key"
+    ssh-keygen -t ed25519 -f "$gh_key" -C "$email" -N "" -q
+  else
+    _say "GitHub key exists: $gh_key (skip)"
+  fi
+  if [[ ! -f "$gl_key" ]]; then
+    _say "generating GitLab key: $gl_key"
+    ssh-keygen -t ed25519 -f "$gl_key" -C "$email" -N "" -q
+  else
+    _say "GitLab key exists: $gl_key (skip)"
+  fi
+
+  # Update ~/.ssh/config idempotently with a marker block.
+  local cfg="$HOME/.ssh/config"
+  touch "$cfg" && chmod 600 "$cfg"
+  local marker_start="# atlas-auth:start"
+  local marker_end="# atlas-auth:end"
+  local block
+  block=$(cat <<EOF
+$marker_start
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile $gh_key
+  IdentitiesOnly yes
+
+Host gitlab.com
+  HostName gitlab.com
+  User git
+  IdentityFile $gl_key
+  IdentitiesOnly yes
+$marker_end
+EOF
+)
+  if grep -q "$marker_start" "$cfg"; then
+    # Replace the existing block.
+    awk -v s="$marker_start" -v e="$marker_end" -v b="$block" '
+      $0 == s { skipping = 1; print b; next }
+      $0 == e { skipping = 0; next }
+      !skipping { print }
+    ' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+    _say "updated $cfg (atlas-auth block replaced)"
+  else
+    printf "\n%s\n" "$block" >> "$cfg"
+    _say "appended atlas-auth block to $cfg"
+  fi
+
+  # Optional: add to ssh-agent if present (macOS Keychain or running agent).
+  if _have ssh-add && [[ -n "${SSH_AUTH_SOCK:-}" ]]; then
+    ssh-add "$gh_key" 2>/dev/null || true
+    ssh-add "$gl_key" 2>/dev/null || true
+    _say "keys added to ssh-agent"
+  fi
+
+  echo ""
+  echo "================================================================"
+  echo "Upload these public keys (copy/paste):"
+  echo "================================================================"
+  echo ""
+  echo "GitHub  →  https://github.com/settings/ssh/new"
+  echo ""
+  cat "$gh_key.pub"
+  echo ""
+  echo "GitLab  →  https://gitlab.com/-/user_settings/ssh_keys"
+  echo ""
+  cat "$gl_key.pub"
+  echo ""
+  echo "After uploading, verify with: atlas auth status"
+  echo ""
+  _say "remotes to add once keys are uploaded:"
+  _say "  git remote add origin git@gitlab.com:you/project.git"
+  _say "  git remote add public git@github.com:you/project.git"
+}
+
+# ---------- status ----------
+
+cmd_auth_status() {
+  echo "atlas auth status"
+  echo "================="
+  echo ""
+
+  echo "vendor CLIs:"
+  if _have gh; then
+    if gh auth status >/dev/null 2>&1; then
+      echo "  gh   ✓ installed + authenticated"
+    else
+      echo "  gh   ⚠ installed but not authenticated (gh auth login)"
+    fi
+  else
+    echo "  gh   ✗ not installed (atlas auth login --method vendor)"
+  fi
+  if _have glab; then
+    if glab auth status >/dev/null 2>&1; then
+      echo "  glab ✓ installed + authenticated"
+    else
+      echo "  glab ⚠ installed but not authenticated (glab auth login)"
+    fi
+  else
+    echo "  glab ✗ not installed (atlas auth login --method vendor)"
+  fi
+
+  echo ""
+  echo "SSH keys:"
+  for k in github gitlab; do
+    if [[ -f "$HOME/.ssh/id_ed25519_$k" ]]; then
+      echo "  $HOME/.ssh/id_ed25519_$k  ✓ present"
+    else
+      echo "  $HOME/.ssh/id_ed25519_$k  ✗ missing (atlas auth login --method ssh)"
+    fi
+  done
+
+  echo ""
+  echo "$HOME/.ssh/config:"
+  if [[ -f "$HOME/.ssh/config" ]] && grep -q "atlas-auth:start" "$HOME/.ssh/config" 2>/dev/null; then
+    echo "  ✓ atlas-auth block present"
+  else
+    echo "  ✗ atlas-auth block absent"
+  fi
+
+  echo ""
+  echo "ssh -T live tests:"
+  for host in github.com gitlab.com; do
+    if timeout 5 ssh -T -o StrictHostKeyChecking=accept-new -o BatchMode=yes "git@$host" 2>&1 \
+       | grep -qE "(successfully authenticated|Welcome to GitLab)"; then
+      echo "  git@$host  ✓ authenticated"
+    else
+      echo "  git@$host  ✗ not authenticated (or key not yet uploaded)"
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
+# repo — wrap gh / glab to create + push a new repo in one shot.
+#
+# atlas repo create
+#   --github | --gitlab     which host (default: github)
+#   --public | --private    visibility (default: public)
+#   --name NAME             repo name (default: cwd basename)
+#   --description "..."     description (default: pulled from README's
+#                            first quote-block paragraph)
+#   --remote NAME           local git remote name (default: origin)
+#   --no-push               skip the initial push
+# ---------------------------------------------------------------------------
+
+cmd_repo() {
+  local sub="${1:-help}"; shift || true
+  case "$sub" in
+    create) cmd_repo_create "$@" ;;
+    help|"") cat <<'HELP'
+atlas repo — create + push a new repo via gh / glab.
+
+  atlas repo create [--github|--gitlab] [--public|--private] \
+                    [--name NAME] [--description "..."] \
+                    [--remote NAME] [--no-push]
+
+  Defaults: --github --public, name = cwd basename, remote = origin,
+            description = first quote-block paragraph of README.md.
+
+  Requires: gh or glab installed + authenticated.
+  Run 'atlas auth login --method vendor' first if not.
+HELP
+      ;;
+    *) _die "unknown 'repo' subcommand: $sub" ;;
+  esac
+}
+
+_repo_default_description() {
+  # Pull the first '>' quote-block paragraph from README.md as the
+  # repo description, strip Markdown.
+  local readme="$PWD/README.md"
+  [[ -f "$readme" ]] || { echo ""; return; }
+  awk '
+    /^> / { sub(/^> +/, ""); print; in_block = 1; next }
+    /^>$/ && in_block { exit }
+    in_block && !/^> / { exit }
+  ' "$readme" \
+    | head -3 \
+    | tr '\n' ' ' \
+    | sed -E 's/\*\*//g; s/\[([^]]+)\]\([^)]+\)/\1/g; s/  +/ /g; s/^ +| +$//g' \
+    | head -c 200
+}
+
+cmd_repo_create() {
+  local host="github" vis="public" name="" desc="" remote="origin" push=1
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --github)         host="github";   shift ;;
+      --gitlab)         host="gitlab";   shift ;;
+      --public)         vis="public";    shift ;;
+      --private)        vis="private";   shift ;;
+      --name)           name="$2"; shift 2 ;;
+      --name=*)         name="${1#--name=}"; shift ;;
+      --description)    desc="$2"; shift 2 ;;
+      --description=*)  desc="${1#--description=}"; shift ;;
+      --remote)         remote="$2"; shift 2 ;;
+      --remote=*)       remote="${1#--remote=}"; shift ;;
+      --no-push)        push=0; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ -z "$name" ]] && name="$(basename "$PWD")"
+  [[ -z "$desc" ]] && desc="$(_repo_default_description)"
+  [[ -z "$desc" ]] && desc="Project at $name"
+
+  _banner "📤" "atlas repo create  $(_c_dim "($host/$vis)")"
+
+  # Need a git repo locally.
+  git rev-parse --git-dir >/dev/null 2>&1 || _die "$PWD is not a git repository (run 'git init' first)"
+
+  # Need at least one commit.
+  git rev-parse HEAD >/dev/null 2>&1 || _die "no commits in this repo yet (commit something first)"
+
+  case "$host" in
+    github)
+      _have gh || _die "'gh' CLI not installed. Run: atlas auth login --method vendor"
+      if ! gh auth status >/dev/null 2>&1; then
+        _die "gh not authenticated. Run: atlas auth login --method vendor"
+      fi
+      # Detect the authenticated user/login to display.
+      local who; who="$(gh api user --jq .login 2>/dev/null || echo '?')"
+      _say "github user: $(_c_cyan "$who")"
+      _say "name:        $(_c_cyan "$name")"
+      _say "visibility:  $(_c_cyan "$vis")"
+      _say "description: $(_c_dim "$desc")"
+      _say "remote:      $(_c_cyan "$remote")"
+      _say "push:        $([[ $push -eq 1 ]] && echo yes || echo no)"
+      echo ""
+      # If the remote already exists on this repo, refuse — user can use git push directly.
+      if git remote get-url "$remote" >/dev/null 2>&1; then
+        _die "remote '$remote' already configured (url: $(git remote get-url "$remote"))"
+      fi
+      local args=(repo create "$name" "--$vis" --source=. --remote="$remote")
+      [[ -n "$desc" ]] && args+=(--description "$desc")
+      [[ $push -eq 1 ]] && args+=(--push)
+      _say "running: $(_c_dim "gh ${args[*]}")"
+      echo ""
+      gh "${args[@]}"
+      ;;
+    gitlab)
+      _have glab || _die "'glab' CLI not installed. Run: atlas auth login --method vendor"
+      if ! glab auth status >/dev/null 2>&1; then
+        _die "glab not authenticated. Run: atlas auth login --method vendor"
+      fi
+      _say "name:        $(_c_cyan "$name")"
+      _say "visibility:  $(_c_cyan "$vis")"
+      _say "description: $(_c_dim "$desc")"
+      _say "remote:      $(_c_cyan "$remote")"
+      echo ""
+      if git remote get-url "$remote" >/dev/null 2>&1; then
+        _die "remote '$remote' already configured (url: $(git remote get-url "$remote"))"
+      fi
+      local args=(repo create "$name" "--$vis")
+      [[ -n "$desc" ]] && args+=(--description "$desc")
+      _say "running: $(_c_dim "glab ${args[*]}")"
+      echo ""
+      glab "${args[@]}"
+      # glab doesn't have --source/--push, so we do them manually.
+      local who
+      who="$(glab api user --jq .username 2>/dev/null || git config user.name | tr -d ' ')"
+      git remote add "$remote" "git@gitlab.com:$who/$name.git"
+      _say "added remote: $remote → git@gitlab.com:$who/$name.git"
+      if [[ $push -eq 1 ]]; then
+        git push -u "$remote" main
+        _say "pushed main to $remote"
+      fi
+      ;;
+    *) _die "unknown --host: $host" ;;
+  esac
+
+  echo ""
+  _banner "✅" "done"
+  if [[ "$host" == "github" ]] && _have gh; then
+    local url; url="$(gh repo view "$name" --json url --jq .url 2>/dev/null || true)"
+    [[ -n "$url" ]] && _say "url: $(_c_cyan "$url")"
+    _say "star history will start ticking on first visit:"
+    _say "  $(_c_dim "https://star-history.com/#${who:-you}/${name}&Date")"
+  fi
+  _say ""
+  _say "next:"
+  _say "  - share the repo URL on X / HN / your README"
+  _say "  - $(_c_dim 'atlas mirror init') if you also have a GitLab canonical"
+}
+
+cmd_install() {
+  local runtime=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --runtime) runtime="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  [[ -z "$runtime" ]] && _die "usage: atlas install --runtime <claude-code|codex|opencode|hermes|generic>"
+  local adapter="$ADAPTERS/$runtime/install.sh"
+  if [[ ! -x "$adapter" ]]; then
+    if [[ -f "$adapter" ]]; then chmod +x "$adapter"; else _die "no adapter for runtime '$runtime' (looked for $adapter)"; fi
+  fi
+  ATLAS_HOME="$ATLAS_HOME" "$adapter"
+}
+
+cmd_styles() {
+  echo "available --style presets:"
+  echo "  default   - universal (everything: §0-§9 + §A/G/D/X/R/O/Sec/B)"
+  for d in "$TEMPLATES/styles"/*/; do
+    [[ -d "$d" ]] && echo "  $(basename "$d")"
+  done | sort -u | grep -v "^  default$" || true
+}
+
+cmd_version() {
+  _logo
+  echo ""
+}
+
+cmd_help() {
+  _logo
+  echo ""
+  printf '  %s\n\n' "${ATLAS_HELP_HEADER:-Usage:}"
+  # Pull the documented subcommand block from the file header.
+  sed -n '2,40p' "$0" | sed -E 's/^# \{0,1\}//'
+}
+
+# --- dispatch -------------------------------------------------------------
+
+main() {
+  local sub="${1:-help}"; shift || true
+  case "$sub" in
+    init)     cmd_init "$@" ;;
+    check)    cmd_check "$@" ;;
+    anchors)  cmd_anchors "$@" ;;
+    anchor)   cmd_anchor "$@" ;;
+    install)  cmd_install "$@" ;;
+    styles)   cmd_styles "$@" ;;
+    stacks)   cmd_stacks "$@" ;;
+    critique) cmd_critique "$@" ;;
+    gap-to-article) cmd_gap_to_article "$@" ;;
+    cost)     cmd_cost "$@" ;;
+    mirror)   cmd_mirror "$@" ;;
+    adr)      cmd_adr "$@" ;;
+    research) cmd_research "$@" ;;
+    auth)     cmd_auth "$@" ;;
+    repo)     cmd_repo "$@" ;;
+    version|--version|-v) cmd_version ;;
+    help|--help|-h|"") cmd_help ;;
+    *) _die "unknown subcommand: $sub (try 'atlas help')" ;;
+  esac
+}
+
+main "$@"

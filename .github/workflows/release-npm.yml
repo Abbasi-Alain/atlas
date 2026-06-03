@@ -1,0 +1,45 @@
+name: release-npm
+
+# Publish @alainabbasi/atlas to npm on every GitHub release.
+#
+# Requires secret: NPM_TOKEN
+#   Generate at: https://www.npmjs.com/settings/alainabbasi/tokens/new
+#   Type:        "Automation" (works without 2FA; never expires by default)
+#   Scope:       Read + write to packages under @alainabbasi/
+#   Then:        repo Settings → Secrets and variables → Actions → New secret
+#                Name: NPM_TOKEN
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write    # for npm provenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify package.json version matches tag
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag $TAG_VERSION does not match package.json $PKG_VERSION"
+            exit 1
+          fi
+          echo "✅ tag and package.json both at $TAG_VERSION"
+
+      - name: Publish
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

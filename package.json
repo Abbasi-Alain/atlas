@@ -1,0 +1,55 @@
+{
+  "name": "@alainabbasi/atlas",
+  "version": "0.1.0",
+  "description": "ATLAS — Agentic Harness Standard. 10–30× fewer orientation tokens. Zero infrastructure. Three Markdown files every Claude/Codex/Cursor/Gemini/Zed/OpenCode/Copilot/Hermes session reads first.",
+  "license": "MIT",
+  "homepage": "https://github.com/Abbasi-Alain/atlas#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Abbasi-Alain/atlas.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Abbasi-Alain/atlas/issues"
+  },
+  "author": "Alain Abbasi",
+  "bin": {
+    "atlas": "bin/atlas-node"
+  },
+  "files": [
+    "bin/",
+    "templates/",
+    "adapters/",
+    "hooks/",
+    "docs/SPEC.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "agentic-harness",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "cursor",
+    "gemini",
+    "copilot",
+    "context-reduction",
+    "token-optimization",
+    "multi-agent",
+    "llm",
+    "documentation-standard",
+    "project-map",
+    "skill-anchor",
+    "architecture-decision-records",
+    "atlas",
+    "developer-tools"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "bash tests/bootstrap.test.sh"
+  }
+}

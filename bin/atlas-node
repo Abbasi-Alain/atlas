@@ -1,0 +1,19 @@
+#!/usr/bin/env node
+// atlas-node — thin npm/npx wrapper that execs the bash CLI.
+// Lets `npx @alainabbasi/atlas init` work without users needing
+// to install bash dependencies separately.
+'use strict';
+const { spawnSync } = require('child_process');
+const path = require('path');
+
+const cli = path.join(__dirname, 'atlas');
+const result = spawnSync('bash', [cli, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: { ...process.env, ATLAS_HOME: path.dirname(__dirname) },
+});
+
+if (result.error) {
+  console.error('atlas: failed to spawn bash —', result.error.message);
+  process.exit(127);
+}
+process.exit(result.status ?? 1);

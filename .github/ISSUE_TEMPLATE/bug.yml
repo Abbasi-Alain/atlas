@@ -1,0 +1,68 @@
+name: 🐛 Bug report
+description: Something in the CLI, a template, or an adapter isn't working as documented.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Before filing, please check open + closed issues for duplicates.
+
+  - type: input
+    id: version
+    attributes:
+      label: ATLAS version
+      description: Run `atlas version` and paste the version line.
+      placeholder: "atlas v0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: How did you install?
+      options:
+        - curl | bash (install.sh)
+        - npx @alainabbasi/atlas
+        - npm install -g @alainabbasi/atlas
+        - git clone + ./install.sh
+        - other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS + shell
+      placeholder: "macOS 14.5 / zsh 5.9   (or Ubuntu 22.04 / bash 5.1)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest sequence of commands that triggers the bug.
+      placeholder: |
+        atlas init --style minimal
+        atlas anchor add FOO "bar"
+        atlas check
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened (actual output)
+      placeholder: Paste stdout/stderr.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true

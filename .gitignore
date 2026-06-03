@@ -1,0 +1,16 @@
+.DS_Store
+node_modules/
+*.log
+.tmp/
+
+# Internal launch / marketing drafts — local only, never pushed.
+.launch/
+
+# Private-style overlays — if you maintain a private style preset as
+# a sibling repo and symlink it into templates/styles/ via an overlay
+# install.sh, these patterns keep the symlink out of git.
+templates/styles/*-private
+templates/styles/*-internal
+
+# Local atlas-mirror config when someone tests inside this repo.
+.atlas/

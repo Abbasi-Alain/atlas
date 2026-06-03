@@ -1,0 +1,46 @@
+name: 🎨 New style preset
+description: Propose a new --style preset (e.g. minimal-for-libraries, microservice, oss-team, …)
+title: "[style] "
+labels: ["style-preset", "good first issue", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Style presets live in `templates/styles/<name>/` and override any of
+        `ATLAS.md.tmpl`, `SKILL.md.tmpl`, `CLAUDE.md.tmpl`, `EXAMPLES.md.tmpl`.
+        See `templates/styles/karpathy/CLAUDE.md.tmpl` for a small example.
+
+  - type: input
+    id: name
+    attributes:
+      label: Style name (kebab-case)
+      placeholder: "oss-library / microservice / academic-research / …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: positioning
+    attributes:
+      label: One-line "when to use this" positioning
+      description: This becomes the row in README.md → Style presets table.
+      placeholder: |
+        e.g. "academic-research" — for ML repos with arXiv preprint links,
+        experiment logs, and reproducibility checklists.
+    validations:
+      required: true
+
+  - type: textarea
+    id: differences
+    attributes:
+      label: What does it override?
+      description: Which files differ from `default`? Bullet-list the deltas.
+      placeholder: |
+        - ATLAS.md.tmpl: adds §P "Reproducibility" with seed/dataset/hash columns.
+        - SKILL.md.tmpl: pre-seeded with §EXPERIMENT-ARTIFACTS-COMMITTED.
+        - CLAUDE.md.tmpl: keeps the karpathy four-principle frame.
+
+  - type: textarea
+    id: prior_art
+    attributes:
+      label: Prior art / influences
+      description: Repos, papers, blog posts that inspired this style.

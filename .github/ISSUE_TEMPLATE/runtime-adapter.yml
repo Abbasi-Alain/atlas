@@ -1,0 +1,46 @@
+name: 🔌 New runtime adapter
+description: Propose ATLAS support for a new agent runtime (Aider, Continue, Tabby, Roo Code, …)
+title: "[adapter] "
+labels: ["adapter", "good first issue", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ATLAS adapters are thin install.sh scripts that wire ATLAS bootstrap into a runtime.
+        See `adapters/cursor/install.sh` for the simplest template.
+
+  - type: input
+    id: runtime_name
+    attributes:
+      label: Runtime name
+      placeholder: "Aider / Continue / Tabby / Roo / your-runtime"
+    validations:
+      required: true
+
+  - type: input
+    id: runtime_url
+    attributes:
+      label: Runtime URL
+      placeholder: "https://github.com/<owner>/<repo>"
+    validations:
+      required: true
+
+  - type: textarea
+    id: bootstrap_mechanism
+    attributes:
+      label: How does this runtime read project-level context?
+      description: |
+        What file does it look for? Per-project (.runtime/config) or global
+        (~/.runtime/AGENTS.md)? Is there a SessionStart-style hook?
+      placeholder: |
+        e.g. "Continue reads `.continue/config.json`. The `systemMessage` field
+        gets prepended to every chat. We'd append the ATLAS-bootstrap block
+        there with marker delimiters for idempotency."
+    validations:
+      required: true
+
+  - type: textarea
+    id: caveats
+    attributes:
+      label: Caveats
+      description: Any runtime-specific quirks worth calling out (like Copilot inline vs Chat).

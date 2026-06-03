@@ -1,0 +1,83 @@
+# CLAUDE.md — strict mode
+
+> Behavioral contract for agents in **{{PROJECT_NAME}}**. Strict mode
+> = high-stakes codebase. Every rule is enforced. Mirror at [`AGENTS.md`](AGENTS.md).
+
+---
+
+## 0. The three rules
+
+**Don't grep.** Read [`ATLAS.md`](ATLAS.md) §0. Every module is one click away. Reaching for `find` or `grep` for orientation is a process failure.
+
+**Don't guess.** State ambiguities. Ask. A silent guess in a strict codebase costs more than a clarifying question.
+
+**Don't repeat.** Search [`SKILL.md`](.agents/skill/{{PROJECT_NAME}}/SKILL.md) before fixing. Re-introducing a paid lesson is the worst diff a strict reviewer can see.
+
+---
+
+## 1. Pre-flight checklist (REQUIRED before any code change)
+
+- [ ] Read the relevant ATLAS section.
+- [ ] Searched SKILL anchors for keywords adjacent to your task.
+- [ ] Identified the smoke command (ATLAS §5).
+- [ ] Confirmed assumptions are stated and acknowledged.
+
+If any box is unchecked, **stop**.
+
+## 2. Hard rules
+
+1. **No speculative code.** No "we might need this later." If you're not solving the brief in *this* commit, don't add it.
+2. **No drive-by changes.** Renames, formatting, "while I'm here" cleanups are separate PRs.
+3. **No silent API changes.** Public signatures unchanged unless the task says so.
+4. **No new dependencies without an ADR.** Adding a library is an architectural decision; record it.
+5. **No `# TODO` left behind.** If it's worth a TODO, it's worth a ticket. Otherwise delete.
+6. **No commented-out code.** Delete or keep. Never both.
+7. **No `Co-Authored-By: Claude …`** or equivalent AI attribution.
+8. **Smoke set MUST pass** before commit.
+9. **ATLAS updated in the same commit** as any structural change.
+10. **SKILL anchor added or cited** for any non-trivial scar.
+
+## 3. Surgical changes
+
+Every changed line traces to the brief. The reviewer should be able to look at any line and say "yes, that's required for X."
+
+When unsure: delete the line. If a test fails, restore it. If no test fails, it wasn't load-bearing.
+
+## 4. Goal-driven execution
+
+Plans look like this:
+
+```
+1. <step> → verify: <observable check>
+2. <step> → verify: <observable check>
+3. <step> → verify: <observable check>
+```
+
+Without a checkable plan, you don't start.
+
+## 5. Reporting
+
+Every task ends with the closing report. The "What I did NOT change" block is required, not optional.
+
+```
+## What changed
+- file: <one line>
+
+## What I did NOT change (and why)
+- <thing>: <reason>
+
+## Smoke
+<last 2-3 lines>
+
+## ATLAS / SKILL updates
+- <none | one line>
+
+## Open items
+- <none | one line>
+```
+
+---
+
+**Working when:** every diff line traces to the brief, every commit cites an anchor, the same scar never appears twice, and reports include explicit non-changes.
+
+*Strict-mode preset. Part of [ATLAS](https://github.com/Abbasi-Alain/atlas).*
