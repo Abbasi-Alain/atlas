@@ -23,8 +23,14 @@ jobs:
           bash packaging/debian/build-deb.sh
           ls -lh dist/
 
-      - name: Upload to release
+      - name: Checksums + upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" dist/atlas_*.deb --clobber
+          VER="${TAG#v}"
+          # Hash the .deb and the source tarball GitHub auto-generates for the tag.
+          curl -fsSL -o "atlas-${VER}.tar.gz" \
+            "https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+          sha256sum dist/atlas_*.deb "atlas-${VER}.tar.gz" | tee checksums.txt
+          gh release upload "$TAG" dist/atlas_*.deb checksums.txt --clobber

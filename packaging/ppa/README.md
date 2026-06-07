@@ -17,6 +17,11 @@ downloadable `.deb` in [`../debian/`](../debian) — that one needs no account.
 > package needs Ubuntu tooling. Use any Ubuntu box, a VM, or Docker:
 > `docker run --rm -it -v "$PWD":/src -w /src ubuntu:24.04 bash`.
 
+> **CI automates this.** `release-ppa.yml` builds + `dput`s on every GitHub
+> release once `LAUNCHPAD_GPG_PRIVATE_KEY` + `LAUNCHPAD_PPA` are set
+> (see [`../../docs/RELEASING.md`](../../docs/RELEASING.md) §5). This page is the
+> one-time GPG/account setup and how to test locally before automating.
+
 ---
 
 ## 1. Create a Launchpad account (~3 min)

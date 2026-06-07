@@ -137,6 +137,30 @@ curl -L https://github.com/Abbasi-Alain/atlas/releases/latest/download/atlas_X.Y
   -o /tmp/atlas.deb && sudo dpkg -i /tmp/atlas.deb
 ```
 
+### 5. Launchpad PPA — a GPG key (for `apt install atlas`)
+
+`release-ppa.yml` builds a signed source package per Ubuntu series and `dput`s
+it to your PPA on each release. **PPA uploads are authorized by a GPG signature,
+not SSH** — an SSH key on Launchpad is not enough.
+
+1. Create the PPA: <https://launchpad.net/~> → "Create a new PPA", name `atlas`.
+2. Generate a **passphraseless** signing key (CI can't type a passphrase):
+   ```bash
+   gpg --batch --passphrase '' --quick-generate-key "Alain Abbasi <abbasi.alain@gmail.com>" default sign 2y
+   gpg --list-secret-keys --keyid-format=long           # note the KEYID
+   gpg --keyserver keyserver.ubuntu.com --send-keys <KEYID>
+   ```
+3. Register + verify it on Launchpad: <https://launchpad.net/~/+editpgpkeys>
+   (paste the fingerprint; decrypt the emailed token; open the link).
+4. Add the two secrets:
+   ```bash
+   gpg --armor --export-secret-keys <KEYID> | gh secret set LAUNCHPAD_GPG_PRIVATE_KEY -R Abbasi-Alain/atlas
+   gh secret set LAUNCHPAD_PPA -R Abbasi-Alain/atlas --body "ppa:<your-launchpad-user>/atlas"
+   ```
+
+Users then: `sudo add-apt-repository ppa:<your-launchpad-user>/atlas && sudo apt install atlas`.
+First-time walkthrough: [`../packaging/ppa/README.md`](../packaging/ppa/README.md).
+
 ---
 
 ## Required GitHub secrets — checklist
@@ -149,6 +173,8 @@ curl -L https://github.com/Abbasi-Alain/atlas/releases/latest/download/atlas_X.Y
 | `AUR_SSH_PRIVATE_KEY` | `release-aur.yml` | ⏳ |
 | `AUR_USERNAME` | `release-aur.yml` | ⏳ |
 | `AUR_EMAIL` | `release-aur.yml` | ⏳ |
+| `LAUNCHPAD_GPG_PRIVATE_KEY` | `release-ppa.yml` | ⏳ |
+| `LAUNCHPAD_PPA` | `release-ppa.yml` | ⏳ |
 
 Set them at: https://github.com/Abbasi-Alain/atlas/settings/secrets/actions
 

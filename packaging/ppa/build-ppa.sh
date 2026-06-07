@@ -33,7 +33,8 @@ for t in dpkg-buildpackage debuild git; do
   command -v "$t" >/dev/null || { echo "missing '$t' — sudo apt-get install -y devscripts debhelper git"; exit 1; }
 done
 
-BUILD="$(mktemp -d)"
+BUILD="${BUILD_DIR:-$(mktemp -d)}"
+mkdir -p "$BUILD"
 SRC="$BUILD/atlas-$VERSION"
 echo "[ppa] staging committed tree (git archive HEAD) -> $SRC"
 mkdir -p "$SRC"

@@ -1,0 +1,72 @@
+name: release-ppa
+
+# On every published release, build a signed Debian SOURCE package per Ubuntu
+# series and upload it to your Launchpad PPA. Launchpad then builds the .deb.
+#
+# Requires (repo Settings → Secrets and variables → Actions):
+#   LAUNCHPAD_GPG_PRIVATE_KEY  ASCII-armored private key, PASSPHRASELESS, whose
+#                              public half is registered + verified on Launchpad.
+#                              Export with: gpg --armor --export-secret-keys <KEYID>
+#   LAUNCHPAD_PPA              your PPA, e.g. ppa:alainabbasi/atlas
+#
+# Note: PPA uploads are authorized by this GPG signature — NOT by an SSH key.
+# The job self-skips until LAUNCHPAD_GPG_PRIVATE_KEY is set.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  ppa:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        series: [noble, jammy]
+    steps:
+      - name: Is the PPA configured?
+        id: cfg
+        env:
+          KEY: ${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::LAUNCHPAD_GPG_PRIVATE_KEY not set — skipping PPA upload."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.configured == 'true'
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install build tooling
+        if: steps.cfg.outputs.configured == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y devscripts debhelper dput-ng gnupg lintian dpkg-dev
+
+      - name: Import GPG signing key
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          GPG_KEY: ${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_KEY" | gpg --batch --import
+          KEYID=$(gpg --list-secret-keys --keyid-format=long --with-colons | awk -F: '/^sec:/{print $5; exit}')
+          echo "GPGKEY=$KEYID" >> "$GITHUB_ENV"
+          echo "imported signing key $KEYID"
+
+      - name: Build signed source package (${{ matrix.series }})
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          BUILD_DIR: ${{ runner.temp }}/ppa-${{ matrix.series }}
+        run: packaging/ppa/build-ppa.sh "${{ matrix.series }}"
+
+      - name: dput to Launchpad (${{ matrix.series }})
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          BUILD_DIR: ${{ runner.temp }}/ppa-${{ matrix.series }}
+          PPA: ${{ secrets.LAUNCHPAD_PPA }}
+        run: |
+          dput "$PPA" "$BUILD_DIR"/atlas_*_source.changes

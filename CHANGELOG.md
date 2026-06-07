@@ -17,6 +17,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `atlas uninstall [--purge] [-y]` — cleanly remove a `curl|bash`/manual install; defers package-manager installs to brew/apt/AUR/npm (install-trust, CRITICS #6).
 - `action.yml` — reusable GitHub Action (`uses: Abbasi-Alain/atlas@v1`) that runs `atlas check` and posts an `atlas measure` job summary.
 - Launchpad PPA packaging under `packaging/ppa/` (proper `/usr` install, `git archive`-based build, full account/GPG/`dput` runbook).
+- `release-ppa.yml` — GitHub Actions builds + `dput`s the signed PPA source package per Ubuntu series (noble, jammy) on each release; self-skips until `LAUNCHPAD_GPG_PRIVATE_KEY` + `LAUNCHPAD_PPA` are set.
+- Release now publishes `checksums.txt` (sha256 of the `.deb` + source tarball) for install-trust (CRITICS #6).
 - This repo now dogfoods ATLAS: real `ATLAS.md`, `.agents/skill/atlas/SKILL.md`, `CLAUDE.md`/`AGENTS.md`, and `llms.txt`.
 
 ### Changed
