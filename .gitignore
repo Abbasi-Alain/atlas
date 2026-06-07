@@ -1,4 +1,6 @@
 .DS_Store
+.env
+.env.*
 node_modules/
 *.log
 .tmp/
@@ -9,6 +11,13 @@ node_modules/
 # Private-style overlays — if you maintain a private style preset as
 # a sibling repo and symlink it into templates/styles/ via an overlay
 # install.sh, these patterns keep the symlink out of git.
+#
+# `abbasi` is maintained privately (GitLab-only) and dropped in via the
+# Atlas-private overlay's install.sh, which symlinks it into this dir at
+# install time. It must NEVER be committed here: the symlink target is an
+# absolute local path, so committing it leaks that path AND ships a dangling
+# link to every npm/brew/.deb/AUR consumer.
+templates/styles/abbasi
 templates/styles/*-private
 templates/styles/*-internal
 
