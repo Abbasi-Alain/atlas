@@ -11,6 +11,13 @@
 #                                     --stack: requires a style with stacks/ subdir
 #                                              (comma-separated; pick any subset)
 #   atlas check                       lint files, verify anchors unique
+#   atlas measure [--badge]           estimate orientation-token savings (with
+#                                     vs without ATLAS); --badge prints a shield
+#   atlas doctor                      diagnose ATLAS_HOME + adapter/hook wiring
+#   atlas badge [--for-the-badge]     print a 'Powered by ATLAS' README badge
+#   atlas export --to <runtime>       fan the canonical trio out to another
+#                                     runtime's context file. <runtime>:
+#                                     codex|copilot|gemini|cursor|llms-txt|all
 #   atlas anchors                     list every SKILL anchor (machine-readable)
 #   atlas anchor add NAME "summary"   append a stub anchor to SKILL.md
 #   atlas critique <topic> [--with-codex|--with-claude]
@@ -1819,6 +1826,241 @@ cmd_help() {
   sed -n '2,40p' "$0" | sed -E 's/^# \{0,1\}//'
 }
 
+# ---------------------------------------------------------------------------
+# measure — estimate the orientation-token savings ATLAS buys this repo.
+#
+# Compares two orientation surfaces (rough estimate, bytes / 4):
+#   WITHOUT ATLAS  what an agent skims to self-orient: README + the file
+#                  tree + the head of the top source files.
+#   WITH ATLAS     the front-loaded trio: ATLAS.md + SKILL.md + CLAUDE.md.
+#
+# --badge prints a shields.io badge with the savings %, for the README.
+# ---------------------------------------------------------------------------
+cmd_measure() {
+  local want_badge=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --badge) want_badge=1; shift ;;
+      *)       shift ;;
+    esac
+  done
+
+  local atlas="$PWD/ATLAS.md"
+  [[ -f "$atlas" ]] || _die "no ATLAS.md in $PWD — run 'atlas init' first"
+  local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+  local claude="$PWD/CLAUDE.md"
+
+  _bytes() { if [[ -f "$1" ]]; then wc -c < "$1" | tr -d ' '; else echo 0; fi; }
+
+  # WITH ATLAS — the front-loaded orientation surface (the trio).
+  local with_b=0
+  with_b=$(( with_b + $(_bytes "$atlas") ))
+  [[ -n "$skill" ]] && with_b=$(( with_b + $(_bytes "$skill") ))
+  with_b=$(( with_b + $(_bytes "$claude") ))
+
+  # WITHOUT ATLAS — README + file tree + head of the top source files.
+  local without_b=0
+  without_b=$(( without_b + $(_bytes "$PWD/README.md") ))
+  local tree_b
+  tree_b=$( { git -C "$PWD" ls-files 2>/dev/null || find "$PWD" -maxdepth 3 -type f; } \
+            | head -400 | wc -c | tr -d ' ')
+  without_b=$(( without_b + tree_b ))
+  local f cnt=0 head_b=0 fb
+  while IFS= read -r f; do
+    [[ $cnt -ge 15 ]] && break
+    [[ -f "$PWD/$f" ]] || continue
+    fb=$(head -c 1600 "$PWD/$f" 2>/dev/null | wc -c | tr -d ' ')
+    head_b=$(( head_b + fb ))
+    cnt=$(( cnt + 1 ))
+  done < <( { git -C "$PWD" ls-files 2>/dev/null || true; } \
+            | grep -Ei '\.(py|js|ts|tsx|jsx|go|rs|rb|java|c|cc|cpp|h|hpp|sh|php|swift|kt|scala|cs|m|mm)$' || true )
+  without_b=$(( without_b + head_b ))
+
+  [[ $with_b    -lt 1 ]] && with_b=1
+  [[ $without_b -lt 1 ]] && without_b=1
+  local with_t=$(( with_b / 4 )) without_t=$(( without_b / 4 ))
+  local ratio pct
+  ratio=$(awk -v a="$without_t" -v b="$with_t" 'BEGIN{ if(b<1)b=1; printf "%.1f", a/b }')
+  pct=$(awk   -v a="$without_t" -v b="$with_t" 'BEGIN{ if(a<1)a=1; printf "%.0f", 100*(a-b)/a }')
+
+  if [[ $want_badge -eq 1 ]]; then
+    echo "[![ATLAS](https://img.shields.io/badge/ATLAS-%E2%88%92${pct}%25%20orientation%20tokens-06b6d4)](https://github.com/Abbasi-Alain/atlas)"
+    return 0
+  fi
+
+  _banner "📊" "atlas measure  $(_c_dim "(estimate · bytes ÷ 4)")"
+  printf "  %-28s %s\n" "without ATLAS (skim):" "$(_c_yellow "~${without_t} tok")"
+  printf "  %-28s %s\n" "with ATLAS (trio):"    "$(_c_green  "~${with_t} tok")"
+  echo ""
+  printf "  %s %s %s\n" "$(_c_bold "${ratio}× less")" "$(_c_dim 'orientation context —')" "$(_c_bold "−${pct}%")"
+  echo ""
+  _say "method: 'without' = README + file tree + head of top source files;"
+  _say "        'with' = ATLAS.md + SKILL.md + CLAUDE.md. Rough estimate."
+  _say "shareable README badge:  $(_c_dim 'atlas measure --badge')"
+}
+
+# ---------------------------------------------------------------------------
+# doctor — diagnose the ATLAS install + this project's harness + runtime wiring.
+# ---------------------------------------------------------------------------
+cmd_doctor() {
+  local warns=0
+  _banner "🩺" "atlas doctor"
+  if _have atlas; then _ok "atlas on PATH ($(command -v atlas))"
+  else _fail "atlas not on PATH — add your bin dir to PATH (see install.sh)"; warns=$(( warns + 1 )); fi
+  echo "   $(_c_dim "ATLAS_HOME=$ATLAS_HOME")"
+  for d in templates adapters hooks; do
+    if [[ -d "$ATLAS_HOME/$d" ]]; then _ok "$d/ present"
+    else _fail "$ATLAS_HOME/$d missing — reinstall ATLAS"; warns=$(( warns + 1 )); fi
+  done
+
+  _banner "📂" "project: $(_project_name)"
+  local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+  local label path
+  for pair in "ATLAS.md:$PWD/ATLAS.md" "CLAUDE.md:$PWD/CLAUDE.md" "AGENTS.md:$PWD/AGENTS.md"; do
+    label="${pair%%:*}"; path="${pair#*:}"
+    if [[ -f "$path" ]]; then _ok "$label present"
+    else _fail "$label missing — run 'atlas init'"; warns=$(( warns + 1 )); fi
+  done
+  if [[ -n "$skill" ]]; then _ok "SKILL.md present ($skill)"
+  else _fail "SKILL.md missing — run 'atlas init'"; warns=$(( warns + 1 )); fi
+
+  # CLAUDE.md is loaded every turn — Claude's own docs say keep it concise.
+  local claude_f="$PWD/CLAUDE.md" lines
+  if [[ -f "$claude_f" ]]; then
+    lines=$(wc -l < "$claude_f" | tr -d ' ')
+    if [[ "$lines" -gt 200 ]]; then _say "CLAUDE.md is $lines lines — it loads every turn; consider trimming < 200"
+    else _ok "CLAUDE.md concise ($lines lines)"; fi
+    if [[ -f "$PWD/AGENTS.md" ]] && ! diff -q "$claude_f" "$PWD/AGENTS.md" >/dev/null 2>&1; then
+      _fail "AGENTS.md drifted from CLAUDE.md — run 'atlas export --to codex'"; warns=$(( warns + 1 ))
+    fi
+  fi
+
+  _banner "🧩" "runtime exports"
+  local rt rp
+  for pair in "Copilot:.github/copilot-instructions.md" "Gemini:GEMINI.md" "Cursor:.cursor/rules/atlas.mdc" "llms.txt:llms.txt"; do
+    rt="${pair%%:*}"; rp="${pair#*:}"
+    if [[ -e "$PWD/$rp" ]]; then _ok "$rt export present ($rp)"
+    else _say "$rt not exported — $(_c_dim "atlas export --to all")"; fi
+  done
+
+  _banner "🔌" "runtime: claude-code"
+  if [[ -f "$HOME/.claude/hooks/atlas-skill-loader.sh" ]]; then _ok "skill-loader hook installed"
+  else _say "hook not installed — $(_c_dim 'atlas install --runtime claude-code')"; fi
+  if [[ -f "$HOME/.claude/settings.json" ]] && grep -q "atlas-skill-loader" "$HOME/.claude/settings.json" 2>/dev/null; then
+    _ok "hook wired into ~/.claude/settings.json"
+  else
+    _say "hook not wired in settings.json — $(_c_dim 'atlas install --runtime claude-code')"
+  fi
+
+  echo ""
+  if [[ $warns -eq 0 ]]; then echo "$(_c_green 'atlas doctor:') healthy ✅"
+  else echo "$(_c_yellow 'atlas doctor:') $warns issue(s) — see fixes above"; fi
+}
+
+# ---------------------------------------------------------------------------
+# badge — print a 'Powered by ATLAS' README badge (markdown + HTML).
+# ---------------------------------------------------------------------------
+cmd_badge() {
+  local style="flat"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --for-the-badge) style="for-the-badge"; shift ;;
+      --flat)          style="flat";          shift ;;
+      *)               shift ;;
+    esac
+  done
+  local img="https://img.shields.io/badge/harness-ATLAS-06b6d4?style=${style}&logo=markdown&logoColor=white"
+  local link="https://github.com/Abbasi-Alain/atlas"
+  _banner "🏷️ " "atlas badge"
+  echo "Markdown — paste into your README:"
+  echo ""
+  echo "  [![ATLAS](${img})](${link})"
+  echo ""
+  echo "HTML:"
+  echo ""
+  echo "  <a href=\"${link}\"><img src=\"${img}\" alt=\"ATLAS harness\"></a>"
+  echo ""
+  _say "every repo that adds this links back to ATLAS — thank you 💙"
+}
+
+# ---------------------------------------------------------------------------
+# export — fan the canonical trio out to other runtimes' context files.
+#
+# CLAUDE.md (behavioral) + ATLAS.md (structural) are the source of truth.
+# This regenerates the per-runtime files so you maintain ONE set of docs:
+#   codex/agents  -> AGENTS.md
+#   copilot       -> .github/copilot-instructions.md
+#   gemini        -> GEMINI.md
+#   cursor        -> .cursor/rules/atlas.mdc
+#   llms-txt      -> llms.txt
+#   all           -> every target above
+# ---------------------------------------------------------------------------
+cmd_export() {
+  local target=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --to)   target="${2:-}"; shift 2 ;;
+      --to=*) target="${1#--to=}"; shift ;;
+      *)      [[ -z "$target" ]] && target="$1"; shift ;;
+    esac
+  done
+  [[ -z "$target" ]] && _die "usage: atlas export --to <codex|copilot|gemini|cursor|llms-txt|all>"
+
+  local claude="$PWD/CLAUDE.md" atlas="$PWD/ATLAS.md"
+  [[ -f "$claude" ]] || _die "no CLAUDE.md in $PWD — run 'atlas init' first"
+
+  local gen="Generated by 'atlas export' from CLAUDE.md — edit CLAUDE.md, not this file."
+
+  _export_one() {
+    case "$1" in
+      codex|agents)
+        cp "$claude" "$PWD/AGENTS.md"
+        _ok "AGENTS.md (Codex / OpenCode — mirror of CLAUDE.md)" ;;
+      copilot)
+        mkdir -p "$PWD/.github"
+        { printf '<!-- %s -->\n\n' "$gen"; cat "$claude"; } > "$PWD/.github/copilot-instructions.md"
+        _ok ".github/copilot-instructions.md (GitHub Copilot)" ;;
+      gemini)
+        { printf '<!-- %s -->\n\n' "$gen"; cat "$claude"; } > "$PWD/GEMINI.md"
+        _ok "GEMINI.md (Gemini CLI)" ;;
+      cursor)
+        mkdir -p "$PWD/.cursor/rules"
+        { printf -- '---\ndescription: ATLAS project rules (from CLAUDE.md)\nalwaysApply: true\n---\n\n'; cat "$claude"; } > "$PWD/.cursor/rules/atlas.mdc"
+        _ok ".cursor/rules/atlas.mdc (Cursor)" ;;
+      llms-txt|llmstxt|llms)
+        local project; project="$(_project_name)"
+        local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+        {
+          printf '# %s\n\n' "$project"
+          if [[ -f "$atlas" ]]; then
+            awk '/^> / { sub(/^> +/,""); print; n++ } n>=2 { exit }' "$atlas"
+            echo ""
+          fi
+          echo "## For AI coding agents — read these first"
+          echo "- [ATLAS.md](ATLAS.md): repository map — where everything lives, commands, architecture, constraints."
+          [[ -n "$skill" ]] && echo "- ${skill#"$PWD"/}: procedural playbook + known failure modes (stable anchors)."
+          echo "- [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md): behavioral contract for coding agents."
+        } > "$PWD/llms.txt"
+        _ok "llms.txt" ;;
+      claude)
+        _say "CLAUDE.md is the canonical source — nothing to export" ;;
+      *)
+        _warn "unknown export target '$1' (skip)" ;;
+    esac
+  }
+
+  _banner "📤" "atlas export  $(_c_dim "(→ $target)")"
+  if [[ "$target" == "all" ]]; then
+    local t
+    for t in codex copilot gemini cursor llms-txt; do _export_one "$t"; done
+  else
+    _export_one "$target"
+  fi
+  echo ""
+  _say "source of truth: CLAUDE.md + ATLAS.md — re-run after edits to resync."
+  _say "$(_c_dim "tip: 'atlas doctor' flags exports that have drifted.")"
+}
+
 # --- dispatch -------------------------------------------------------------
 
 main() {
@@ -1826,6 +2068,10 @@ main() {
   case "$sub" in
     init)     cmd_init "$@" ;;
     check)    cmd_check "$@" ;;
+    measure)  cmd_measure "$@" ;;
+    doctor)   cmd_doctor "$@" ;;
+    badge)    cmd_badge "$@" ;;
+    export)   cmd_export "$@" ;;
     anchors)  cmd_anchors "$@" ;;
     anchor)   cmd_anchor "$@" ;;
     install)  cmd_install "$@" ;;

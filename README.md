@@ -146,6 +146,7 @@ atlas init                          # write ATLAS.md + SKILL.md + CLAUDE.md
                                     # + AGENTS.md mirror + EXAMPLES.md
 
 atlas check                         # verify anchors unique, structure valid
+atlas measure                       # estimate the orientation-token savings
 
 atlas install --runtime claude-code # SessionStart hook + /init-atlas command
                                     # (or: codex / opencode / hermes / generic)
@@ -186,6 +187,10 @@ Mix-and-match works: a style only overrides files it ships. Missing files fall b
 ```bash
 atlas init [--style <preset>] [--force]   # bootstrap the trio
 atlas check                               # validate ATLAS+SKILL; unique anchors
+atlas measure [--badge]                   # estimate orientation-token savings (with vs without)
+atlas doctor                              # diagnose install + harness + runtime-export drift
+atlas export --to <runtime>               # fan the trio out: codex|copilot|gemini|cursor|llms-txt|all
+atlas badge                               # print a 'Powered by ATLAS' README badge
 atlas anchors                             # list every SKILL anchor (machine-readable)
 atlas anchor add NAME "summary"           # append a stub anchor
 

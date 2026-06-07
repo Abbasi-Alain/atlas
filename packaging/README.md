@@ -5,7 +5,8 @@ Source manifests for distributing ATLAS via standard package channels.
 | Channel | File | Setup |
 |---|---|---|
 | Homebrew tap (macOS/Linux) | `homebrew/atlas.rb` | See `homebrew/README.md` |
-| Debian / Ubuntu / Mint / PopOS | `debian/build-deb.sh` | Run `./build-deb.sh`; attach `dist/atlas_*.deb` to the release |
+| Debian / Ubuntu `.deb` (download) | `debian/build-deb.sh` | Run `./build-deb.sh`; attach `dist/atlas_*.deb` to the release |
+| Ubuntu PPA (`apt install atlas`) | `ppa/` | See `ppa/README.md` — needs a Launchpad account + GPG (build on Ubuntu) |
 | AUR (Arch / Manjaro) | `aur/PKGBUILD` | See `aur/README.md` |
 
 ## Update on every release

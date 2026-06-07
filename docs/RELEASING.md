@@ -152,6 +152,25 @@ curl -L https://github.com/Abbasi-Alain/atlas/releases/latest/download/atlas_X.Y
 
 Set them at: https://github.com/Abbasi-Alain/atlas/settings/secrets/actions
 
+### Quick: set them from the CLI
+
+As of now **zero secrets are set** (`gh secret list -R Abbasi-Alain/atlas` is
+empty), so the next tag publishes only the `.deb`. Set the rest once:
+
+```bash
+gh secret set NPM_TOKEN            -R Abbasi-Alain/atlas          # paste npm "Automation" token
+gh secret set HOMEBREW_TAP_TOKEN   -R Abbasi-Alain/atlas          # paste fine-grained PAT (homebrew-atlas: Contents rw)
+gh secret set AUR_SSH_PRIVATE_KEY  -R Abbasi-Alain/atlas < ~/.ssh/aur_atlas
+gh secret set AUR_USERNAME         -R Abbasi-Alain/atlas --body "alainabbasi"
+gh secret set AUR_EMAIL            -R Abbasi-Alain/atlas --body "abbasi.alain@gmail.com"
+```
+
+### Launchpad PPA (manual, not in CI)
+
+Launchpad uploads need an interactive GPG signature, so the PPA is released by
+hand on an Ubuntu box after tagging — see [`../packaging/ppa/README.md`](../packaging/ppa/README.md).
+The downloadable `.deb` (`release-deb.yml`) stays fully automated.
+
 ---
 
 ## Versioning convention

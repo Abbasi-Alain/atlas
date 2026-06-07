@@ -1,0 +1,28 @@
+Source: atlas
+Section: utils
+Priority: optional
+Maintainer: Alain Abbasi <abbasi.alain@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/Abbasi-Alain/atlas
+Rules-Requires-Root: no
+Vcs-Git: https://github.com/Abbasi-Alain/atlas.git
+Vcs-Browser: https://github.com/Abbasi-Alain/atlas
+
+Package: atlas
+Architecture: all
+Depends: ${misc:Depends}, bash (>= 4.0), git
+Recommends: gh
+Description: repo context maps for AI coding agents (Agentic Harness Standard)
+ ATLAS gives AI coding agents a small, maintained set of Markdown files to read
+ before they work, instead of re-scanning the whole repository every session:
+ .
+  * ATLAS.md   — where everything lives (the repository map)
+  * SKILL.md   — procedural playbook + known failure modes (stable anchors)
+  * CLAUDE.md / AGENTS.md — the behavioral contract for coding agents
+ .
+ It ships a zero-dependency CLI (init, check, measure, doctor, export, anchors,
+ adr, research, and more) plus adapters for Claude Code, Codex, Cursor, Gemini,
+ Zed, GitHub Copilot, OpenCode, Hermes, and a generic runtime. ATLAS is a
+ complement to AGENTS.md, not a replacement: `atlas export` regenerates the
+ per-runtime files from one canonical source.

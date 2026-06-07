@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+# Build the arch-independent `atlas` binary package.
+# The whole source tree is dropped under /usr/share/atlas; a thin launcher
+# on PATH points ATLAS_HOME at it so all template/adapter/hook lookups resolve.
+
+%:
+	dh $@
+
+# Pure bash — nothing to compile or test at package-build time.
+override_dh_auto_build:
+override_dh_auto_test:
+
+override_dh_auto_install:
+	install -d debian/atlas/usr/share/atlas
+	cp -R bin templates adapters hooks debian/atlas/usr/share/atlas/
+	# Defensive: never ship macOS cruft or a stray private-style symlink.
+	find debian/atlas/usr/share/atlas -name .DS_Store -delete
+	rm -f debian/atlas/usr/share/atlas/templates/styles/abbasi
+	install -D -m0644 docs/SPEC.md debian/atlas/usr/share/doc/atlas/SPEC.md
+	# Launcher on PATH.
+	install -d debian/atlas/usr/bin
+	printf '#!/usr/bin/env bash\nexport ATLAS_HOME=/usr/share/atlas\nexec /usr/share/atlas/bin/atlas "$$@"\n' \
+		> debian/atlas/usr/bin/atlas
+	chmod 0755 debian/atlas/usr/bin/atlas

@@ -10,15 +10,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
--
+- `atlas measure [--badge]` — estimate orientation-token savings (with vs without ATLAS) and emit a shields.io badge for the README.
+- `atlas doctor` — diagnose the install, the project harness, CLAUDE.md size, AGENTS.md drift, and per-runtime export status.
+- `atlas export --to <codex|copilot|gemini|cursor|llms-txt|all>` — fan the canonical trio out to other runtimes' context files from one source of truth.
+- `atlas badge` — print a "Powered by ATLAS" README badge (markdown + HTML).
+- `action.yml` — reusable GitHub Action (`uses: Abbasi-Alain/atlas@v1`) that runs `atlas check` and posts an `atlas measure` job summary.
+- Launchpad PPA packaging under `packaging/ppa/` (proper `/usr` install, `git archive`-based build, full account/GPG/`dput` runbook).
+- This repo now dogfoods ATLAS: real `ATLAS.md`, `.agents/skill/atlas/SKILL.md`, `CLAUDE.md`/`AGENTS.md`, and `llms.txt`.
 
 ### Changed
 
--
+- `packaging/README.md` + `docs/RELEASING.md` document the PPA channel and a `gh secret set` cheat-sheet.
 
 ### Fixed
 
--
+- The private `abbasi` style shipped as a committed symlink with an absolute local-disk target — a dangling link plus a path leak in every npm/brew/.deb/AUR/clone consumer. It is now untracked and `.gitignore`d (SKILL §PRIVATE-STYLE-OVERLAY).
+- Stale `PortfoliaX/Atlas` URLs corrected to `Abbasi-Alain/atlas` (installed Claude Code hook + private overlay docs).
 
 ---
 

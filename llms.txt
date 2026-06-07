@@ -1,0 +1,9 @@
+# atlas
+
+**Purpose.** Graph index of this repo. Any agent dropped into this
+directory reads this file *first* and follows links to the exact
+
+## For AI coding agents — read these first
+- [ATLAS.md](ATLAS.md): repository map — where everything lives, commands, architecture, constraints.
+- .agents/skill/atlas/SKILL.md: procedural playbook + known failure modes (stable anchors).
+- [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md): behavioral contract for coding agents.

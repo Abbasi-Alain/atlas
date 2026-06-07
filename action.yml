@@ -1,0 +1,56 @@
+# Reusable GitHub Action for ATLAS.
+#
+# Other repos add this to a workflow to validate their ATLAS harness in CI
+# and surface the orientation-token savings in the job summary:
+#
+#   - uses: Abbasi-Alain/atlas@v1
+#     with:
+#       working-directory: .
+#
+# It installs the pinned ATLAS CLI, runs `atlas check` (fails the job if the
+# trio is missing/stale), and posts an `atlas measure` summary + badge snippet.
+
+name: "ATLAS check"
+description: "Validate the ATLAS harness (ATLAS.md + SKILL.md + CLAUDE.md/AGENTS.md) and report orientation-token savings."
+author: "Alain Abbasi"
+branding:
+  icon: "map"
+  color: "blue"
+
+inputs:
+  ref:
+    description: "ATLAS version/branch/tag to install (e.g. v1, main)."
+    required: false
+    default: "main"
+  working-directory:
+    description: "Directory to validate."
+    required: false
+    default: "."
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install ATLAS CLI
+      shell: bash
+      run: |
+        curl -fsSL "https://raw.githubusercontent.com/Abbasi-Alain/atlas/${{ inputs.ref }}/install.sh" | bash
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: atlas check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: atlas check
+
+    - name: atlas measure (job summary)
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        {
+          echo "### 🗺 ATLAS"
+          echo ""
+          echo '```'
+          atlas measure || true
+          echo '```'
+          echo ""
+          echo "Badge: \`$(atlas measure --badge 2>/dev/null || true)\`"
+        } >> "$GITHUB_STEP_SUMMARY"
