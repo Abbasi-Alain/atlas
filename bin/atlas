@@ -66,6 +66,8 @@
 #                                     the first README quote-block.
 #   atlas install --runtime <name>    wire ATLAS into an agent runtime
 #                                     <claude-code|codex|opencode|hermes|generic>
+#   atlas uninstall [--purge] [-y]    remove a curl|bash / manual install
+#                                     (--purge also removes the claude-code hook)
 #   atlas styles                      list available --style presets
 #   atlas stacks                      list --stack add-ons per style
 #   atlas version                     print version
@@ -2061,6 +2063,59 @@ cmd_export() {
   _say "$(_c_dim "tip: 'atlas doctor' flags exports that have drifted.")"
 }
 
+# ---------------------------------------------------------------------------
+# uninstall — remove a curl|bash / manual ATLAS install (launcher + home).
+# Package-manager installs (brew/apt/AUR/npm) are deferred to that manager.
+# ---------------------------------------------------------------------------
+cmd_uninstall() {
+  local purge=0 assume_yes=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --purge)  purge=1; shift ;;
+      --yes|-y) assume_yes=1; shift ;;
+      *)        shift ;;
+    esac
+  done
+  _banner "🗑️ " "atlas uninstall"
+
+  case "$ATLAS_HOME" in
+    */Cellar/*|/usr/*|/opt/*)
+      _warn "ATLAS lives under a package-managed path: $ATLAS_HOME"
+      _say "remove it with the manager you installed with:"
+      _say "  brew uninstall atlas"
+      _say "  sudo apt remove atlas        # or: sudo dpkg -r atlas"
+      _say "  yay -R atlas                 # Arch / AUR"
+      _say "  npm rm -g @alainabbasi/atlas"
+      return 0 ;;
+  esac
+
+  local launcher; launcher="$(command -v atlas 2>/dev/null || true)"
+  echo "  will remove:"
+  [[ -n "$launcher" ]] && echo "    launcher:    $launcher"
+  echo "    ATLAS_HOME:  $ATLAS_HOME"
+  [[ $purge -eq 1 ]] && echo "    hook:        $HOME/.claude/hooks/atlas-skill-loader.sh"
+  echo ""
+
+  if [[ $assume_yes -ne 1 ]]; then
+    printf "  proceed? [y/N]: "
+    local ans; read -r ans
+    case "$ans" in y|Y|yes) : ;; *) _say "aborted — nothing removed"; return 0 ;; esac
+  fi
+
+  [[ -n "$launcher" && -f "$launcher" ]] && rm -f "$launcher" && _ok "removed $launcher"
+  if [[ "$ATLAS_HOME" == "$HOME/.atlas" ]]; then
+    rm -rf "$ATLAS_HOME" && _ok "removed $ATLAS_HOME"
+  else
+    _warn "ATLAS_HOME is not the default ~/.atlas — remove it yourself if intended:"
+    _say  "  rm -rf \"$ATLAS_HOME\""
+  fi
+  if [[ $purge -eq 1 && -f "$HOME/.claude/hooks/atlas-skill-loader.sh" ]]; then
+    rm -f "$HOME/.claude/hooks/atlas-skill-loader.sh" && _ok "removed claude-code hook"
+    _say "(left ~/.claude/settings.json wiring intact — edit it if you want the entry gone)"
+  fi
+  _say "done. re-install: curl -fsSL https://raw.githubusercontent.com/Abbasi-Alain/atlas/main/install.sh | bash"
+}
+
 # --- dispatch -------------------------------------------------------------
 
 main() {
@@ -2075,6 +2130,7 @@ main() {
     anchors)  cmd_anchors "$@" ;;
     anchor)   cmd_anchor "$@" ;;
     install)  cmd_install "$@" ;;
+    uninstall) cmd_uninstall "$@" ;;
     styles)   cmd_styles "$@" ;;
     stacks)   cmd_stacks "$@" ;;
     critique) cmd_critique "$@" ;;
