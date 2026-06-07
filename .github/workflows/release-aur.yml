@@ -16,19 +16,34 @@ name: release-aur
 #                          → "SSH Public Key")
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   bump-aur:
     runs-on: ubuntu-latest
     steps:
+      - name: Is AUR configured?
+        id: cfg
+        env:
+          KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AUR_SSH_PRIVATE_KEY not set — skipping AUR publish."
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ok == 'true'
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.ref_name }}
 
       - name: Compute release tarball SHA256
         id: sha
+        if: steps.cfg.outputs.ok == 'true'
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           TARBALL="https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
@@ -41,6 +56,7 @@ jobs:
           echo "sha=$SHA"          >> $GITHUB_OUTPUT
 
       - name: Update PKGBUILD with new pkgver + sha
+        if: steps.cfg.outputs.ok == 'true'
         run: |
           sed -i -E "s|^pkgver=.*$|pkgver=${{ steps.sha.outputs.version }}|" packaging/aur/PKGBUILD
           sed -i -E "s|^pkgrel=.*$|pkgrel=1|" packaging/aur/PKGBUILD
@@ -49,6 +65,7 @@ jobs:
           cat packaging/aur/PKGBUILD
 
       - name: Publish to AUR
+        if: steps.cfg.outputs.ok == 'true'
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
         with:
           pkgname: atlas

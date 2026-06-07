@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+_Nothing yet — the next `git push --tags` cuts a release._
+
+---
+
+## [0.1.2] — 2026-06-08
+
 ### Added
 
 - `atlas measure [--badge]` — estimate orientation-token savings (with vs without ATLAS) and emit a shields.io badge for the README.
@@ -87,5 +93,6 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/Abbasi-Alain/atlas/releases/tag/v0.1.0

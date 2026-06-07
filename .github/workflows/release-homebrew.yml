@@ -14,8 +14,9 @@ name: release-homebrew
 #               Name: HOMEBREW_TAP_TOKEN
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   bump-tap:
