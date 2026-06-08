@@ -70,4 +70,9 @@ jobs:
           BUILD_DIR: ${{ runner.temp }}/ppa-${{ matrix.series }}
           PPA: ${{ secrets.LAUNCHPAD_PPA }}
         run: |
+          case "$PPA" in
+            ""|*"<"*|*">"*)
+              echo "::error::LAUNCHPAD_PPA is empty or still a placeholder. Set it to your real PPA, e.g. ppa:alainabbasi/atlas"
+              exit 1 ;;
+          esac
           dput "$PPA" "$BUILD_DIR"/atlas_*_source.changes
