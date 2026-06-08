@@ -2415,16 +2415,6 @@ cmd_bench() {
   else
   for cond in without with; do
     for (( rep=1; rep<=reps; rep++ )); do
-      work="$(mktemp -d)"
-      if git -C "$base" rev-parse HEAD >/dev/null 2>&1; then
-        git -C "$base" archive HEAD 2>/dev/null | tar -x -C "$work"
-      else
-        cp -R "$base/." "$work/" 2>/dev/null || true
-      fi
-      if [[ "$cond" == "without" ]]; then
-        for f in "${quartet[@]}"; do rm -rf "${work:?}/$f"; done
-      fi
-
       local agent=()
       case "$runtime" in
         claude)
@@ -2447,13 +2437,26 @@ cmd_bench() {
           if [[ -n "$effort" ]]; then agent+=(--variant "$effort"); fi ;;
       esac
 
+      # Dry-run is print-only — NO mktemp / git-archive. (`git archive | tar`
+      # aborts under bin/atlas's set -e+pipefail on a shallow CI clone, which is
+      # what broke the `bench dry-run` CI check.)
       if [[ $dry -eq 1 ]]; then
         if [[ "$runtime" == "generic" ]]; then
-          printf "  %-8s #%d  →  (cd %s && ATLAS_BENCH_TASK=… bash -c %q)\n" "$cond" "$rep" "$work" "$exec_tpl"
+          printf "  %-8s #%d  →  (cd <tmp> && ATLAS_BENCH_TASK=… bash -c %q)\n" "$cond" "$rep" "$exec_tpl"
         else
-          printf "  %-8s #%d  →  (cd %s && %s)\n" "$cond" "$rep" "$work" "${agent[*]}"
+          printf "  %-8s #%d  →  (cd <tmp> && %s)\n" "$cond" "$rep" "${agent[*]}"
         fi
-        rm -rf "$work"; continue
+        continue
+      fi
+
+      work="$(mktemp -d)"
+      if git -C "$base" rev-parse HEAD >/dev/null 2>&1; then
+        git -C "$base" archive HEAD 2>/dev/null | tar -x -C "$work" 2>/dev/null || cp -R "$base/." "$work/" 2>/dev/null || true
+      else
+        cp -R "$base/." "$work/" 2>/dev/null || true
+      fi
+      if [[ "$cond" == "without" ]]; then
+        for f in "${quartet[@]}"; do rm -rf "${work:?}/$f"; done
       fi
 
       _say "running $cond #$rep …"
