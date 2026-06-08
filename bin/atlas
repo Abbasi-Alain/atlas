@@ -2646,9 +2646,12 @@ json.dump({"meta":meta,"task":task,"runs":rows,"summary":summary},open(base_path
 # context per turn and can climb even as cost falls (SCARS §BENCH-TOKEN-SUM-CACHE).
 # Falls back to wall_s when turns weren't parsed (e.g. codex/opencode schema drift).
 def _has(m): return isinstance(summary["without"].get(m),(int,float)) and isinstance(summary["with"].get(m),(int,float))
-_pref={"claude":["num_turns"],"opencode":["num_turns","wall_s"],"codex":["num_turns","wall_s"],
+def _signal(m): return _has(m) and summary["without"][m]!=summary["with"][m]  # a metric equal on both sides carries no signal
+_pref={"claude":["num_turns","wall_s"],"opencode":["num_turns","wall_s"],"codex":["num_turns","wall_s"],
        "openai":["input_tokens"]}.get(parser,["wall_s","output_chars"])
-prim=next((m for m in _pref if _has(m)), _pref[-1])
+# prefer the first preferred metric with a real (non-degenerate) delta; else the
+# first with data. Avoids headlining e.g. opencode's 1-vs-1 message count as "0%".
+prim=next((m for m in _pref if _signal(m)), None) or next((m for m in _pref if _has(m)), _pref[-1])
 plabel={"num_turns":"fewer turns","input_tokens":"fewer orientation tokens",
         "wall_s":"less wall-time","output_chars":"less output"}.get(prim,"less "+prim)
 wo,wi=summary["without"].get(prim),summary["with"].get(prim)

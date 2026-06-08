@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "runtime": "opencode",
+    "runtime_version": "1.15.10",
+    "model": "qwen3.6-35b",
+    "effort": "high",
+    "atlas_version": "0.1.5",
+    "date_utc": "2026-06-08T15:37:19Z",
+    "repo": "Atlas@cd25137",
+    "reps": "1",
+    "parser": "opencode"
+  },
+  "task": "In as few steps as possible, answer: where is the release pipeline configured, and what are the exact steps to add a new package channel? List every file you opened to find out.",
+  "runs": [
+    {
+      "condition": "without",
+      "rep": 1,
+      "wall_s": 141,
+      "output_chars": 12215,
+      "input_tokens": 24929,
+      "output_tokens": 196,
+      "num_turns": 1
+    },
+    {
+      "condition": "with",
+      "rep": 1,
+      "wall_s": 99,
+      "output_chars": 10714,
+      "input_tokens": 26343,
+      "output_tokens": 356,
+      "num_turns": 1
+    }
+  ],
+  "summary": {
+    "without": {
+      "num_turns": 1,
+      "cost_usd": null,
+      "wall_s": 141,
+      "input_tokens": 24929,
+      "output_tokens": 196
+    },
+    "with": {
+      "num_turns": 1,
+      "cost_usd": null,
+      "wall_s": 99,
+      "input_tokens": 26343,
+      "output_tokens": 356
+    }
+  }
+}
