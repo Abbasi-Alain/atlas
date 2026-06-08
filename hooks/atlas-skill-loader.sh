@@ -39,6 +39,23 @@ if [[ -f "$ATLAS" ]]; then
   echo ""
 fi
 
+SCARS="$CWD/SCARS.md"
+if [[ -f "$SCARS" ]]; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "SCARS.md (hard-won failure memory) detected at $SCARS"
+  echo "================================================================"
+  echo "Anchors below are stable — DO NOT repeat these. Read the full"
+  echo "section (Read tool) before touching the relevant area."
+  echo ""
+  awk '
+    /^## Table of contents/ { in_toc = 1; print; next }
+    in_toc && /^## / && !/^## Table of contents/ { exit }
+    in_toc { print }
+  ' "$SCARS"
+  echo ""
+fi
+
 SKILL_FILE=""
 if [[ -d "$CWD/.agents/skill" ]]; then
   SKILL_FILE=$(find "$CWD/.agents/skill" -maxdepth 2 -name SKILL.md -type f 2>/dev/null | head -1)

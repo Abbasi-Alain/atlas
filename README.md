@@ -76,13 +76,14 @@ The hook fires once per session, before the agent's first action.
 
 ---
 
-## The trio *(three files. that's it.)*
+## The quartet *(four files. that's it.)*
 
 
 | File                                                              | Axis           | Question it answers                                                                                                                                                                           | Token cost              |
 | ----------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | `[ATLAS.md](templates/ATLAS.md.tmpl)`                             | **Structural** | *Where is X?* Graph index — every important module, its role, what it talks to. Plus glossary, data model, external deps, runtime topology, observability, security boundaries, build/deploy. | ~1.4k auto-loaded §0+§1 |
-| `[.agents/skill/<project>/SKILL.md](templates/SKILL.md.tmpl)`     | **Procedural** | *What did we learn the hard way?* Stable anchors (`§NAME-LIKE-THIS`) — symptom → root cause → do NOT → do → file pointer → commit SHA. Cite from PRs and commits.                             | ~0.4k ToC auto-loaded   |
+| `[SCARS.md](templates/SCARS.md.tmpl)`                             | **Failure memory** | *What did we learn the hard way?* Stable anchors (`§NAME-LIKE-THIS`) — symptom → root cause → do NOT → do → file pointer. Cite from PRs and commits.                                     | ~0.4k ToC auto-loaded   |
+| `[.agents/skill/<project>/SKILL.md](templates/SKILL.md.tmpl)`     | **Procedural** | *How do I do X here?* Task recipes — goal → steps → how to verify.                                                                                                                            | on-demand               |
 | `[CLAUDE.md](templates/CLAUDE.md.tmpl)` + `[AGENTS.md](#)` mirror | **Behavioral** | *How should the agent act?* Don't assume. Don't refactor adjacent code. Match existing style. Define success criteria. Loop until verified.                                                   | on-demand               |
 
 
@@ -142,8 +143,8 @@ After install you have the `atlas` CLI on PATH and adapters ready to wire into y
 ```bash
 cd your-project/
 
-atlas init                          # write ATLAS.md + SKILL.md + CLAUDE.md
-                                    # + AGENTS.md mirror + EXAMPLES.md
+atlas init                          # write ATLAS.md + SKILL.md + SCARS.md
+                                    # + CLAUDE.md + AGENTS.md mirror + EXAMPLES.md
 
 atlas check                         # verify anchors unique, structure valid
 atlas measure                       # estimate the orientation-token savings

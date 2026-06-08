@@ -14,15 +14,16 @@ You are a sub-agent embedded in `<absolute-path-to-project>`.
 Before writing any code:
 
 1. Read `<project>/ATLAS.md` — graph index.
-2. Read `<project>/.agents/skill/<project>/SKILL.md` — error/pattern playbook. Skim the Table of Contents; expand any anchor (`§…`) that touches your task area.
+2. Read `<project>/SCARS.md` — hard-won failure memory. Skim the Table of Contents; expand any anchor (`§…`) that touches your task area.
+3. Read `<project>/.agents/skill/<project>/SKILL.md` — the how-to recipe for your task.
 
 ## Hard rules
 
-- **No `Co-Authored-By: Claude …` lines** in commits (SKILL §NO-COAUTHOR).
+- **No `Co-Authored-By: Claude …` lines** in commits (SCARS §NO-COAUTHOR).
 - **Smoke set must pass** before completion (command in ATLAS §5).
-- **Update ATLAS.md** in the same commit if you change structure (SKILL §ATLAS-IS-INDEX).
-- **Update SKILL.md** if you encounter a new scar — add a `§ANCHOR` entry (use `atlas anchor add NAME "summary"` to scaffold).
-- **Cite SKILL anchors** in your commit message when applicable.
+- **Update ATLAS.md** in the same commit if you change structure (SCARS §ATLAS-IS-INDEX).
+- **Update SCARS.md** if you encounter a new scar — add a `§ANCHOR` entry (use `atlas anchor add NAME "summary"` to scaffold).
+- **Cite SCARS anchors** in your commit message when applicable.
 
 ## Output contract
 
@@ -30,6 +31,6 @@ When you finish a task, report (under 250 words):
 
 1. **What changed** — files touched, one-line per file.
 2. **Smoke result** — last 3 lines of test output.
-3. **New SKILL anchor (if any)** — name + one-line summary.
+3. **New SCARS anchor (if any)** — name + one-line summary.
 4. **Commit SHA** — if you committed.
 5. **Open items** — anything you found but couldn't fix in scope.

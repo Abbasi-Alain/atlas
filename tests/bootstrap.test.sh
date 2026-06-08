@@ -35,6 +35,7 @@ else
 fi
 skill_count=$(find "$TMP/.agents/skill" -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')
 [[ "$skill_count" == "1" ]] && _pass "init wrote SKILL.md" || _fail "no SKILL.md (count=$skill_count)"
+[[ -f "$TMP/SCARS.md" ]] && _pass "init wrote SCARS.md" || _fail "no SCARS.md"
 
 # overwrite refused
 init_out="$("$CLI" init 2>&1)"

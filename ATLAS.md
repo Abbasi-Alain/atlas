@@ -4,13 +4,13 @@
 > directory reads this file *first* and follows links to the exact
 > file/section it needs — no grep, no glob, no wasted context.
 >
-> **Pair-with.** Read [`.agents/skill/atlas/SKILL.md`](.agents/skill/atlas/SKILL.md)
-> for the **error/pattern playbook** (lessons paid for in blood).
-> ATLAS = *"where things live"*; SKILL = *"what to remember when you touch them"*.
+> **Pair-with.** [`SCARS.md`](SCARS.md) = the **failure memory** (what not to
+> repeat); [`.agents/skill/atlas/SKILL.md`](.agents/skill/atlas/SKILL.md) = the
+> **task playbook** (how to do things). ATLAS = *"where things live"*.
 >
 > **This repo dogfoods itself** — it *is* the ATLAS tool, described in
 > the ATLAS format. See the [spec](docs/SPEC.md). Update this file in
-> the same commit as any structural change. SKILL §ATLAS-IS-INDEX.
+> the same commit as any structural change. SCARS §ATLAS-IS-INDEX.
 
 ---
 
@@ -25,7 +25,7 @@
 | Add/fix a runtime adapter | [`adapters/`](adapters/) (§4) |
 | Publish to a package channel | [`packaging/`](packaging/) + [`docs/RELEASING.md`](docs/RELEASING.md) (§6) |
 | Run the tests | §5 — `bash tests/bootstrap.test.sh` + `shellcheck` |
-| Debug a known trap | [`.agents/skill/atlas/SKILL.md`](.agents/skill/atlas/SKILL.md) |
+| Debug a known trap | [`SCARS.md`](SCARS.md) |
 | Look up a term (trio/anchor/style/stack) | §G Glossary |
 | The format rules | [`docs/SPEC.md`](docs/SPEC.md) |
 
@@ -59,7 +59,7 @@
 
 A single `set -euo pipefail` bash script (~1.9k lines). One advantage:
 zero runtime dependencies (only `bash`, `git`, coreutils). The cost: it's
-a monolith — see SKILL §BASH-MONOLITH for the modularization plan.
+a monolith — see SCARS §BASH-MONOLITH for the modularization plan.
 
 ### 2.1 Shape & helpers
 
@@ -78,14 +78,14 @@ a monolith — see SKILL §BASH-MONOLITH for the modularization plan.
 2. Add a `case` arm in `main()`.
 3. Document it in the header comment block (lines ~4–65) so it shows in
    `atlas help` (which prints header lines 2–40).
-4. `shellcheck bin/atlas` must stay clean (CI enforces). Mind SKILL §SET-E-AND-AND.
+4. `shellcheck bin/atlas` must stay clean (CI enforces). Mind SCARS §SET-E-AND-AND.
 
 ### 2.3 Command surface
 
 | Core | Purpose |
 |---|---|
 | `init [--style --stack --force]` | Scaffold the trio (+ style seeds / stack docs) |
-| `check` | Lint the trio; verify SKILL anchors are unique |
+| `check` | Lint the trio; verify SCARS anchors are unique |
 | `measure [--badge]` | Estimate orientation-token savings (with vs without ATLAS) |
 | `doctor` | Diagnose install + project harness + runtime-export drift |
 | `badge` | Print a "Powered by ATLAS" README badge |
@@ -116,7 +116,7 @@ a monolith — see SKILL §BASH-MONOLITH for the modularization plan.
 
 > The `abbasi` style is **private** (maintained in a sibling GitLab repo,
 > symlinked in by an overlay installer) and is `.gitignore`d here — never
-> commit it. SKILL §PRIVATE-STYLE-OVERLAY.
+> commit it. SCARS §PRIVATE-STYLE-OVERLAY.
 
 ---
 
@@ -168,7 +168,7 @@ Release runbook + secret setup: [`docs/RELEASING.md`](docs/RELEASING.md).
 - **New generated section** → edit `templates/*.tmpl`, not the rendered output.
 - **New runtime** → `adapters/<name>/install.sh` + README support table + `atlas export` arm if it has a context file.
 - **New package channel** → `packaging/<channel>/` + a `release-<channel>.yml` + a row in §6 + `docs/RELEASING.md`.
-- **Any structural change** → update *this file* in the same commit. SKILL §ATLAS-IS-INDEX.
+- **Any structural change** → update *this file* in the same commit. SCARS §ATLAS-IS-INDEX.
 
 ---
 
@@ -193,8 +193,8 @@ Release runbook + secret setup: [`docs/RELEASING.md`](docs/RELEASING.md).
 
 | Term | Definition |
 |---|---|
-| **the trio** | `ATLAS.md` (structural map) + `SKILL.md` (procedural playbook) + `CLAUDE.md`/`AGENTS.md` (behavioral contract) |
-| **anchor** | A stable `<a id="…">` failure-mode entry in SKILL.md; treated as load-bearing — never renumbered |
+| **the quartet** | `ATLAS.md` (map) + `SKILL.md` (task playbook) + `SCARS.md` (failure memory) + `CLAUDE.md`/`AGENTS.md` (behavioral contract) |
+| **anchor** | A stable `<a id="…">` failure-mode entry in SCARS.md; treated as load-bearing — never renumbered |
 | **style** | A preset under `templates/styles/<name>/` that overrides some/all templates (e.g. `minimal`, `strict`, `karpathy`, `google`) |
 | **stack** | A per-style add-on (`styles/<name>/stacks/<stack>/`) dropped into `docs/stacks/` via `--stack` |
 | **adapter** | A per-runtime installer that wires the trio into an agent (Claude/Codex/Cursor/…) |
@@ -207,4 +207,4 @@ Release runbook + secret setup: [`docs/RELEASING.md`](docs/RELEASING.md).
 This file is the **graph entry point**. Add a top-level module, a command,
 a package channel, or a runtime → update it **in the same commit**. A stale
 ATLAS forces every future agent to re-grep the tree. Validate: `atlas check`.
-Enumerate SKILL anchors: `atlas anchors`. Measure the payoff: `atlas measure`.
+Enumerate SCARS anchors: `atlas anchors`. Measure the payoff: `atlas measure`.

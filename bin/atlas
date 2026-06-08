@@ -3,8 +3,8 @@
 #
 # Subcommands:
 #   atlas init [--style <preset>] [--stack <a,b,c>] [--force]
-#                                     bootstrap ATLAS.md + SKILL.md + CLAUDE.md
-#                                     + AGENTS.md + EXAMPLES.md (+ style seeds)
+#                                     bootstrap ATLAS.md + SKILL.md + SCARS.md
+#                                     + CLAUDE.md + AGENTS.md + EXAMPLES.md (+ seeds)
 #                                     + stack-specific docs in cwd.
 #                                     --style: default | minimal | strict |
 #                                              karpathy | google
@@ -18,8 +18,8 @@
 #   atlas export --to <runtime>       fan the canonical trio out to another
 #                                     runtime's context file. <runtime>:
 #                                     codex|copilot|gemini|cursor|llms-txt|all
-#   atlas anchors                     list every SKILL anchor (machine-readable)
-#   atlas anchor add NAME "summary"   append a stub anchor to SKILL.md
+#   atlas anchors                     list every SCARS anchor (machine-readable)
+#   atlas anchor add NAME "summary"   append a stub anchor to SCARS.md
 #   atlas critique <topic> [--with-codex|--with-claude]
 #                                     append CRITICS.md row stub + print the
 #                                     brutal-honest prompt template. Optional
@@ -241,6 +241,7 @@ cmd_init() {
   _banner "🚀" "atlas init  $(_c_dim "(style=$style)")"
   _render "$(_src ATLAS.md.tmpl)"    "$PWD/ATLAS.md"                                   "$force"
   _render "$(_src SKILL.md.tmpl)"    "$PWD/.agents/skill/${project}/SKILL.md"          "$force"
+  _render "$(_src SCARS.md.tmpl)"    "$PWD/SCARS.md"                                   "$force"
   _render "$(_src CLAUDE.md.tmpl)"   "$PWD/CLAUDE.md"                                  "$force"
   _render "$(_src EXAMPLES.md.tmpl)" "$PWD/EXAMPLES.md"                                "$force"
   # AGENTS.md is a content mirror of CLAUDE.md so Codex/OpenCode auto-discover.
@@ -297,6 +298,7 @@ cmd_init() {
 cmd_check() {
   _banner "🔍" "atlas check"
   local atlas="$PWD/ATLAS.md"
+  local scars="$PWD/SCARS.md"
   local project; project="$(_project_name)"
   local skill="$PWD/.agents/skill/${project}/SKILL.md"
   local skill_glob; skill_glob=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
@@ -314,8 +316,14 @@ cmd_check() {
   else
     _ok "SKILL.md present at $skill"
     grep -q "^## Table of contents" "$skill" || { _fail "SKILL.md missing Table of contents"; errs=$((errs+1)); }
+  fi
+  if [[ ! -f "$scars" ]]; then
+    _fail "missing SCARS.md (run 'atlas init')"; errs=$((errs+1))
+  else
+    _ok "SCARS.md present"
+    grep -q "^## Table of contents" "$scars" || { _fail "SCARS.md missing Table of contents"; errs=$((errs+1)); }
     local anchors dups
-    anchors=$(grep -Eo '<a id="[a-z0-9-]+"></a>' "$skill" | sort)
+    anchors=$(grep -Eo '<a id="[a-z0-9-]+"></a>' "$scars" | sort)
     dups=$(echo "$anchors" | uniq -d)
     if [[ -n "$dups" ]]; then
       _fail "duplicate anchors:"
@@ -333,9 +341,8 @@ cmd_check() {
 }
 
 cmd_anchors() {
-  local project; project="$(_project_name)"
-  local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
-  [[ -z "$skill" ]] && _die "no SKILL.md found"
+  local scars="$PWD/SCARS.md"
+  [[ -f "$scars" ]] || _die "no SCARS.md found (run 'atlas init')"
   # Extract: anchor id + section title.
   awk '
     /<a id="[a-z0-9-]+"><\/a>/ {
@@ -346,7 +353,7 @@ cmd_anchors() {
       print id "\t" $0;
       id = "";
     }
-  ' "$skill"
+  ' "$scars"
 }
 
 cmd_anchor() {
@@ -356,13 +363,12 @@ cmd_anchor() {
       local name="${1:-}"; shift || true
       local summary="${*:-}"
       [[ -z "$name" || -z "$summary" ]] && _die "usage: atlas anchor add NAME \"summary\""
-      local project; project="$(_project_name)"
-      local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
-      [[ -z "$skill" ]] && _die "no SKILL.md (run 'atlas init')"
+      local scars="$PWD/SCARS.md"
+      [[ -f "$scars" ]] || _die "no SCARS.md (run 'atlas init')"
       local upper lower
       upper="$(echo "$name" | tr '[:lower:]' '[:upper:]' | tr ' _' '--')"
       lower="$(echo "$upper" | tr '[:upper:]' '[:lower:]')"
-      cat >> "$skill" <<EOF
+      cat >> "$scars" <<EOF
 
 ---
 
@@ -381,7 +387,7 @@ cmd_anchor() {
 
 **Shipped in.** \`<commit sha>\`.
 EOF
-      _say "appended §${upper} stub to $skill"
+      _say "appended §${upper} stub to $scars"
       _say "add a ToC line manually: - [§${upper} — ${summary}](#${lower})"
       ;;
     *)
@@ -1850,14 +1856,16 @@ cmd_measure() {
   local atlas="$PWD/ATLAS.md"
   [[ -f "$atlas" ]] || _die "no ATLAS.md in $PWD — run 'atlas init' first"
   local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+  local scars="$PWD/SCARS.md"
   local claude="$PWD/CLAUDE.md"
 
   _bytes() { if [[ -f "$1" ]]; then wc -c < "$1" | tr -d ' '; else echo 0; fi; }
 
-  # WITH ATLAS — the front-loaded orientation surface (the trio).
+  # WITH ATLAS — the front-loaded orientation surface (the quartet).
   local with_b=0
   with_b=$(( with_b + $(_bytes "$atlas") ))
   [[ -n "$skill" ]] && with_b=$(( with_b + $(_bytes "$skill") ))
+  [[ -f "$scars" ]] && with_b=$(( with_b + $(_bytes "$scars") ))
   with_b=$(( with_b + $(_bytes "$claude") ))
 
   # WITHOUT ATLAS — README + file tree + head of the top source files.
@@ -1897,7 +1905,7 @@ cmd_measure() {
   printf "  %s %s %s\n" "$(_c_bold "${ratio}× less")" "$(_c_dim 'orientation context —')" "$(_c_bold "−${pct}%")"
   echo ""
   _say "method: 'without' = README + file tree + head of top source files;"
-  _say "        'with' = ATLAS.md + SKILL.md + CLAUDE.md. Rough estimate."
+  _say "        'with' = ATLAS.md + SKILL.md + SCARS.md + CLAUDE.md. Rough estimate."
   _say "shareable README badge:  $(_c_dim 'atlas measure --badge')"
 }
 
@@ -1918,7 +1926,7 @@ cmd_doctor() {
   _banner "📂" "project: $(_project_name)"
   local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
   local label path
-  for pair in "ATLAS.md:$PWD/ATLAS.md" "CLAUDE.md:$PWD/CLAUDE.md" "AGENTS.md:$PWD/AGENTS.md"; do
+  for pair in "ATLAS.md:$PWD/ATLAS.md" "SCARS.md:$PWD/SCARS.md" "CLAUDE.md:$PWD/CLAUDE.md" "AGENTS.md:$PWD/AGENTS.md"; do
     label="${pair%%:*}"; path="${pair#*:}"
     if [[ -f "$path" ]]; then _ok "$label present"
     else _fail "$label missing — run 'atlas init'"; warns=$(( warns + 1 )); fi

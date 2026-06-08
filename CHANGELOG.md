@@ -8,7 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-_Nothing yet — the next `git push --tags` cuts a release._
+### Added
+
+- **SCARS.md** — a fourth canonical file at the repo root: hard-won failure memory (the stable `§ANCHOR` playbook). The trio is now a **quartet**: ATLAS (structural) + SKILL (procedural how-to) + SCARS (failure memory) + CLAUDE/AGENTS (behavioral). `atlas init` scaffolds it; `atlas check` / `anchors` / `anchor add` operate on it; the SessionStart hook surfaces its ToC; SPEC, templates, dogfood, and the sub-agent adapter updated.
+
+### Changed
+
+- `SKILL.md` is now the procedural **task playbook** (how-to recipes); the failure-mode `§ANCHORS` moved to `SCARS.md`.
 
 ---
 

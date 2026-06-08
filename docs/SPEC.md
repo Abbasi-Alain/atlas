@@ -1,37 +1,41 @@
 # ATLAS specification — v0.1
 
-> Three files (plus one mirror). Fixed names. Fixed structure. Machine-readable, human-readable. The whole point is that any agent — Claude, Codex, OpenCode, Hermes, anything — can rely on them being where they are and structured the way they are.
+> Four files (plus one mirror). Fixed names. Fixed structure. Machine-readable, human-readable. The whole point is that any agent — Claude, Codex, OpenCode, Hermes, anything — can rely on them being where they are and structured the way they are.
 
 ---
 
-## 1. The trio
+## 1. The quartet
 
 ```
 <repo-root>/
 ├── ATLAS.md                              ← structural   (where things live)
+├── SCARS.md                              ← failure memory (what breaks / not to repeat)
 ├── CLAUDE.md                             ← behavioral   (how to act)
 ├── AGENTS.md                             ← mirror of CLAUDE.md (Codex / OpenCode)
 ├── EXAMPLES.md  (optional but recommended)  ← teaching by transform pairs
 └── .agents/
     └── skill/
         └── <project-name>/
-            └── SKILL.md                  ← procedural   (what we learned)
+            └── SKILL.md                  ← procedural   (how to do common tasks)
 ```
 
 - `ATLAS.md` **MUST** be at the repo root.
+- `SCARS.md` **MUST** be at the repo root. It holds the stable `§ANCHOR` failure
+  memory (symptom → root cause → do NOT → do). Read before fixing a bug.
 - `CLAUDE.md` **MUST** be at the repo root if the project targets Claude or wants opinionated behavior. `AGENTS.md` SHOULD mirror `CLAUDE.md` byte-for-byte so Codex/OpenCode/other AGENTS-aware runtimes auto-discover.
-- `SKILL.md` **MUST** be at `.agents/skill/<project-name>/SKILL.md`, where `<project-name>` is the kebab-cased git remote basename (or repo-root basename if no remote).
+- `SKILL.md` **MUST** be at `.agents/skill/<project-name>/SKILL.md`, where `<project-name>` is the kebab-cased git remote basename (or repo-root basename if no remote). It holds procedural task recipes (how-to).
 - `EXAMPLES.md` is OPTIONAL but strongly recommended — teaches the conventions by transformation pairs (vague→concrete, bad→good).
 - All required files **MUST** be UTF-8 Markdown and checked into version control.
 
 ### Axes
 
-The trio covers three orthogonal axes. Conformance means addressing each:
+The quartet covers four orthogonal axes. Conformance means addressing each:
 
 | Axis | File | Question it answers |
 |---|---|---|
 | Structural | `ATLAS.md` | *Where is X?* |
-| Procedural | `SKILL.md` | *What did we learn the hard way?* |
+| Procedural | `SKILL.md` | *How do I do X here?* |
+| Failure memory | `SCARS.md` | *What did we learn the hard way?* |
 | Behavioral | `CLAUDE.md` / `AGENTS.md` | *How should the agent act?* |
 
 ---
@@ -91,17 +95,21 @@ A row pointing at `.agents/skill/<project>/SKILL.md` for "Debug a known issue".
 
 ---
 
-## 3. SKILL.md — required structure
+## 3. SCARS.md — required structure
+
+> `SKILL.md` is the procedural how-to file (task recipes); it has no fixed
+> internal schema beyond an H1 + a `## Table of contents`. The structured
+> `§ANCHOR` schema below belongs to **SCARS.md**.
 
 ### 3.1 Header
-- H1 title: `# SKILL — <project-name> error/pattern playbook`
+- H1 title: `# SCARS — <project-name> hard-won failure memory`
 - Quote-block intro pointing to ATLAS.md.
 
 ### 3.2 Table of Contents
 - H2: `## Table of contents`
 - Bullet-list entries of form: `- [§ANCHOR-NAME — one-line summary](#anchor-name)`
 - Group bullets under bolded category headings: `**Process / hygiene**`, `**Operations**`, `**Security**`, `**Performance**`, `**Data integrity**`, `**Observability**`, `**Concurrency**`, `**Domain-specific**`, …
-- New SKILL.md scaffolds include the universal **Process / hygiene** category with these anchors: `§NO-COAUTHOR`, `§ATLAS-IS-INDEX`, `§MAINTAIN-DOCS`, `§SMOKE-AFTER-CHANGE`, `§ADR-BEFORE-MAJOR`.
+- New SCARS.md scaffolds include the universal **Process / hygiene** category with these anchors: `§NO-COAUTHOR`, `§ATLAS-IS-INDEX`, `§MAINTAIN-DOCS`, `§SMOKE-AFTER-CHANGE`, `§ADR-BEFORE-MAJOR`.
 
 ### 3.3 Anchors
 - Anchor name format: `§ANCHOR-NAME` (uppercase, kebab-separated). The HTML anchor is the lowercase form.

@@ -1,134 +1,64 @@
-# SKILL — {{PROJECT_NAME}} error/pattern playbook
+# SKILL — {{PROJECT_NAME}} task playbook
 
-> **For sub-agents.** Read [`/ATLAS.md`](../../../ATLAS.md) first
-> ("where things live"); read **this file** second ("what to
-> remember when you touch them"). Every entry below was paid for in
-> production blood — symptom → root cause → do NOT → do → file
-> pointer → commit SHA.
+> **The "how do I do X here" file.** Common tasks for this repo as repeatable
+> recipes: goal → steps → how to verify. When a recipe bites back, the lesson
+> graduates to a `§ANCHOR` in [`SCARS.md`](../../../SCARS.md).
 >
-> **Anchors are stable and immutable.** Cite them from PR
-> descriptions, commit messages, FAQ entries, and other agents'
-> prompts. Renaming an anchor = creating a new one + redirect.
->
-> **Promote cross-project lessons** to the global template at
-> `~/.atlas/templates/SKILL.md.tmpl` (or [upstream Atlas repo](https://github.com/Abbasi-Alain/atlas)).
+> **Reading order.** [`ATLAS.md`](../../../ATLAS.md) (*where* things live) →
+> [`SCARS.md`](../../../SCARS.md) (*what breaks*) → **this file** (*how* to do tasks).
 
 ---
 
 ## Table of contents
 
-**Process / hygiene** *(every project keeps these — customise as needed)*
-- [§NO-COAUTHOR — never add AI-assistant attribution to commits](#no-coauthor)
-- [§ATLAS-IS-INDEX — update ATLAS.md when structure changes](#atlas-is-index)
-- [§MAINTAIN-DOCS — append substantive Q&A to docs/FAQ.md](#maintain-docs)
-- [§SMOKE-AFTER-CHANGE — run the smoke set after touching runtime](#smoke-after-change)
-- [§ADR-BEFORE-MAJOR — non-trivial decisions get an ADR before shipping](#adr-before-major)
-
-**Operations / deploy** *(add as scars accumulate)*
-- _(e.g. §ROLLBACK-WINDOW — every release must be reversible within N minutes)_
-
-**Security / secrets**
-- _(e.g. §NO-PII-IN-LOGS, §SECRET-ROTATION-90D)_
-
-**Performance / hot paths**
-- _(e.g. §N+1-GUARDRAIL, §CACHE-INVALIDATION-RULE)_
-
-**Data integrity / migrations**
-- _(e.g. §MIGRATIONS-IDEMPOTENT, §NO-DOWNTIME-COLUMN-ADD)_
-
-**Observability**
-- _(e.g. §LOG-CORRELATION-ID, §ALERT-NOISE-BUDGET)_
-
-**Concurrency / state**
-- _(e.g. §LOCK-ORDER, §IDEMPOTENT-OP-KEY)_
-
-**Domain-specific** *(add `## <Domain>` headings as you accumulate scars)*
-- _(e.g. for a trading app: brokers, microstructure, UI)_
+- [Run the project's tests](#run-tests)
+- [Add a feature / change behavior](#add-feature)
+- [Add a dependency](#add-dependency)
+- [Cut a release](#cut-release)
 
 ---
 
-## Process / hygiene
+## Tasks
 
-<a id="no-coauthor"></a>
-### §NO-COAUTHOR — never add AI-assistant attribution to commits
+<a id="run-tests"></a>
+### Run the project's tests
 
-Project preference. Do not add `Co-Authored-By: Claude …` or
-equivalent lines in commits.
-
----
-
-<a id="atlas-is-index"></a>
-### §ATLAS-IS-INDEX — update ATLAS.md when structure changes
-
-If you add a top-level module, a new message type, a new external
-dependency, or move files across sections — **update
-[`/ATLAS.md`](../../../ATLAS.md) in the same commit**. ATLAS is the
-graph entry point; a stale ATLAS forces every future agent to grep.
-
-Use `atlas check` to verify the file still parses.
-
----
-
-<a id="maintain-docs"></a>
-### §MAINTAIN-DOCS — append substantive Q&A to docs/FAQ.md
-
-When a user asks a substantive inner-workings question and you
-answer it well, append the Q&A to `docs/FAQ.md`. Future agents
-reading the FAQ then know without re-asking.
-
----
-
-<a id="smoke-after-change"></a>
-### §SMOKE-AFTER-CHANGE — run the smoke set after touching runtime
-
-The smoke command lives in ATLAS §5. Run it after any change to the
-runtime or shared modules. **Don't ship commits that don't green
-the smoke set.**
-
----
-
-<a id="adr-before-major"></a>
-### §ADR-BEFORE-MAJOR — non-trivial decisions get an ADR before shipping
-
-If a change introduces a new external dep, alters a public contract,
-or changes a long-standing convention — write an ADR in
-`docs/adr/NNNN-short-name.md` (copy `docs/adr/0000-template.md`) and
-link it from ATLAS §A3 **before** the implementation lands. ADRs
-are immutable once accepted; supersede by writing a new one that
-references the old.
-
----
-
-## Domain sections
-
-> Add new `## <Domain>` headings + stable-anchor entries for every
-> scar this project earns. Template per entry:
-
-```markdown
-<a id="anchor-name"></a>
-### §ANCHOR-NAME — one-line summary
-
-**Symptom.** What the user/agent observes.
-
-**Root cause.** Why it happens.
-
-**Do NOT.** Anti-patterns to avoid.
-
-**Do.** Correct pattern with code or steps.
-
-**Where.** `path/to/file.ext::function_name`
-
-**Shipped in.** `<commit sha>`.
 ```
-
-Add the anchor to the Table of Contents above too, under the
-appropriate category. Use `atlas anchor add NAME "summary"` to
-scaffold a stub.
+{{TEST_CMD}}
+```
+Run this after touching runtime or shared modules (SCARS §SMOKE-AFTER-CHANGE).
+The smoke subset lives in ATLAS §5.
 
 ---
 
-## Appendix — commit-anchor index
+<a id="add-feature"></a>
+### Add a feature / change behavior
 
-| SHA | Anchor |
-|---|---|
-| _(fill in as you ship fixes — `git show <sha>` for the patch)_ | |
+1. Read the relevant `ATLAS.md` section; cite it in your plan.
+2. Make the change in `{{SRC_DIR}}/` — surgical, minimal (CLAUDE.md §3).
+3. Add/extend a test that fails before and passes after.
+4. Run the tests above.
+5. If you changed structure (new module, dep, file moves) → update `ATLAS.md`
+   in the **same commit** (SCARS §ATLAS-IS-INDEX).
+
+---
+
+<a id="add-dependency"></a>
+### Add a dependency
+
+1. Add it to `{{PRIMARY_BUILD_FILE}}`.
+2. Record *why* in `ATLAS.md` §X (external deps) — agents must not modify it blindly.
+3. A new external dep is a non-trivial decision → write an ADR (SCARS §ADR-BEFORE-MAJOR).
+
+---
+
+<a id="cut-release"></a>
+### Cut a release
+
+_(fill in this project's release steps — e.g. bump version, update CHANGELOG,
+tag, push. Cross-link any release gotchas to `SCARS.md`.)_
+
+---
+
+> Add a `### <Task>` + a ToC link for each common task. Keep recipes short;
+> push the *failure* knowledge to `SCARS.md` so it stays a clean how-to list.

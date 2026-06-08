@@ -1,64 +1,35 @@
-# SKILL — sample-project error/pattern playbook
+# SKILL — sample-project task playbook
 
-> Minimal example. Real projects accrete anchors over time. See [Atlas SPEC](https://github.com/Abbasi-Alain/atlas/blob/main/docs/SPEC.md).
+> How-to recipes for common tasks. Failure memory (what *not* to repeat) lives
+> in [`SCARS.md`](../../../SCARS.md). See [Atlas SPEC](https://github.com/Abbasi-Alain/atlas/blob/main/docs/SPEC.md).
 
 ---
 
 ## Table of contents
 
-**Process / hygiene**
-- [§NO-COAUTHOR — never add AI-assistant attribution to commits](#no-coauthor)
-- [§ATLAS-IS-INDEX — update ATLAS.md when structure changes](#atlas-is-index)
-- [§SMOKE-AFTER-CHANGE — run the smoke set after touching runtime](#smoke-after-change)
-
-**Domain-specific**
-- [§USER-VS-ACCOUNT — User ≠ Account, never conflate](#user-vs-account)
+- [Run the tests](#run-tests)
+- [Add an API endpoint](#add-endpoint)
 
 ---
 
-## Process / hygiene
+## Tasks
 
-<a id="no-coauthor"></a>
-### §NO-COAUTHOR — never add AI-assistant attribution to commits
-Do not add `Co-Authored-By: Claude …` or equivalent.
+<a id="run-tests"></a>
+### Run the tests
 
----
-
-<a id="atlas-is-index"></a>
-### §ATLAS-IS-INDEX — update ATLAS.md when structure changes
-Structural changes (new route, new external dep, new service) update ATLAS in the same commit.
+```
+npm test
+```
+Must pass before any commit (SCARS §SMOKE-AFTER-CHANGE).
 
 ---
 
-<a id="smoke-after-change"></a>
-### §SMOKE-AFTER-CHANGE — run the smoke set after touching runtime
-`npm test` must pass before commit.
+<a id="add-endpoint"></a>
+### Add an API endpoint
 
----
-
-## Domain-specific
-
-<a id="user-vs-account"></a>
-### §USER-VS-ACCOUNT — User ≠ Account, never conflate
-
-**Symptom.** Billing emails sent to the wrong address; permissions surfaces show "no access" for legitimate users.
-
-**Root cause.** A `User` is one human; an `Account` is the billing entity. One Account may have many Users (and one User may belong to many Accounts via teams). Code that assumes `user.email` is the billing email will silently misroute.
-
-**Do NOT.**
-- Use `user.email` for invoicing.
-- Use `account.email` for OAuth login flows.
-
-**Do.** Always route through `getBillingContact(accountId)` / `getLoginEmail(userId)`.
-
-**Where.** `src/billing.ts::getBillingContact`, `src/auth.ts::getLoginEmail`.
-
-**Shipped in.** `abcd123`.
-
----
-
-## Appendix — commit-anchor index
-
-| SHA | Anchor |
-|---|---|
-| abcd123 | §USER-VS-ACCOUNT |
+1. Add the handler in `src/routes/`.
+2. Route billing through `getBillingContact(accountId)`, never `user.email`
+   (SCARS §USER-VS-ACCOUNT).
+3. Add a test; run `npm test`.
+4. If you added a route/dep, update `ATLAS.md` in the same commit
+   (SCARS §ATLAS-IS-INDEX).

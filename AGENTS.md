@@ -1,10 +1,11 @@
 # CLAUDE.md
 
 > Behavioral contract for agents working in **atlas**.
-> Pair with [`ATLAS.md`](ATLAS.md) (where things live) and
-> [`.agents/skill/atlas/SKILL.md`](.agents/skill/atlas/SKILL.md) (what we learned).
+> Pair with [`ATLAS.md`](ATLAS.md) (where things live),
+> [`SCARS.md`](SCARS.md) (what breaks), and
+> [`.agents/skill/atlas/SKILL.md`](.agents/skill/atlas/SKILL.md) (how to do tasks).
 >
-> Three files. One purpose: **don't grep, don't guess, don't repeat.**
+> Four files. One purpose: **don't grep, don't guess, don't repeat.**
 
 A mirror of this file MUST also exist as [`AGENTS.md`](AGENTS.md) so Codex /
 OpenCode / other runtimes that look for `AGENTS.md` find it. Keep them
@@ -16,9 +17,9 @@ identical. *(The `atlas init` CLI sets up the mirror automatically.)*
 
 **Don't grep.** If you reach for `find` or `grep` for orientation, you've already lost. Read [`ATLAS.md`](ATLAS.md) §0 first. Every important module is one click away.
 
-**Don't guess.** If something is unclear, stop. State the ambiguity. Ask. Half the bugs in [`SKILL.md`](.agents/skill/atlas/SKILL.md) started as a silent guess.
+**Don't guess.** If something is unclear, stop. State the ambiguity. Ask. Half the bugs in [`SCARS.md`](SCARS.md) started as a silent guess.
 
-**Don't repeat.** Before fixing a bug, search [`SKILL.md`](.agents/skill/atlas/SKILL.md) for the anchor. If we paid for this lesson once, we don't pay again.
+**Don't repeat.** Before fixing a bug, search [`SCARS.md`](SCARS.md) for the anchor. If we paid for this lesson once, we don't pay again.
 
 ---
 
@@ -98,10 +99,10 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **One change. One message. Cite the anchor.**
 
-- Commit messages cite SKILL anchors when applicable: *"fix: guard the `&&` chain in measure under set -e — SKILL §SET-E-AND-AND."*
+- Commit messages cite SKILL anchors when applicable: *"fix: guard the `&&` chain in measure under set -e — SCARS §SET-E-AND-AND."*
 - Update [`ATLAS.md`](ATLAS.md) in the **same commit** as any structural change (new module, new dep, new service, file moves across §-boundaries).
 - Run the smoke set before committing (command in `ATLAS.md` §5).
-- No `Co-Authored-By: Claude …` or equivalent AI-assistant attribution — SKILL §NO-COAUTHOR.
+- No `Co-Authored-By: Claude …` or equivalent AI-assistant attribution — SCARS §NO-COAUTHOR.
 
 ---
 
@@ -121,7 +122,7 @@ Every non-trivial task ends with a report under 250 words:
 ## Smoke
 <last 2-3 lines of test output>
 
-## New SKILL anchor (if any)
+## New SCARS anchor (if any)
 - §NAME — one-line summary
 
 ## Open items
