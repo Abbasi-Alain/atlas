@@ -1,0 +1,301 @@
+#!/usr/bin/env python3
+# atlas-mcp — ATLAS Model Context Protocol server.  Pure stdlib, zero deps.
+#
+# Serves THIS project's orientation map (ATLAS.md §0-1), the SKILL/SCARS
+# playbooks, and the measured token reduction to ANY MCP client — Claude Code,
+# Cursor, OpenClaw, Codex, Gemini, … — so the agent orients from the map instead
+# of grepping. stdio transport by default: the OS process boundary is the auth,
+# so no token is needed (or wanted) locally.
+#
+# The deep-query tools (atlas_graph / atlas_deepsearch / atlas_recall) appear
+# ONLY when ATLAS_MCP_BACKEND_URL is set; they proxy to a graph+vector+memory
+# backend (e.g. FuseGraph / FuseRAG) with an optional bearer token. With nothing
+# configured, ATLAS stays 100% local + free — the backend is a bring-your-own
+# upsell, never a dependency.
+#
+# Env:
+#   ATLAS_PROJECT           project root to serve            (default: cwd)
+#   ATLAS_BIN               path to the atlas CLI            (default: sibling ./atlas)
+#   ATLAS_VERSION           reported serverInfo.version      (default: hardcoded below)
+#   ATLAS_MCP_BACKEND_URL   opt-in deep backend base URL — lights up graph/deepsearch/recall
+#   ATLAS_MCP_BACKEND_TOKEN bearer token sent to that backend
+#
+# Launch:  atlas mcp                 (stdio — what Claude Code/Cursor/OpenClaw spawn)
+# Spec:    docs/SPEC.md · part of the ATLAS standard (https://github.com/Abbasi-Alain/atlas)
+import sys, os, re, json, glob, subprocess, urllib.request, http.server
+
+VERSION = "0.1.7"
+DEFAULT_PROTO = "2025-06-18"
+
+
+def log(*a):
+    print("[atlas-mcp]", *a, file=sys.stderr, flush=True)
+
+
+def proj():
+    return os.environ.get("ATLAS_PROJECT") or os.getcwd()
+
+
+def _read(path, limit=200000):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return f.read(limit)
+    except Exception:
+        return ""
+
+
+def _atlas_md(): return os.path.join(proj(), "ATLAS.md")
+def _scars_md(): return os.path.join(proj(), "SCARS.md")
+
+
+def _skill_md():
+    hits = glob.glob(os.path.join(proj(), ".agents", "skill", "*", "SKILL.md"))
+    return hits[0] if hits else ""
+
+
+def _until(text, stop_re):
+    """Lines from the top until (exclusive) a line matching stop_re."""
+    out = []
+    for line in text.splitlines():
+        if re.match(stop_re, line):
+            break
+        out.append(line)
+    return "\n".join(out).strip()
+
+
+def _toc(text):
+    """The '## Table of contents' block of a SKILL/SCARS file, if present."""
+    grab, out = False, []
+    for line in text.splitlines():
+        if re.match(r'^##\s+Table of contents', line, re.I):
+            grab = True
+            continue
+        if grab and re.match(r'^##\s+\S', line) and "contents" not in line.lower():
+            break
+        if grab:
+            out.append(line)
+    return "\n".join(out).strip()
+
+
+# ---- tools: local (zero-infra) -------------------------------------------
+def t_orient(_args):
+    a = _read(_atlas_md())
+    if not a:
+        return "No ATLAS.md in %s — run `atlas init` to scaffold the map." % proj()
+    parts = ["# ATLAS — where things live (read this before you grep)\n",
+             _until(a, r'^## 2\.')]            # §0 quick-orientation + §1 top-level map
+    sk = _read(_skill_md())
+    if sk:
+        parts += ["\n## SKILL.md — task playbook (stable anchors)\n", _toc(sk)]
+    sc = _read(_scars_md())
+    if sc:
+        parts += ["\n## SCARS.md — failure memory (don't repeat)\n", _toc(sc)]
+    return "\n".join(p for p in parts if p)
+
+
+def t_find(args):
+    q = (args.get("query") or "").strip()
+    if not q:
+        return "Pass a `query` (e.g. 'release pipeline')."
+    rx = re.compile(re.escape(q), re.I)
+    hits = []
+    for label, path in (("ATLAS", _atlas_md()), ("SKILL", _skill_md()), ("SCARS", _scars_md())):
+        for i, line in enumerate(_read(path).splitlines(), 1):
+            if line.strip() and rx.search(line):
+                hits.append("%s:%d  %s" % (label, i, line.strip()[:160]))
+    if not hits:
+        return "No map entry matches %r — it may be undocumented; consider adding it to ATLAS.md." % q
+    return "Map entries matching %r:\n\n%s" % (q, "\n".join(hits[:40]))
+
+
+def t_scars(args):
+    sc = _read(_scars_md())
+    if not sc:
+        return "No SCARS.md in this project."
+    blocks = [b for b in re.split(r'(?=^### §)', sc, flags=re.M) if b.strip().startswith("### §")]
+    q = (args.get("query") or "").strip()
+    if q:
+        rx = re.compile(re.escape(q), re.I)
+        blocks = [b for b in blocks if rx.search(b)]
+        if not blocks:
+            return "No SCARS anchor matches %r — see `atlas anchors` for the full list." % q
+    return ("".join(blocks))[:8000] or "No anchors found."
+
+
+def t_measure(_args):
+    atlas_bin = os.environ.get("ATLAS_BIN") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "atlas")
+    try:
+        r = subprocess.run([atlas_bin, "measure"], cwd=proj(),
+                           capture_output=True, text=True, timeout=30)
+        out = re.sub(r'\x1b\[[0-9;]*m', '', (r.stdout or "") + (r.stderr or ""))
+        return out.strip() or "measure produced no output."
+    except Exception as e:
+        return "measure unavailable: %s" % e
+
+
+# ---- tools: optional backend (FuseGraph / FuseRAG) -----------------------
+def _backend(path, payload):
+    base = os.environ["ATLAS_MCP_BACKEND_URL"].rstrip("/")
+    req = urllib.request.Request(base + path, data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json"})
+    tok = os.environ.get("ATLAS_MCP_BACKEND_TOKEN")
+    if tok:
+        req.add_header("Authorization", "Bearer " + tok)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+def t_graph(args):      return _backend("/graph",  {"project": proj(), "query": args.get("query", "")})
+def t_deepsearch(args): return _backend("/search", {"project": proj(), "query": args.get("query", "")})
+def t_recall(args):     return _backend("/recall", {"project": proj(), "query": args.get("query", "")})
+
+
+# ---- registry ------------------------------------------------------------
+def _obj(props, required=()):
+    return {"type": "object", "properties": props, "required": list(required)}
+
+
+Q = {"query": {"type": "string", "description": "natural-language query"}}
+
+LOCAL_TOOLS = [
+    ("atlas_orient",  "Where things live: the ATLAS.md §0 map + SKILL/SCARS tables of contents. Call this FIRST to orient in a repo instead of grepping.", _obj({}), t_orient),
+    ("atlas_find",    "Find where something lives in the project map (files/modules/anchors) by keyword.", _obj(Q, ["query"]), t_find),
+    ("atlas_scars",   "Hard-won failure lessons (SCARS anchors) — what breaks and how to avoid it. Optionally filter by query.", _obj(Q), t_scars),
+    ("atlas_measure", "The measured orientation-token reduction ATLAS buys this repo (vs a smart skim and a whole-repo dump).", _obj({}), t_measure),
+]
+BACKEND_TOOLS = [
+    ("atlas_graph",      "Deep structural query (callers/callees, call chains, dead code) via the configured graph backend.", _obj(Q, ["query"]), t_graph),
+    ("atlas_deepsearch", "Semantic code/doc search via the configured vector backend.", _obj(Q, ["query"]), t_deepsearch),
+    ("atlas_recall",     "Recall relevant context from prior sessions via the configured backend.", _obj(Q, ["query"]), t_recall),
+]
+
+
+def tools():
+    t = list(LOCAL_TOOLS)
+    if os.environ.get("ATLAS_MCP_BACKEND_URL"):
+        t += BACKEND_TOOLS
+    return t
+
+
+# ---- JSON-RPC / MCP ------------------------------------------------------
+def _ok(i, result):  return {"jsonrpc": "2.0", "id": i, "result": result}
+def _err(i, code, m): return {"jsonrpc": "2.0", "id": i, "error": {"code": code, "message": m}}
+
+
+def handle(msg):
+    method, i = msg.get("method"), msg.get("id")
+    if method == "initialize":
+        proto = (msg.get("params") or {}).get("protocolVersion") or DEFAULT_PROTO
+        return _ok(i, {"protocolVersion": proto, "capabilities": {"tools": {}},
+                       "serverInfo": {"name": "atlas", "version": os.environ.get("ATLAS_VERSION", VERSION)}})
+    if method in ("notifications/initialized", "initialized"):
+        return None
+    if method == "ping":
+        return _ok(i, {})
+    if method == "tools/list":
+        return _ok(i, {"tools": [{"name": n, "description": d, "inputSchema": s} for (n, d, s, _f) in tools()]})
+    if method == "tools/call":
+        p = msg.get("params") or {}
+        fn = dict((n, f) for (n, _d, _s, f) in tools()).get(p.get("name"))
+        if not fn:
+            return _err(i, -32602, "unknown tool: %s" % p.get("name"))
+        try:
+            return _ok(i, {"content": [{"type": "text", "text": fn(p.get("arguments") or {})}], "isError": False})
+        except Exception as e:
+            return _ok(i, {"content": [{"type": "text", "text": "error: %s" % e}], "isError": True})
+    if i is None:
+        return None  # unknown notification — ignore
+    return _err(i, -32601, "method not found: %s" % method)
+
+
+def serve_stdio():
+    log("ATLAS MCP (stdio) v%s — project: %s%s" % (
+        os.environ.get("ATLAS_VERSION", VERSION), proj(),
+        "  [deep backend: ON]" if os.environ.get("ATLAS_MCP_BACKEND_URL") else ""))
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except Exception as e:
+            log("bad JSON-RPC line:", e)
+            continue
+        for one in (msg if isinstance(msg, list) else [msg]):
+            resp = handle(one)
+            if resp is not None:
+                sys.stdout.write(json.dumps(resp) + "\n")
+                sys.stdout.flush()
+
+
+def serve_http(host, port, token):
+    # Minimal MCP-over-HTTP (Streamable HTTP, non-streaming): POST JSON-RPC →
+    # JSON response. Optional bearer-token auth — opt-in, for team/remote use.
+    ver = os.environ.get("ATLAS_VERSION", VERSION)
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def _send(self, code, body=b"", ctype="application/json"):
+            if isinstance(body, str):
+                body = body.encode()
+            self.send_response(code)
+            if body:
+                self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if body:
+                self.wfile.write(body)
+
+        def _authed(self):
+            return (not token) or self.headers.get("Authorization", "") == "Bearer " + token
+
+        def do_GET(self):
+            if self.path.rstrip("/") in ("/health", "/healthz"):
+                return self._send(200, json.dumps({"status": "ok", "server": "atlas", "version": ver}))
+            return self._send(405, json.dumps({"error": "POST JSON-RPC to this endpoint"}))
+
+        def do_POST(self):
+            if not self._authed():
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", "Bearer")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            n = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(n).decode("utf-8", "replace") if n else ""
+            try:
+                msg = json.loads(raw)
+            except Exception as e:
+                return self._send(400, json.dumps(_err(None, -32700, "parse error: %s" % e)))
+            out = [r for r in (handle(o) for o in (msg if isinstance(msg, list) else [msg])) if r is not None]
+            if not out:
+                return self._send(202)  # notification(s) only
+            return self._send(200, json.dumps(out if isinstance(msg, list) else out[0]))
+
+        def log_message(self, *a):
+            pass  # quiet; the startup line already went to stderr
+
+    httpd = http.server.ThreadingHTTPServer((host, port), Handler)
+    log("ATLAS MCP (http) v%s on http://%s:%d  project: %s  [auth: %s]" % (
+        ver, host, port, proj(), "ON" if token else "OFF"))
+    if not token and host not in ("127.0.0.1", "localhost", "::1"):
+        log("WARNING: bound to %s with no --token — anyone on the network can query it." % host)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
+def main():
+    if "--http" in sys.argv[1:]:
+        serve_http(os.environ.get("ATLAS_MCP_HOST", "127.0.0.1"),
+                   int(os.environ.get("ATLAS_MCP_PORT", "7332")),
+                   os.environ.get("ATLAS_MCP_TOKEN") or None)
+    else:
+        serve_stdio()
+
+
+if __name__ == "__main__":
+    main()

@@ -206,6 +206,30 @@ Open a new agent session in any project with these files. The agent's first acti
 
 ---
 
+## Plug into any agent — the MCP server
+
+ATLAS ships a **zero-dependency Model Context Protocol server**, so *any* MCP client — Claude Code, Cursor, OpenClaw, Codex, Gemini — reads the map directly instead of grepping:
+
+```bash
+atlas mcp --config                  # prints the registration snippet
+claude mcp add atlas -- atlas mcp   # or paste the snippet into .mcp.json / Cursor
+```
+
+Four local tools — no infra, no embeddings, no API key:
+
+| tool | what the agent gets |
+|---|---|
+| `atlas_orient` | the §0 map + SKILL/SCARS tables of contents — *"where things live"* |
+| `atlas_find` | where a thing lives, by keyword |
+| `atlas_scars` | the failure lessons for a topic |
+| `atlas_measure` | the orientation-token reduction for this repo |
+
+Need deep queries? Set `ATLAS_MCP_BACKEND_URL` and three more tools (`atlas_graph`, `atlas_deepsearch`, `atlas_recall`) light up, proxying to a bring-your-own graph+vector backend. With nothing set, ATLAS stays **100% local and free**.
+
+Sharing with a team? `atlas mcp --http --token "$SECRET"` serves the same tools over HTTP — token auth is opt-in (no token locally, required off-localhost), with `GET /health` for liveness.
+
+---
+
 ## Style presets — pick a vibe
 
 Not every project wants the same temperament. `atlas init --style <preset>` picks the templates:

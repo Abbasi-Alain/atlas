@@ -22,6 +22,8 @@
 #                                     (claude/codex/opencode/--exec) OR single-shot
 #                                     vs any OpenAI-compatible endpoint (--api-base,
 #                                     e.g. local vLLM). Writes JSON + Markdown.
+#   atlas mcp [--config] [--http]     run the MCP server — serve the map to any
+#                                     MCP client (Claude Code/Cursor/OpenClaw/…)
 #   atlas doctor                      diagnose ATLAS_HOME + adapter/hook wiring
 #   atlas badge [--for-the-badge]     print a 'Powered by ATLAS' README badge
 #   atlas export --to <runtime>       fan the canonical trio out to another
@@ -87,7 +89,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.1.6"
+ATLAS_VERSION="0.1.7"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -2729,6 +2731,49 @@ PY
   _say "comparable across runs (version+model+effort+date+sha recorded). Methodology: docs/benchmarks/methodology.md"
 }
 
+# mcp — launch the ATLAS Model Context Protocol server (stdio, zero-infra).
+#
+# Serves this project's map to any MCP client (Claude Code/Cursor/OpenClaw/Codex):
+# atlas_orient · atlas_find · atlas_scars · atlas_measure. Deep tools
+# (atlas_graph/deepsearch/recall) appear only when ATLAS_MCP_BACKEND_URL is set —
+# a bring-your-own graph+vector backend (e.g. FuseGraph/FuseRAG), never required.
+# `--config` prints the registration snippet. `--http [--host H] [--port N]
+# [--token T]` serves over HTTP for team/remote use (token auth is opt-in; a
+# token is required to be safe on any non-localhost host).
+cmd_mcp() {
+  local want_config=0 http=0 token=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --config|--print-config) want_config=1; shift ;;
+      --http)      http=1; shift ;;
+      --port)      export ATLAS_MCP_PORT="${2:-}"; shift 2 ;;
+      --port=*)    export ATLAS_MCP_PORT="${1#--port=}"; shift ;;
+      --host)      export ATLAS_MCP_HOST="${2:-}"; shift 2 ;;
+      --host=*)    export ATLAS_MCP_HOST="${1#--host=}"; shift ;;
+      --token)     token="${2:-}"; shift 2 ;;
+      --token=*)   token="${1#--token=}"; shift ;;
+      *) shift ;;
+    esac
+  done
+  if [[ $want_config -eq 1 ]]; then
+    cat <<'JSON'
+{
+  "mcpServers": {
+    "atlas": { "command": "atlas", "args": ["mcp"] }
+  }
+}
+JSON
+    echo "# Claude Code:  claude mcp add atlas -- atlas mcp" >&2
+    return 0
+  fi
+  _have python3 || _die "atlas mcp needs python3."
+  local server="$ATLAS_HOME/bin/atlas-mcp"
+  [[ -f "$server" ]] || _die "atlas-mcp server not found at $server"
+  export ATLAS_PROJECT="${ATLAS_PROJECT:-$PWD}" ATLAS_BIN="$ATLAS_HOME/bin/atlas" ATLAS_VERSION
+  [[ -n "$token" ]] && export ATLAS_MCP_TOKEN="$token"
+  if [[ $http -eq 1 ]]; then exec python3 "$server" --http; else exec python3 "$server"; fi
+}
+
 # --- dispatch -------------------------------------------------------------
 
 main() {
@@ -2738,6 +2783,7 @@ main() {
     check)    cmd_check "$@" ;;
     measure)  cmd_measure "$@" ;;
     bench)    cmd_bench "$@" ;;
+    mcp)      cmd_mcp "$@" ;;
     doctor)   cmd_doctor "$@" ;;
     badge)    cmd_badge "$@" ;;
     export)   cmd_export "$@" ;;

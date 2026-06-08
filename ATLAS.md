@@ -37,6 +37,7 @@
 |---|---|---|
 | [`bin/atlas`](bin/atlas) | **The CLI.** Pure bash, zero deps. All subcommands live here. | templates/, adapters/, hooks/ |
 | [`bin/atlas-node`](bin/atlas-node) | npm/npx wrapper — execs `bin/atlas` via bash | bin/atlas |
+| [`bin/atlas-mcp`](bin/atlas-mcp) | **MCP server** (Python stdlib, zero-dep). `atlas mcp` serves the map (atlas_orient/find/scars/measure) to any MCP client; deep tools proxy to an opt-in backend | bin/atlas, ATLAS.md |
 | [`install.sh`](install.sh) | `curl \| bash` installer → `~/.atlas` + launcher on PATH | bin/atlas |
 | [`package.json`](package.json) | npm metadata; `bin: atlas → bin/atlas-node`; test script | §6 |
 | [`templates/`](templates/) | The `.tmpl` files `atlas init` renders (§3) | bin/atlas |

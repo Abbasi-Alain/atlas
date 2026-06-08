@@ -76,6 +76,50 @@ echo "-- new commands --"
 "$CLI" bench --runtime openai --api-base http://127.0.0.1:1 --model x --dry-run >/dev/null 2>&1 && _pass "bench openai --dry-run runs" || _fail "bench openai dry-run"
 ATLAS_HOME=/opt/cellar/atlas "$CLI" uninstall 2>&1 | grep -qi 'package' && _pass "uninstall defers package-managed installs" || _fail "uninstall defer"
 
+# MCP server: registration snippet + a real JSON-RPC handshake
+"$CLI" mcp --config 2>/dev/null | grep -q '"mcpServers"' && _pass "mcp --config emits registration JSON" || _fail "mcp --config"
+if command -v python3 >/dev/null 2>&1; then
+  MCP_IN='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"atlas_orient","arguments":{}}}'
+  MCP_OUT="$(printf '%s\n' "$MCP_IN" | ATLAS_PROJECT="$TMP" "$CLI" mcp 2>/dev/null)"
+  echo "$MCP_OUT" | grep -q '"serverInfo"'     && _pass "mcp initialize handshake"               || _fail "mcp initialize"
+  echo "$MCP_OUT" | grep -q 'atlas_orient'      && _pass "mcp tools/list lists atlas_orient"      || _fail "mcp tools/list"
+  echo "$MCP_OUT" | grep -q 'where things live' && _pass "mcp atlas_orient returns the map"        || _fail "mcp atlas_orient"
+  echo "$MCP_OUT" | grep -q 'atlas_graph'       && _fail "mcp backend tools must stay hidden"      || _pass "mcp deep tools hidden without a backend"
+  printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | ATLAS_PROJECT="$TMP" ATLAS_MCP_BACKEND_URL="https://x.example" "$CLI" mcp 2>/dev/null | grep -q 'atlas_graph' && _pass "mcp deep tools appear when backend set" || _fail "mcp backend gating"
+else
+  _pass "mcp JSON-RPC tests skipped (no python3)"
+fi
+
+# MCP HTTP transport + token auth (start the server, assert 401 without / 200 with)
+if command -v python3 >/dev/null 2>&1; then
+  HPORT=7399
+  ATLAS_PROJECT="$TMP" "$CLI" mcp --http --port "$HPORT" --token testtok >/dev/null 2>&1 &
+  HPID=$!
+  if python3 - "$HPORT" testtok <<'PY'
+import sys, time, urllib.request as u
+port, token = sys.argv[1], sys.argv[2]
+base = "http://127.0.0.1:%s" % port
+for _ in range(25):
+    try: u.urlopen(base + "/health", timeout=1); break
+    except Exception: time.sleep(0.2)
+else: sys.exit(2)
+body = b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+try:
+    u.urlopen(u.Request(base + "/", data=body, headers={"Content-Type": "application/json"}), timeout=3)
+    sys.exit(3)                                   # should have been rejected
+except u.HTTPError as e:
+    if e.code != 401: sys.exit(3)
+r = u.urlopen(u.Request(base + "/", data=body, headers={"Content-Type": "application/json", "Authorization": "Bearer " + token}), timeout=3)
+sys.exit(0 if b"atlas_orient" in r.read() else 4)
+PY
+  then _pass "mcp --http: token auth (401 without, 200+tools with)"; else _fail "mcp --http auth"; fi
+  kill "$HPID" 2>/dev/null
+else
+  _pass "mcp --http test skipped (no python3)"
+fi
+
 # init --analyze injects an auto-detected map
 TMP_AN="$(mktemp -d)"; pushd "$TMP_AN" >/dev/null
 git init -q -b main 2>/dev/null; echo '{}' > package.json; mkdir -p src; touch src/index.js
