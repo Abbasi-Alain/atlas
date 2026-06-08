@@ -84,6 +84,17 @@ grep -q '0.5 Auto-detected' ATLAS.md && _pass "init --analyze injects a detected
 "$CLI" check >/dev/null 2>&1 && _pass "--analyze output still passes check" || _fail "--analyze breaks check"
 popd >/dev/null; rm -rf "$TMP_AN"
 
+# drift enforcement
+TMP_DR="$(mktemp -d)"; pushd "$TMP_DR" >/dev/null
+git init -q -b main 2>/dev/null
+"$CLI" init >/dev/null 2>&1
+git add -A && git -c user.email=t@t -c user.name=t commit -qm init >/dev/null 2>&1
+"$CLI" check --changed-files >/dev/null 2>&1 && _pass "drift: clean tree passes --changed-files" || _fail "clean tree failed drift"
+touch NEWMODULE.js; git add NEWMODULE.js
+"$CLI" check --changed-files >/dev/null 2>&1; rc=$?
+[[ $rc -ne 0 ]] && _pass "drift: structural add without ATLAS update fails" || _fail "structural drift not caught"
+popd >/dev/null; rm -rf "$TMP_DR"
+
 # --- public style presets ------------------------------------------------
 echo ""
 echo "-- style presets --"

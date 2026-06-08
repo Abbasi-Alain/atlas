@@ -11,7 +11,9 @@
 #                                              karpathy | google
 #                                     --stack: requires a style with stacks/ subdir
 #                                              (comma-separated; pick any subset)
-#   atlas check                       lint files, verify anchors unique
+#   atlas check [--changed-files[=REF]]  lint the quartet + verify anchors unique;
+#                                     --changed-files also fails on structural
+#                                     drift (files moved but ATLAS.md not updated)
 #   atlas measure [--badge]           estimate orientation-token savings (with
 #                                     vs without ATLAS); --badge prints a shield
 #   atlas bench [--runtime claude|codex|opencode|openai] [--model M] [--effort L]
@@ -398,7 +400,37 @@ cmd_init() {
   _say "next:    fill in §-sections of ATLAS.md, then 'atlas check'"
 }
 
+# Drift gate: fail if files were added/moved/removed without updating ATLAS.md.
+_check_drift() {
+  local ref="$1" changed atlas_changed structural
+  git rev-parse --git-dir >/dev/null 2>&1 || { _say "drift: not a git repo — skip"; return 0; }
+  if [[ -n "$ref" ]]; then
+    changed="$(git diff --name-status "$ref" 2>/dev/null || true)"
+  else
+    changed="$(git diff --name-status HEAD 2>/dev/null || true)"
+  fi
+  [[ -z "$changed" ]] && { _ok "no drift (no changes vs ${ref:-HEAD})"; return 0; }
+  atlas_changed=""
+  printf '%s\n' "$changed" | grep -qE 'ATLAS\.md$' && atlas_changed=1
+  structural="$(printf '%s\n' "$changed" | grep -E '^[ADR]' | grep -vE 'ATLAS\.md|SCARS\.md|SKILL\.md|CLAUDE\.md|AGENTS\.md|EXAMPLES\.md|llms\.txt|\.md$|^.[[:space:]]+CHANGELOG|README' || true)"
+  if [[ -n "$structural" && -z "$atlas_changed" ]]; then
+    _fail "structural changes (add/move/remove) without an ATLAS.md update — the map may be stale (SCARS §ATLAS-IS-INDEX):"
+    printf '%s\n' "$structural" | head -8 | sed 's/^/      /'
+    _say "→ update ATLAS.md in the same change (or 'atlas init --analyze' to refresh §0.5)."
+    exit 1
+  fi
+  _ok "no structural drift — ATLAS.md is current"
+}
+
 cmd_check() {
+  local drift=0 ref=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --changed-files)   drift=1; shift ;;
+      --changed-files=*) drift=1; ref="${1#--changed-files=}"; shift ;;
+      *) shift ;;
+    esac
+  done
   _banner "🔍" "atlas check"
   local atlas="$PWD/ATLAS.md"
   local scars="$PWD/SCARS.md"
@@ -440,6 +472,7 @@ cmd_check() {
     fi
   fi
   if [[ $errs -gt 0 ]]; then exit 1; fi
+  if [[ $drift -eq 1 ]]; then _check_drift "$ref"; fi
   echo "$(_c_green 'atlas:') ok"
 }
 
