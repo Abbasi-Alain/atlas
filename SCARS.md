@@ -30,6 +30,11 @@
 - [§PPA-PLACEHOLDER-SECRET — a `<placeholder>` LAUNCHPAD_PPA silently drops uploads](#ppa-placeholder-secret)
 - [§CLI-VERSION-DRIFT — bump ATLAS_VERSION in bin/atlas with every release](#cli-version-drift)
 
+**Benchmarking** *(`atlas bench`)*
+- [§BENCH-NEEDS-GIT — `codex exec` bails (0s, no output) in a `git archive` dir; keep stderr](#bench-needs-git)
+- [§BENCH-TOKEN-SUM-CACHE — summed per-turn `input_tokens` double-counts cache; use turns/cost](#bench-token-sum-cache)
+- [§OPENCODE-PURE-JSON — opencode floods stdout with plugin logs; run `--pure`](#opencode-pure-json)
+
 ---
 
 ## Process / hygiene
@@ -165,6 +170,79 @@ it must be bumped by hand. It silently drifted 0.1.0 → 0.1.4.
 same commit as `package.json`. (A CI check comparing the two would prevent this.)
 
 **Where.** `bin/atlas` (top), `package.json`.
+
+---
+
+## Benchmarking (`atlas bench`)
+
+### §BENCH-NEEDS-GIT — a runtime that bails in a non-git dir produces a silent 0/0
+
+**Symptom.** `atlas bench --runtime codex` reported `output_chars 0 / wall_s 0`
+for both conditions — "no delta computed." No error, no clue why.
+
+**Root cause.** Two compounding traps. (1) The per-run work dir is built with
+`git archive HEAD | tar -x`, which has **no `.git`** — and `codex exec` refuses
+to run outside a git repo, exiting in ~0s. (2) The runner sent stderr to
+`/dev/null`, so the refusal was invisible. `claude -p` has no such guard, so it
+ran and masked the asymmetry.
+
+**Do NOT.** Discard a benchmarked runtime's stderr — a silent failure scores as
+"0," which a naive primary metric reads as a result.
+
+**Do.** Pass `codex exec --skip-git-repo-check` (or `git init -q` the work dir);
+capture stderr to a `.err` file; flag empty output as a `parse_error` so a dead
+run can never masquerade as a datapoint.
+
+**Where.** `bin/atlas` `cmd_bench` (the `codex)` agent array + the run redirect +
+the empty-output check in the python parser).
+
+---
+
+### §BENCH-TOKEN-SUM-CACHE — summed per-turn `input_tokens` is not a cost/efficiency metric
+
+**Symptom.** An agentic A/B claimed ATLAS made things **−98.6%** (1.95× *more*
+input_tokens) — while the same run finished in **fewer turns (5 vs 6), 33% less
+wall-time (58s vs 87s), and ~10% lower cost ($0.38 vs $0.42)**. The headline
+contradicted every real signal.
+
+**Root cause.** The parser summed each assistant turn's `usage.input_tokens`.
+In an agentic loop every turn re-sends the whole (cached) context, so the sum
+grows super-linearly with turns and counts cache **reads** (priced ~10×) as if
+they were fresh input. The dogfooded SessionStart hook injecting the quartet
+into the "with" copy widened the gap further. The tell: the token sum *rose*
+while **cost fell** — impossible if it were a real cost measure.
+
+**Do NOT.** Headline summed per-turn `input_tokens` for agentic runs, or mix it
+with the deterministic single-shot count in the same "reduction" claim.
+
+**Do.** For agentic runtimes (claude/codex/opencode) use **turns / cost / wall**
+as the metric (all lower-is-better); reserve token counts for the deterministic
+`openai` / `atlas measure` single-shot mode, which tokenizes a *fixed* context
+once and is reproducible. That single-shot path is the source of the headline
+**−92% / 12.8×**; agentic rows are logged as *directional*.
+
+**Where.** `bin/atlas` `cmd_bench` (`prim`/`plabel` selection + the claude
+parser); `docs/benchmarks/methodology.md`; `docs/benchmarks/RESULTS.md`.
+
+---
+
+### §OPENCODE-PURE-JSON — opencode floods stdout with plugin logs; run `--pure`
+
+**Symptom.** `atlas bench --runtime opencode` produced unparseable output (or
+hung): the JSON was preceded by `[TelegramRemote] …` / `[Config] …` plugin log
+lines, and a no-`-m` invocation waited forever on model selection.
+
+**Root cause.** opencode loads user plugins that log to **stdout**, corrupting
+`--format json`; and `opencode run` with no model blocks on selection when headless.
+
+**Do.** Invoke `opencode run --pure --format json -m <provider>/<model> …` —
+`--pure` skips user plugins so stdout is clean JSON, and `-m` is required (the CLI
+`_die`s without it rather than hang). The parser still defensively scans for the
+first `[`/`{` in case a stray line slips through. opencode messages carry
+`tokens:{input,output,…}` + `cost` + `modelID`; sum them, count assistant messages
+as turns (same cache caveat as [[§BENCH-TOKEN-SUM-CACHE]] → headline **turns**).
+
+**Where.** `bin/atlas` `cmd_bench` (opencode agent array + the `opencode` parser).
 
 ---
 

@@ -87,7 +87,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.1.5"
+ATLAS_VERSION="0.1.6"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -1993,16 +1993,22 @@ cmd_measure() {
   [[ -f "$atlas" ]] || _die "no ATLAS.md in $PWD — run 'atlas init' first"
   local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
   local scars="$PWD/SCARS.md"
-  local claude="$PWD/CLAUDE.md"
 
   _bytes() { if [[ -f "$1" ]]; then wc -c < "$1" | tr -d ' '; else echo 0; fi; }
 
-  # WITH ATLAS — the front-loaded orientation surface (the quartet).
-  local with_b=0
-  with_b=$(( with_b + $(_bytes "$atlas") ))
-  [[ -n "$skill" ]] && with_b=$(( with_b + $(_bytes "$skill") ))
-  [[ -f "$scars" ]] && with_b=$(( with_b + $(_bytes "$scars") ))
-  with_b=$(( with_b + $(_bytes "$claude") ))
+  # WITH ATLAS — the front-loaded orientation *spine* (what the hook injects first:
+  # ATLAS §0-1 + the SKILL/SCARS tables of contents), NOT the whole files. This is
+  # the same surface the benchmark measures, so `measure` and `bench` agree.
+  local with_b=0 _sp
+  _sp=$(awk '/^## 2\./{exit} 1' "$atlas" 2>/dev/null | wc -c | tr -d ' '); with_b=$(( with_b + _sp ))
+  if [[ -f "$scars" ]]; then
+    _sp=$(awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$scars" 2>/dev/null | wc -c | tr -d ' ')
+    with_b=$(( with_b + _sp ))
+  fi
+  if [[ -n "$skill" ]]; then
+    _sp=$(awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$skill" 2>/dev/null | wc -c | tr -d ' ')
+    with_b=$(( with_b + _sp ))
+  fi
 
   # WITHOUT ATLAS — README + file tree + head of the top source files.
   local without_b=0
@@ -2022,26 +2028,39 @@ cmd_measure() {
             | grep -Ei '\.(py|js|ts|tsx|jsx|go|rs|rb|java|c|cc|cpp|h|hpp|sh|php|swift|kt|scala|cs|m|mm)$' || true )
   without_b=$(( without_b + head_b ))
 
+  # WITHOUT ATLAS — upper bound: the whole repo (a RAG dump / "load everything"
+  # agent), skipping binaries. The reduction is a *range*: smart-skim → whole-repo.
+  local full_b=0 ff
+  while IFS= read -r ff; do
+    case "$ff" in *.png|*.gif|*.jpg|*.jpeg|*.pdf|*.zip|*.deb|*.ico|*.woff|*.woff2|*.ttf|*.mp4|*.mov|*.lock) continue ;; esac
+    [[ -f "$PWD/$ff" ]] || continue
+    full_b=$(( full_b + $(_bytes "$PWD/$ff") ))
+  done < <( { git -C "$PWD" ls-files 2>/dev/null | head -3000; } || true )
+
   [[ $with_b    -lt 1 ]] && with_b=1
   [[ $without_b -lt 1 ]] && without_b=1
-  local with_t=$(( with_b / 4 )) without_t=$(( without_b / 4 ))
-  local ratio pct
-  ratio=$(awk -v a="$without_t" -v b="$with_t" 'BEGIN{ if(b<1)b=1; printf "%.1f", a/b }')
-  pct=$(awk   -v a="$without_t" -v b="$with_t" 'BEGIN{ if(a<1)a=1; printf "%.0f", 100*(a-b)/a }')
+  [[ $full_b -lt $without_b ]] && full_b=$without_b
+  local with_t=$(( with_b / 4 )) without_t=$(( without_b / 4 )) full_t=$(( full_b / 4 ))
+  local ratio pct ratio_hi pct_hi
+  ratio=$(awk    -v a="$without_t" -v b="$with_t" 'BEGIN{ if(b<1)b=1; printf "%.1f", a/b }')
+  pct=$(awk      -v a="$without_t" -v b="$with_t" 'BEGIN{ if(a<1)a=1; printf "%.0f", 100*(a-b)/a }')
+  ratio_hi=$(awk -v a="$full_t"    -v b="$with_t" 'BEGIN{ if(b<1)b=1; printf "%.1f", a/b }')
+  pct_hi=$(awk   -v a="$full_t"    -v b="$with_t" 'BEGIN{ if(a<1)a=1; printf "%.0f", 100*(a-b)/a }')
 
   if [[ $want_badge -eq 1 ]]; then
-    echo "[![ATLAS](https://img.shields.io/badge/ATLAS-%E2%88%92${pct}%25%20orientation%20tokens-06b6d4)](https://github.com/Abbasi-Alain/atlas)"
+    echo "[![ATLAS](https://img.shields.io/badge/ATLAS-%E2%88%92${pct}%25%E2%80%93${pct_hi}%25%20orientation%20tokens-06b6d4)](https://github.com/Abbasi-Alain/atlas)"
     return 0
   fi
 
   _banner "📊" "atlas measure  $(_c_dim "(estimate · bytes ÷ 4)")"
-  printf "  %-28s %s\n" "without ATLAS (skim):" "$(_c_yellow "~${without_t} tok")"
-  printf "  %-28s %s\n" "with ATLAS (trio):"    "$(_c_green  "~${with_t} tok")"
+  printf "  %-30s %s\n" "with ATLAS (quartet spine):" "$(_c_green  "~${with_t} tok")"
+  printf "  %-30s %s %s %s %s\n" "without — smart skim:"      "$(_c_yellow "~${without_t} tok")" "$(_c_dim '→')" "$(_c_bold "−${pct}%")"    "$(_c_dim "(${ratio}×)")"
+  printf "  %-30s %s %s %s %s\n" "without — whole-repo dump:" "$(_c_yellow "~${full_t} tok")"    "$(_c_dim '→')" "$(_c_bold "−${pct_hi}%")" "$(_c_dim "(${ratio_hi}×)")"
   echo ""
-  printf "  %s %s %s\n" "$(_c_bold "${ratio}× less")" "$(_c_dim 'orientation context —')" "$(_c_bold "−${pct}%")"
+  printf "  %s %s\n" "$(_c_bold "ATLAS cuts orientation −${pct}% to −${pct_hi}%")" "$(_c_dim '(smart-skim → whole-repo baseline)')"
   echo ""
-  _say "method: 'without' = README + file tree + head of top source files;"
-  _say "        'with' = ATLAS.md + SKILL.md + SCARS.md + CLAUDE.md. Rough estimate."
+  _say "method: 'with' = ATLAS+SKILL+SCARS+CLAUDE spine; 'without' ranges from a"
+  _say "        smart skim (README+tree+heads) to the whole repo. Estimate (bytes÷4)."
   _say "shareable README badge:  $(_c_dim 'atlas measure --badge')"
 }
 
@@ -2307,8 +2326,8 @@ cmd_bench() {
   local parser rt_check
   case "$runtime" in
     claude)   parser="claude";  rt_check="claude" ;;
-    codex)    parser="generic"; rt_check="codex" ;;
-    opencode) parser="generic"; rt_check="opencode" ;;
+    codex)    parser="codex";    rt_check="codex" ;;
+    opencode) parser="opencode"; rt_check="opencode" ;;
     openai)   parser="openai";  rt_check="" ;;
     generic)  parser="generic"; rt_check=""; [[ -z "$exec_tpl" ]] && _die "--runtime generic needs --exec '<cmd referencing \$ATLAS_BENCH_TASK>'" ;;
     *) _die "unknown --runtime '$runtime' (claude | codex | opencode | openai | generic via --exec)" ;;
@@ -2317,6 +2336,9 @@ cmd_bench() {
     [[ -z "$api_base" ]] && api_base="https://api.openai.com/v1"
     [[ -z "$api_key"  ]] && api_key="${OPENAI_API_KEY:-none}"
     [[ -z "$model" ]] && _die "--runtime openai needs --model (e.g. --model qwen3.6-35b)"
+  fi
+  if [[ "$runtime" == "opencode" && -z "$model" && $dry -ne 1 ]]; then
+    _die "--runtime opencode needs --model provider/model (e.g. --model dgx-spark-prisma/qwen3.6-35b) — without it opencode hangs on selection."
   fi
   if [[ $dry -ne 1 ]]; then
     _have python3 || _die "atlas bench needs python3 for parsing + the report."
@@ -2328,9 +2350,9 @@ cmd_bench() {
   local rt_ver date_utc base cleanup_base="" repo_sha="n/a" repo_label
   date_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   case "$runtime" in
-    claude)   rt_ver="$(claude --version 2>/dev/null | head -1)" ;;
-    codex)    rt_ver="$(codex --version 2>/dev/null | head -1)" ;;
-    opencode) rt_ver="$(opencode --version 2>/dev/null | head -1)" ;;
+    claude)   rt_ver="$(claude --version 2>/dev/null | head -1 || true)" ;;
+    codex)    rt_ver="$(codex --version 2>/dev/null | head -1 || true)" ;;
+    opencode) rt_ver="$(opencode --version 2>/dev/null | head -1 || true)" ;;
     openai)   rt_ver="openai-compat: $api_base ($model)" ;;
     generic)  rt_ver="exec: $exec_tpl" ;;
   esac
@@ -2393,16 +2415,6 @@ cmd_bench() {
   else
   for cond in without with; do
     for (( rep=1; rep<=reps; rep++ )); do
-      work="$(mktemp -d)"
-      if git -C "$base" rev-parse HEAD >/dev/null 2>&1; then
-        git -C "$base" archive HEAD 2>/dev/null | tar -x -C "$work"
-      else
-        cp -R "$base/." "$work/" 2>/dev/null || true
-      fi
-      if [[ "$cond" == "without" ]]; then
-        for f in "${quartet[@]}"; do rm -rf "${work:?}/$f"; done
-      fi
-
       local agent=()
       case "$runtime" in
         claude)
@@ -2410,30 +2422,52 @@ cmd_bench() {
           if [[ -n "$model"  ]]; then agent+=(--model "$model"); fi
           if [[ -n "$effort" ]]; then agent+=(--effort "$effort"); fi ;;
         codex)
-          agent=(codex exec "$task")
+          # --skip-git-repo-check: the work dir is a `git archive` export with no
+          # .git, and `codex exec` otherwise refuses to run there → 0s / no output
+          # (SCARS §BENCH-NEEDS-GIT).
+          agent=(codex exec --json --skip-git-repo-check "$task")
           if [[ -n "$model"  ]]; then agent+=(--model "$model"); fi
           if [[ -n "$effort" ]]; then agent+=(-c "model_reasoning_effort=$effort"); fi ;;
         opencode)
-          agent=(opencode run "$task")
+          # --pure: skip user plugins that otherwise flood stdout with log lines
+          # and corrupt the JSON (SCARS §OPENCODE-PURE-JSON). A model is required
+          # or opencode hangs waiting on selection.
+          agent=(opencode run --pure --format json "$task")
           if [[ -n "$model"  ]]; then agent+=(-m "$model"); fi
           if [[ -n "$effort" ]]; then agent+=(--variant "$effort"); fi ;;
       esac
 
+      # Dry-run is print-only — NO mktemp / git-archive. (`git archive | tar`
+      # aborts under bin/atlas's set -e+pipefail on a shallow CI clone, which is
+      # what broke the `bench dry-run` CI check.)
       if [[ $dry -eq 1 ]]; then
         if [[ "$runtime" == "generic" ]]; then
-          printf "  %-8s #%d  →  (cd %s && ATLAS_BENCH_TASK=… bash -c %q)\n" "$cond" "$rep" "$work" "$exec_tpl"
+          printf "  %-8s #%d  →  (cd <tmp> && ATLAS_BENCH_TASK=… bash -c %q)\n" "$cond" "$rep" "$exec_tpl"
         else
-          printf "  %-8s #%d  →  (cd %s && %s)\n" "$cond" "$rep" "$work" "${agent[*]}"
+          printf "  %-8s #%d  →  (cd <tmp> && %s)\n" "$cond" "$rep" "${agent[*]}"
         fi
-        rm -rf "$work"; continue
+        continue
+      fi
+
+      work="$(mktemp -d)"
+      if git -C "$base" rev-parse HEAD >/dev/null 2>&1; then
+        git -C "$base" archive HEAD 2>/dev/null | tar -x -C "$work" 2>/dev/null || cp -R "$base/." "$work/" 2>/dev/null || true
+      else
+        cp -R "$base/." "$work/" 2>/dev/null || true
+      fi
+      if [[ "$cond" == "without" ]]; then
+        for f in "${quartet[@]}"; do rm -rf "${work:?}/$f"; done
       fi
 
       _say "running $cond #$rep …"
       t0=$(date +%s)
+      # < /dev/null: headless agents (codex --json) otherwise block "Reading
+      # additional input from stdin…" and hang. keep stderr (a silent 2>/dev/null
+      # once hid a runtime that bailed at 0s — SCARS §BENCH-NEEDS-GIT).
       if [[ "$runtime" == "generic" ]]; then
-        ( cd "$work" && ATLAS_BENCH_TASK="$task" bash -c "$exec_tpl" ) > "$runs/${cond}-${rep}.out" 2>/dev/null || true
+        ( cd "$work" && ATLAS_BENCH_TASK="$task" bash -c "$exec_tpl" < /dev/null ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
       else
-        ( cd "$work" && "${agent[@]}" ) > "$runs/${cond}-${rep}.out" 2>/dev/null || true
+        ( cd "$work" && "${agent[@]}" < /dev/null ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
       fi
       t1=$(date +%s)
       printf '%s\t%d\t%d\t%s\n' "$cond" "$rep" "$(( t1 - t0 ))" "${cond}-${rep}.out" >> "$runs/index.tsv"
@@ -2465,12 +2499,16 @@ def count_tokens(text):
 meta=json.load(open(os.path.join(runs_dir,"meta.json")))
 task=open(os.path.join(runs_dir,"task.txt")).read()
 parser=meta["parser"]
-rows=[]; idx=os.path.join(runs_dir,"index.tsv")
+rows=[]; detected_models=set(); idx=os.path.join(runs_dir,"index.tsv")
 if os.path.exists(idx):
     for line in open(idx):
         cond,rep,wall,fn=line.rstrip("\n").split("\t")
         raw=open(os.path.join(runs_dir,fn)).read()
         rec={"condition":cond,"rep":int(rep),"wall_s":int(wall),"output_chars":len(raw)}
+        if not raw.strip():
+            ep=os.path.join(runs_dir, fn.rsplit(".",1)[0]+".err")
+            errtxt=open(ep).read().strip() if os.path.exists(ep) else ""
+            rec["parse_error"]="empty output"+((": "+errtxt[:200]) if errtxt else " (runtime produced nothing — check install/auth)")
         if parser=="claude":
             try:
                 d=json.loads(raw); events=d if isinstance(d,list) else [d]
@@ -2478,10 +2516,13 @@ if os.path.exists(idx):
                 for e in events:
                     if not isinstance(e,dict): continue
                     u=e.get("usage") or (e.get("message") or {}).get("usage") or {}
+                    mdl=(e.get("message") or {}).get("model")
+                    if mdl: detected_models.add(mdl)
                     if e.get("type")=="assistant" and u:
                         inp+=(u.get("input_tokens") or 0)+(u.get("cache_creation_input_tokens") or 0)
                         outp+=(u.get("output_tokens") or 0)
                     if e.get("type")=="result" or "total_cost_usd" in e: result=e
+                    for mk in (e.get("modelUsage") or {}): detected_models.add(mk)
                 if result is not None:
                     rec["num_turns"]=result.get("num_turns")
                     rec["cost_usd"]=result.get("total_cost_usd")
@@ -2509,18 +2550,113 @@ if os.path.exists(idx):
                 rec["output_tokens"]=u.get("completion_tokens") or 0
             except Exception as ex:
                 rec["parse_error"]=str(ex)
+        elif parser=="opencode":
+            # opencode `run --pure --format json` may emit a single JSON doc OR a
+            # JSONL event stream. Collect every parseable object either way; each
+            # assistant message carries tokens:{input,output,…}+cost+modelID.
+            objs=[]
+            try:
+                objs=[json.loads(raw)]
+            except Exception:
+                for ln in raw.splitlines():
+                    ln=ln.strip()
+                    if not ln or ln[0] not in "[{": continue   # skip any stray log lines
+                    try: objs.append(json.loads(ln))
+                    except Exception: pass
+                if not objs:
+                    for i in (raw.find("["), raw.find("{")):
+                        if i>=0:
+                            try: objs.append(json.loads(raw[i:])); break
+                            except Exception: pass
+            if not objs:
+                if not rec.get("parse_error"): rec["parse_error"]="opencode: no JSON in output"
+            else:
+                acc={"inp":0,"outp":0,"cost":0.0,"turns":0}
+                def _visit(o):
+                    if isinstance(o,dict):
+                        tk=o.get("tokens")
+                        if isinstance(tk,dict) and (("input" in tk) or ("output" in tk)):
+                            acc["inp"]+=tk.get("input") or 0; acc["outp"]+=tk.get("output") or 0; acc["turns"]+=1
+                        if isinstance(o.get("cost"),(int,float)): acc["cost"]+=o["cost"]
+                        if o.get("modelID"): detected_models.add(o["modelID"])
+                        for v in o.values(): _visit(v)
+                    elif isinstance(o,list):
+                        for v in o: _visit(v)
+                for o in objs: _visit(o)
+                if acc["inp"] or acc["outp"]: rec["input_tokens"]=acc["inp"]; rec["output_tokens"]=acc["outp"]
+                if acc["cost"]: rec["cost_usd"]=round(acc["cost"],6)
+                if acc["turns"]>0: rec["num_turns"]=acc["turns"]   # else fall back to wall_s
+                if acc["turns"]==0 and acc["inp"]==0 and not rec.get("parse_error"):
+                    rec["parse_error"]="opencode: parsed %d obj(s) but no token-bearing messages — using wall_s"%len(objs)
+        elif parser=="codex":
+            # codex `exec --json` emits JSONL events. Token usage rides on
+            # payload.type=="token_count" (info.total_token_usage); count
+            # agent_message events as turns. ($ cost is plan-based, not reported.)
+            turns=0; last=None; seen=False
+            for ln in raw.splitlines():
+                ln=ln.strip()
+                if not ln: continue
+                try: e=json.loads(ln)
+                except Exception: continue
+                seen=True
+                pl=e.get("payload") if isinstance(e.get("payload"),dict) else e
+                pt=pl.get("type")
+                # turn markers vary by codex version: agent_message (rollout) or an
+                # item.completed carrying an assistant message (exec --json stream).
+                if pt in ("agent_message","agent_reasoning"): turns+=1
+                elif pt in ("item.completed","item_completed"):
+                    it=pl.get("item") or e.get("item") or {}
+                    if str(it.get("type") or "").endswith("message") and (it.get("role")=="assistant" or "text" in it): turns+=1
+                if pt=="token_count":
+                    info=pl.get("info") or {}
+                    tu=info.get("total_token_usage") or info.get("last_token_usage") or {}
+                    if tu: last=tu
+                u2=pl.get("usage") or (pl.get("response") or {}).get("usage")
+                if isinstance(u2,dict) and (u2.get("input_tokens") or u2.get("prompt_tokens")): last=u2
+                if pl.get("model"): detected_models.add(pl["model"])
+            if last:
+                rec["input_tokens"]=last.get("input_tokens") or last.get("prompt_tokens") or 0
+                rec["output_tokens"]=last.get("output_tokens") or last.get("completion_tokens") or 0
+            if turns>0: rec["num_turns"]=turns   # else: fall back to wall_s (never fake a turn count)
+            if not seen and not rec.get("parse_error"):
+                rec["parse_error"]="codex: no JSONL events parsed (is --json supported?)"
+            elif seen and turns==0 and last is None and not rec.get("parse_error"):
+                rec["parse_error"]="codex: events parsed but no turn/usage markers — headlining wall_s"
+        # On any parse miss, keep the raw output next to the report so the schema
+        # can be inspected without re-running (the temp run dir is cleaned).
+        if rec.get("parse_error") and raw.strip():
+            try: open("%s-%s-%d.rawout"%(base_path,cond,rec["rep"]),"w").write(raw[:30000])
+            except Exception: pass
         rows.append(rec)
 
-if parser=="claude": metrics=["input_tokens","output_tokens","num_turns","cost_usd","wall_s"]
-elif parser=="openai": metrics=["input_tokens","output_tokens","num_turns","wall_s"]
-else: metrics=["output_chars","wall_s"]
+# Record the model the runtime *actually* resolved (e.g. "default" → claude-opus-4-8),
+# so the ledger never just says "default" (it can't be reconstructed later).
+if detected_models:
+    meta["model"]="+".join(sorted(detected_models))
+
+if parser in ("claude","opencode"): metrics=["num_turns","cost_usd","wall_s","input_tokens","output_tokens"]
+elif parser=="codex": metrics=["num_turns","wall_s","input_tokens","output_tokens"]
+elif parser=="openai": metrics=["input_tokens","output_tokens","wall_s"]
+else: metrics=["wall_s","output_chars"]
 def agg(cond,key):
     vals=[r[key] for r in rows if r["condition"]==cond and isinstance(r.get(key),(int,float))]
     return round(statistics.mean(vals),4) if vals else None
 summary={c:{m:agg(c,m) for m in metrics} for c in ("without","with")}
 json.dump({"meta":meta,"task":task,"runs":rows,"summary":summary},open(base_path+".json","w"),indent=2)
 
-prim="input_tokens" if parser in ("claude","openai") else "output_chars"
+# Headline metric. All are lower-is-better. For agentic runtimes we use *turns*
+# (orientation efficiency) — NOT summed input_tokens, which double-counts cached
+# context per turn and can climb even as cost falls (SCARS §BENCH-TOKEN-SUM-CACHE).
+# Falls back to wall_s when turns weren't parsed (e.g. codex/opencode schema drift).
+def _has(m): return isinstance(summary["without"].get(m),(int,float)) and isinstance(summary["with"].get(m),(int,float))
+def _signal(m): return _has(m) and summary["without"][m]!=summary["with"][m]  # a metric equal on both sides carries no signal
+_pref={"claude":["num_turns","wall_s"],"opencode":["num_turns","wall_s"],"codex":["num_turns","wall_s"],
+       "openai":["input_tokens"]}.get(parser,["wall_s","output_chars"])
+# prefer the first preferred metric with a real (non-degenerate) delta; else the
+# first with data. Avoids headlining e.g. opencode's 1-vs-1 message count as "0%".
+prim=next((m for m in _pref if _signal(m)), None) or next((m for m in _pref if _has(m)), _pref[-1])
+plabel={"num_turns":"fewer turns","input_tokens":"fewer orientation tokens",
+        "wall_s":"less wall-time","output_chars":"less output"}.get(prim,"less "+prim)
 wo,wi=summary["without"].get(prim),summary["with"].get(prim)
 ratio=pct=None
 if wo and wi and wi>0: ratio=wo/wi; pct=(1-wi/wo)*100
@@ -2542,9 +2678,12 @@ for c in ("without","with"):
     md.append("| "+("without ATLAS" if c=="without" else "with ATLAS")+" | "+" | ".join(fn(summary[c][m]) for m in metrics)+" |")
 md.append("")
 if ratio:
-    md.append(f"**→ with ATLAS uses {ratio:.1f}× less {prim} ({pct:.0f}% lower).**  _[N={n} per condition — estimate; {meta['runtime_version']}, model={meta['model']}, effort={meta['effort']}]_")
+    md.append(f"**→ with ATLAS: {ratio:.1f}× {plabel} ({pct:.0f}% lower).**  _[N={n} per condition — directional; {meta['runtime_version']}, model={meta['model']}, effort={meta['effort']}]_")
 else:
-    md.append(f"_(no token delta computed — check runs for errors. N={n}.)_")
+    md.append(f"_(no delta computed — check runs for errors. N={n}.)_")
+if parser in ("claude","opencode"):
+    md.append("")
+    md.append("> _Agentic note: summed `input_tokens` over-counts cached context across turns — it moves independently of real cost (it can rise even when turns, output, or **cost** fall), so the headline here is **turns**, with cost + wall-time shown alongside. On a small repo / short task the quartet's fixed injection may not amortize, so cost can go either way. The clean, reproducible token-reduction figure is the deterministic `openai` / `atlas measure` mode (see [RESULTS.md](../RESULTS.md))._")
 md+=["","<details><summary>raw per-run</summary>","","```json",json.dumps(rows,indent=2),"```","</details>"]
 open(base_path+".md","w").write("\n".join(md)+"\n")
 
@@ -2570,13 +2709,15 @@ LL=["# ATLAS benchmark ledger","",
     "|"+"|".join(["---"]*len(cols))+"|"]
 for e in entries:
     LL.append("| "+" | ".join((str(e.get(c)) if e.get(c) is not None else "—") for c in cols)+" |")
+LL+=["",
+     "> **Reading this table.** `openai` rows are the **deterministic single-shot** headline — tokenize a *fixed* context once (reproducible, model-independent) — the source of **−92% / 12.8×**. `claude` (agentic) rows are a live task loop: metric = **turns** (lower-is-better), N per `reps`, **directional**. Their cost/wall vary with model, task, and repo size — on a tiny repo the quartet's fixed injection may not amortize, so agentic *cost* can rise even when turns fall. Don't headline agentic token counts (SCARS §BENCH-TOKEN-SUM-CACHE). See [methodology](methodology.md)."]
 open(res_md,"w").write("\n".join(LL)+"\n")
 
 W=16
 print(); print("  "+"condition".ljust(W)+"".join(m.ljust(W) for m in metrics))
 for c in ("without","with"): print("  "+c.ljust(W)+"".join(fn(summary[c][m]).ljust(W) for m in metrics))
 print()
-if ratio: print(f"  → with ATLAS: {ratio:.1f}× less {prim} ({pct:.0f}% lower)   [N={n} — estimate]")
+if ratio: print(f"  → with ATLAS: {ratio:.1f}× {plabel} ({pct:.0f}% lower)   [N={n} — directional]")
 else: print(f"  → no delta computed (check for errors). N={n}")
 errs=[r for r in rows if r.get("parse_error") or r.get("is_error")]
 if errs: print(f"  ⚠ {len(errs)} run(s) flagged errors — see the JSON")

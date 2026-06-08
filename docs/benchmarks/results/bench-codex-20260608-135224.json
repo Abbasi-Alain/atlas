@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "runtime": "codex",
+    "runtime_version": "codex-cli 0.130.0",
+    "model": "default",
+    "effort": "high",
+    "atlas_version": "0.1.5",
+    "date_utc": "2026-06-08T11:48:37Z",
+    "repo": "Atlas@da57423",
+    "reps": "1",
+    "parser": "generic"
+  },
+  "task": "In as few steps as possible, answer: where is the release pipeline configured, and what are the exact steps to add a new package channel? List every file you opened to find out.",
+  "runs": [
+    {
+      "condition": "without",
+      "rep": 1,
+      "wall_s": 128,
+      "output_chars": 2285
+    },
+    {
+      "condition": "with",
+      "rep": 1,
+      "wall_s": 98,
+      "output_chars": 1587
+    }
+  ],
+  "summary": {
+    "without": {
+      "wall_s": 128,
+      "output_chars": 2285
+    },
+    "with": {
+      "wall_s": 98,
+      "output_chars": 1587
+    }
+  }
+}

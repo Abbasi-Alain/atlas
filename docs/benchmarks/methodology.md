@@ -11,18 +11,34 @@ The claim "ATLAS reduces agent orientation cost" is only worth anything if it's
 measured the same way twice. The goal is a public, re-runnable benchmark that
 others can cite — not a marketing number.
 
-## Two measurements (don't conflate them)
+## Three measurements (don't conflate them)
 
-| | `atlas measure` (shipped) | `atlas bench` (shipped — MVP) |
-|---|---|---|
-| What | Static byte/token estimate of the orientation *surface* | Live A/B: same task with vs without the quartet, via a headless agent |
-| Cost | Instant, offline | Expensive (API + wall time) |
-| Use | A quick proxy + a shareable badge | The citable result |
+| | `atlas measure` (shipped) | `atlas bench --runtime openai` (shipped) | `atlas bench --runtime claude\|codex` (shipped) |
+|---|---|---|---|
+| What | Static byte/token estimate of the orientation *surface* | **Deterministic single-shot**: tokenize a fixed context (quartet spine vs raw repo) once, locally | Live agentic A/B: same task, full tool-use loop, with vs without the quartet |
+| Metric | bytes → ~tokens | **`input_tokens`** (cl100k, local) | **turns / cost / wall** |
+| Cost | Instant, offline | One API round-trip (or none — tokenized locally) | Expensive (full agent loop) |
+| Reproducible? | Yes | **Yes** — same bytes → same count | No — model/effort/cache-dependent |
+| Use | A quick proxy + a shareable badge | **The citable headline number** | Directional sanity check |
 
-`atlas measure` compares the bytes of the ATLAS trio against a proxy for "what
-an agent skims to self-orient" (README + file tree + heads of top source
-files), at ~4 bytes/token. It is an **estimate** and says so. It is not a
-substitute for the live benchmark below.
+`atlas measure` compares the bytes of the ATLAS quartet against a proxy for
+"what an agent skims to self-orient" (README + file tree + heads of top source
+files), at ~4 bytes/token. It is an **estimate** and says so.
+
+### Which token number is real? (a scar — SCARS §BENCH-TOKEN-SUM-CACHE)
+
+The **headline −92% / 12.8×** comes from the *deterministic single-shot* mode:
+it tokenizes a fixed context once, so the count is reproducible and endpoint-
+independent (a local vLLM's own `usage` is recorded only as a cross-check — it
+drifted under prefix caching).
+
+Do **not** headline summed per-turn `input_tokens` from the agentic loop. Each
+turn re-sends the whole cached context, so the sum grows with turns and counts
+cache *reads* (priced ~10×) as fresh input — it can rise even as **cost falls**.
+In the first claude run it nearly doubled (98.5k→195.7k) while the task finished
+in **fewer turns (5 vs 6), 33% less wall-time, and ~10% lower cost**. So agentic
+runs are reported on **turns / cost / wall** and logged as *directional*, never
+as the token-reduction headline.
 
 ## The live protocol (`atlas bench`)
 

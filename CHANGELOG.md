@@ -8,10 +8,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-06-08
+
 ### Added
 
+- `atlas bench` is now a **cross-runtime benchmark board**: first-class parsers for **claude / codex / opencode / openai**, each appending an honest row to the ledger. Measured on this repo: openai-deterministic **−92% (12.8×)** orientation tokens; agentic turns/wall reductions on every runtime (Haiku −33% turns, opencode −30% wall). The headline metric auto-selects the first non-degenerate signal (so a 1-vs-1 message count never shows as "0%").
 - `atlas init --analyze` — scans the repo (languages, build/test commands, CI, entry points, top-level inventory with guessed roles) and injects a pre-filled **§0.5 Auto-detected map** into ATLAS.md, so the map isn't a blank page. The auto-draft lever from CRITICS #8.
 - `atlas check --changed-files[=REF]` — **drift gate**: fails if files were added/moved/removed without updating `ATLAS.md` (the map is stale). Wire it into CI to enforce the spec's *"a stale ATLAS is worse than none"* (CRITICS #7).
+- `atlas measure` now reports a **range**, not a single point — orientation reduction against a *smart skim* (mid) **and** a *whole-repo dump* (upper bound): **−93% to −99%** on this repo. It now measures the same front-loaded **spine** the benchmark does (ATLAS §0-1 + SKILL/SCARS ToCs) instead of the whole files, so `measure` and `bench` finally agree; the `--badge` shows the range.
+- `atlas bench` gained **first-class `codex` and `opencode` parsers** (no longer "generic"): codex via `exec --json` (counts turns, reads `token_count` usage), opencode via `run --pure --format json` (per-message `tokens` + `cost` + `modelID`). Both headline **turns** with a `wall_s` fallback when token parsing isn't available. `--pure` fixes opencode's plugin-log stdout pollution (SCARS §OPENCODE-PURE-JSON), and opencode now requires `--model` so it can't hang on selection. Both parsers are unit-tested against real stored sessions.
+
+### Fixed
+
+- `atlas bench` **agentic metric is now honest** (SCARS §BENCH-TOKEN-SUM-CACHE). Summing per-turn `input_tokens` double-counts cached context — it can climb even as **cost falls** — so it is no longer the headline for `--runtime claude\|codex\|opencode`. Those runtimes now report **turns / cost / wall-time** (all lower-is-better) and are logged as *directional*; the deterministic single-shot `openai` / `measure` mode remains the source of the reproducible **−92% / 12.8×** (which rises to **~99%** when the baseline is a whole-repo dump rather than a smart skim). First agentic matrix (effort=high, N=1, atlas repo) shows **fewer round-trips — most for the smallest model**: Opus 4.8 6→5 turns, Sonnet 4.6 5→4, **Haiku 4.5 15→10 (−33%)**; codex 128→98s wall (−23%). Cost is ~flat/noisy at N=1 on this tiny repo (the spine's fixed injection ≈ the turn savings); the consistent signal is turns/wall, and it scales with repo size.
+- `atlas bench` now **records the model the runtime actually resolved** (e.g. `default` → `claude-opus-4-8` / `claude-haiku-4-5-20251001`) by reading it back from the run's own JSON, so the ledger never just says "default".
+- `atlas bench --runtime codex` previously scored **0/0** silently (SCARS §BENCH-NEEDS-GIT): the `git archive` work dir has no `.git`, so `codex exec` refused to run and bailed in ~0s — and its stderr was discarded. Now passes `--skip-git-repo-check`, keeps stderr, and flags empty output as a `parse_error` so a dead run can't masquerade as a datapoint. **Validated**: a clean codex datapoint now records (128→98s wall with the quartet).
 
 ---
 
@@ -134,7 +145,8 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.2...v0.1.3
