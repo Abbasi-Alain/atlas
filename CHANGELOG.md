@@ -8,8 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-06-08
+
 ### Added
 
+- `atlas bench` is now a **cross-runtime benchmark board**: first-class parsers for **claude / codex / opencode / openai**, each appending an honest row to the ledger. Measured on this repo: openai-deterministic **−92% (12.8×)** orientation tokens; agentic turns/wall reductions on every runtime (Haiku −33% turns, opencode −30% wall). The headline metric auto-selects the first non-degenerate signal (so a 1-vs-1 message count never shows as "0%").
 - `atlas init --analyze` — scans the repo (languages, build/test commands, CI, entry points, top-level inventory with guessed roles) and injects a pre-filled **§0.5 Auto-detected map** into ATLAS.md, so the map isn't a blank page. The auto-draft lever from CRITICS #8.
 - `atlas check --changed-files[=REF]` — **drift gate**: fails if files were added/moved/removed without updating `ATLAS.md` (the map is stale). Wire it into CI to enforce the spec's *"a stale ATLAS is worse than none"* (CRITICS #7).
 - `atlas measure` now reports a **range**, not a single point — orientation reduction against a *smart skim* (mid) **and** a *whole-repo dump* (upper bound): **−93% to −99%** on this repo. It now measures the same front-loaded **spine** the benchmark does (ATLAS §0-1 + SKILL/SCARS ToCs) instead of the whole files, so `measure` and `bench` finally agree; the `--badge` shows the range.
@@ -142,7 +145,8 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.2...v0.1.3
