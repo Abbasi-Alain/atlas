@@ -76,6 +76,14 @@ echo "-- new commands --"
 "$CLI" bench --runtime openai --api-base http://127.0.0.1:1 --model x --dry-run >/dev/null 2>&1 && _pass "bench openai --dry-run runs" || _fail "bench openai dry-run"
 ATLAS_HOME=/opt/cellar/atlas "$CLI" uninstall 2>&1 | grep -qi 'package' && _pass "uninstall defers package-managed installs" || _fail "uninstall defer"
 
+# init --analyze injects an auto-detected map
+TMP_AN="$(mktemp -d)"; pushd "$TMP_AN" >/dev/null
+git init -q -b main 2>/dev/null; echo '{}' > package.json; mkdir -p src; touch src/index.js
+"$CLI" init --analyze >/dev/null 2>&1
+grep -q '0.5 Auto-detected' ATLAS.md && _pass "init --analyze injects a detected map" || _fail "init --analyze"
+"$CLI" check >/dev/null 2>&1 && _pass "--analyze output still passes check" || _fail "--analyze breaks check"
+popd >/dev/null; rm -rf "$TMP_AN"
+
 # --- public style presets ------------------------------------------------
 echo ""
 echo "-- style presets --"

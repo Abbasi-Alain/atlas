@@ -2,9 +2,10 @@
 # atlas — CLI for the ATLAS project-map standard.
 #
 # Subcommands:
-#   atlas init [--style <preset>] [--stack <a,b,c>] [--force]
+#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze]
 #                                     bootstrap ATLAS.md + SKILL.md + SCARS.md
-#                                     + CLAUDE.md + AGENTS.md + EXAMPLES.md (+ seeds)
+#                                     + CLAUDE.md + AGENTS.md + EXAMPLES.md (+ seeds).
+#                                     --analyze scans the repo + pre-fills the map.
 #                                     + stack-specific docs in cwd.
 #                                     --style: default | minimal | strict |
 #                                              karpathy | google
@@ -214,11 +215,103 @@ _render() {
 
 # --- subcommands -----------------------------------------------------------
 
+# Heuristic role labels for `atlas init --analyze`.
+_role_dir() {
+  case "$1" in
+    src|lib|pkg|source|app|internal)      echo "source code" ;;
+    test|tests|spec|specs|__tests__)      echo "tests" ;;
+    doc|docs)                             echo "documentation" ;;
+    .github)                              echo "GitHub config + CI workflows" ;;
+    bin)                                  echo "executables / CLI" ;;
+    cmd)                                  echo "command entrypoints" ;;
+    scripts|tools)                        echo "scripts / tooling" ;;
+    examples|example)                     echo "examples" ;;
+    assets|static|public|media)           echo "static assets" ;;
+    packaging|debian|packages)            echo "packaging / distribution" ;;
+    adapters|plugins|extensions)          echo "plugins / adapters" ;;
+    templates)                            echo "templates" ;;
+    hooks)                                echo "hooks" ;;
+    migrations|db)                        echo "database / migrations" ;;
+    *)                                    echo "_(dir — fill in)_" ;;
+  esac
+}
+_role_file() {
+  case "$1" in
+    README*|readme*)              echo "public overview" ;;
+    LICENSE*|COPYING*)            echo "license" ;;
+    CHANGELOG*|HISTORY*)          echo "release history" ;;
+    CONTRIBUTING*)                echo "contribution guide" ;;
+    Makefile|makefile|GNUmakefile) echo "build tasks" ;;
+    Dockerfile*|*.dockerfile|docker-compose*) echo "container build" ;;
+    package.json|Cargo.toml|go.mod|pyproject.toml|setup.py|build.gradle|pom.xml|CMakeLists.txt|Gemfile) echo "build / deps config" ;;
+    *.md)                         echo "documentation" ;;
+    *.sh)                         echo "shell script" ;;
+    .gitignore|.gitattributes|.editorconfig) echo "repo config" ;;
+    *.yml|*.yaml|*.toml|*.ini|*.cfg) echo "config" ;;
+    *)                            echo "_(file — fill in)_" ;;
+  esac
+}
+
+# Scan the repo + inject a "## 0.5 Auto-detected map" block into ATLAS.md.
+_analyze_inject() {
+  local atlas="$1"
+  [[ -f "$atlas" ]] || return 0
+  local langs files build_file test_cmd ci entry inv e typ role block f
+  files="$(git ls-files 2>/dev/null)"
+  [[ -z "$files" ]] && files="$(find . -type f -not -path './.git/*' -not -path './node_modules/*' 2>/dev/null)"
+  langs="$(printf '%s\n' "$files" | grep -oE '\.[A-Za-z0-9]+$' | sort | uniq -c | sort -rn | head -5 | awk '{printf "%s×%s  ", $1, substr($2,2)}' || true)"
+  [[ -z "$langs" ]] && langs="(none detected)"
+  build_file="(none)"
+  for f in Cargo.toml pyproject.toml package.json go.mod build.gradle pom.xml CMakeLists.txt Makefile Gemfile; do
+    [[ -f "$f" ]] && { build_file="$f"; break; }
+  done
+  test_cmd="_(set me)_"
+  if   [[ -f Cargo.toml ]];     then test_cmd="cargo test --all"
+  elif [[ -f pyproject.toml ]]; then test_cmd="pytest"
+  elif [[ -f package.json ]];   then test_cmd="npm test"
+  elif [[ -f go.mod ]];         then test_cmd="go test ./..."
+  fi
+  ci="(none)"
+  [[ -f .gitlab-ci.yml ]]    && ci="\`.gitlab-ci.yml\`"
+  [[ -d .github/workflows ]] && ci="\`.github/workflows/\`"
+  shopt -s nullglob dotglob
+  local ents=(bin/* cmd/* main.* src/main.* index.*)
+  entry="${ents[*]:0:6}"
+  [[ -z "$entry" ]] && entry="_(main / CLI entry — fill in)_"
+  inv=""
+  for e in *; do
+    case "$e" in
+      .git|.DS_Store|node_modules|target|dist|build|vendor|.agents|ATLAS.md|SCARS.md|CLAUDE.md|AGENTS.md|EXAMPLES.md|llms.txt) continue ;;
+    esac
+    if [[ -d "$e" ]]; then typ="$e/"; role="$(_role_dir "$e")"; else typ="$e"; role="$(_role_file "$e")"; fi
+    inv+="| \`$typ\` | $role |"$'\n'
+  done
+  shopt -u nullglob dotglob
+  block="## 0.5 Auto-detected map  *(from \`atlas init --analyze\` — verify, refine, then delete this note)*
+
+- **Languages:** ${langs}
+- **Build file:** \`${build_file}\`  ·  **Tests:** \`${test_cmd}\`  ·  **CI:** ${ci}
+- **Entry points:** ${entry}
+
+| Top-level | Likely role |
+|---|---|
+${inv}"
+  local before after
+  before="$(awk '/^## 1\./{exit} {print}' "$atlas")"
+  after="$(awk '/^## 1\./{p=1} p' "$atlas")"
+  if [[ -n "$after" ]]; then
+    printf '%s\n\n%s\n%s\n' "$before" "$block" "$after" > "$atlas"
+  else
+    printf '%s\n\n%s\n' "$(cat "$atlas")" "$block" > "$atlas"
+  fi
+}
+
 cmd_init() {
-  local force=0 style="default" stacks=""
+  local force=0 style="default" stacks="" analyze=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f)  force=1; shift ;;
+      --analyze)   analyze=1; shift ;;
       --style)     style="${2:-default}"; shift 2 ;;
       --style=*)   style="${1#--style=}"; shift ;;
       --stack)     stacks="${2:-}"; shift 2 ;;
@@ -293,6 +386,10 @@ cmd_init() {
         done < <(find "$sdir" -type f -name '*.md')
       done
     fi
+  fi
+  if [[ $analyze -eq 1 && -f "$PWD/ATLAS.md" ]]; then
+    _analyze_inject "$PWD/ATLAS.md"
+    _say "analyzed: injected an auto-detected map into ATLAS.md §0.5 — verify + refine"
   fi
   echo ""
   _say "project: ${project}"
