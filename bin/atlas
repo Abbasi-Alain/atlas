@@ -2350,9 +2350,9 @@ cmd_bench() {
   local rt_ver date_utc base cleanup_base="" repo_sha="n/a" repo_label
   date_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   case "$runtime" in
-    claude)   rt_ver="$(claude --version 2>/dev/null | head -1)" ;;
-    codex)    rt_ver="$(codex --version 2>/dev/null | head -1)" ;;
-    opencode) rt_ver="$(opencode --version 2>/dev/null | head -1)" ;;
+    claude)   rt_ver="$(claude --version 2>/dev/null | head -1 || true)" ;;
+    codex)    rt_ver="$(codex --version 2>/dev/null | head -1 || true)" ;;
+    opencode) rt_ver="$(opencode --version 2>/dev/null | head -1 || true)" ;;
     openai)   rt_ver="openai-compat: $api_base ($model)" ;;
     generic)  rt_ver="exec: $exec_tpl" ;;
   esac
