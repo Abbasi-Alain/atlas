@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "runtime": "openai",
+    "runtime_version": "openai-compat: http://192.168.100.1:8000/v1 (qwen3.6-35b)",
+    "model": "qwen3.6-35b",
+    "effort": "default",
+    "atlas_version": "0.1.4",
+    "date_utc": "2026-06-08T01:55:48Z",
+    "repo": "Atlas@757e98b",
+    "reps": "1",
+    "parser": "openai"
+  },
+  "task": "In as few steps as possible, answer: where is the release pipeline configured, and what are the exact steps to add a new package channel? List every file you opened to find out.",
+  "runs": [
+    {
+      "condition": "without",
+      "rep": 1,
+      "wall_s": 8,
+      "output_chars": 2077,
+      "input_tokens": 17365,
+      "output_tokens": 400,
+      "num_turns": 1
+    },
+    {
+      "condition": "with",
+      "rep": 1,
+      "wall_s": 5,
+      "output_chars": 2142,
+      "input_tokens": 3554,
+      "output_tokens": 400,
+      "num_turns": 1
+    }
+  ],
+  "summary": {
+    "without": {
+      "input_tokens": 17365,
+      "output_tokens": 400,
+      "num_turns": 1,
+      "wall_s": 8
+    },
+    "with": {
+      "input_tokens": 3554,
+      "output_tokens": 400,
+      "num_turns": 1,
+      "wall_s": 5
+    }
+  }
+}

@@ -13,11 +13,12 @@
 #   atlas check                       lint files, verify anchors unique
 #   atlas measure [--badge]           estimate orientation-token savings (with
 #                                     vs without ATLAS); --badge prints a shield
-#   atlas bench [--runtime claude|codex] [--model M] [--effort L] [--exec CMD]
-#               [--task "…"] [--reps N] [--repo P] [--dry-run]
-#                                     A/B a task with vs without ATLAS via a real
-#                                     headless agent (any provider via --exec);
-#                                     writes JSON + Markdown report w/ token delta
+#   atlas bench [--runtime claude|codex|opencode|openai] [--model M] [--effort L]
+#               [--api-base URL] [--exec CMD] [--task "…"] [--reps N] [--dry-run]
+#                                     A/B a task with vs without ATLAS. Agentic
+#                                     (claude/codex/opencode/--exec) OR single-shot
+#                                     vs any OpenAI-compatible endpoint (--api-base,
+#                                     e.g. local vLLM). Writes JSON + Markdown.
 #   atlas doctor                      diagnose ATLAS_HOME + adapter/hook wiring
 #   atlas badge [--for-the-badge]     print a 'Powered by ATLAS' README badge
 #   atlas export --to <runtime>       fan the canonical trio out to another
@@ -2144,7 +2145,7 @@ cmd_uninstall() {
 # --dry-run previews without invoking anything. Needs python3 + the runtime CLI.
 # ---------------------------------------------------------------------------
 cmd_bench() {
-  local runtime="claude" model="" effort="" exec_tpl="" task="" task_file="" repo="$PWD" reps=1 out="" dry=0
+  local runtime="claude" model="" effort="" exec_tpl="" task="" task_file="" repo="$PWD" reps=1 out="" dry=0 api_base="" api_key=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --runtime)    runtime="${2:-}"; shift 2 ;;
@@ -2153,6 +2154,10 @@ cmd_bench() {
       --model=*)    model="${1#--model=}"; shift ;;
       --effort)     effort="${2:-}"; shift 2 ;;
       --effort=*)   effort="${1#--effort=}"; shift ;;
+      --api-base)   api_base="${2:-}"; runtime="openai"; shift 2 ;;
+      --api-base=*) api_base="${1#--api-base=}"; runtime="openai"; shift ;;
+      --api-key)    api_key="${2:-}"; shift 2 ;;
+      --api-key=*)  api_key="${1#--api-key=}"; shift ;;
       --exec)       exec_tpl="${2:-}"; runtime="generic"; shift 2 ;;
       --exec=*)     exec_tpl="${1#--exec=}"; runtime="generic"; shift ;;
       --task)       task="${2:-}"; shift 2 ;;
@@ -2174,11 +2179,18 @@ cmd_bench() {
     claude)   parser="claude";  rt_check="claude" ;;
     codex)    parser="generic"; rt_check="codex" ;;
     opencode) parser="generic"; rt_check="opencode" ;;
+    openai)   parser="openai";  rt_check="" ;;
     generic)  parser="generic"; rt_check=""; [[ -z "$exec_tpl" ]] && _die "--runtime generic needs --exec '<cmd referencing \$ATLAS_BENCH_TASK>'" ;;
-    *) _die "unknown --runtime '$runtime' (claude | codex | opencode | generic via --exec)" ;;
+    *) _die "unknown --runtime '$runtime' (claude | codex | opencode | openai | generic via --exec)" ;;
   esac
+  if [[ "$runtime" == "openai" ]]; then
+    [[ -z "$api_base" ]] && api_base="https://api.openai.com/v1"
+    [[ -z "$api_key"  ]] && api_key="${OPENAI_API_KEY:-none}"
+    [[ -z "$model" ]] && _die "--runtime openai needs --model (e.g. --model qwen3.6-35b)"
+  fi
   if [[ $dry -ne 1 ]]; then
     _have python3 || _die "atlas bench needs python3 for parsing + the report."
+    if [[ "$runtime" == "openai" ]]; then _have curl || _die "openai mode needs curl."; fi
     if [[ -n "$rt_check" ]]; then _have "$rt_check" || _die "'$rt_check' not on PATH — install it, or pass --dry-run."; fi
   fi
 
@@ -2189,6 +2201,7 @@ cmd_bench() {
     claude)   rt_ver="$(claude --version 2>/dev/null | head -1)" ;;
     codex)    rt_ver="$(codex --version 2>/dev/null | head -1)" ;;
     opencode) rt_ver="$(opencode --version 2>/dev/null | head -1)" ;;
+    openai)   rt_ver="openai-compat: $api_base ($model)" ;;
     generic)  rt_ver="exec: $exec_tpl" ;;
   esac
 
@@ -2210,6 +2223,43 @@ cmd_bench() {
   printf '%s' "$task" > "$runs/task.txt"
 
   local cond rep work f t0 t1
+  if [[ "$runtime" == "openai" ]]; then
+    # Single-shot: feed the quartet vs the raw repo as context; measure prompt_tokens.
+    local ctx_w="$runs/ctx-with.txt" ctx_o="$runs/ctx-without.txt" ctxf sk cnt ff
+    {
+      echo "# ATLAS.md"; cat "$base/ATLAS.md" 2>/dev/null
+      echo; echo "# SCARS.md (table of contents)"
+      awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$base/SCARS.md" 2>/dev/null
+      sk=$(find "$base/.agents/skill" -name SKILL.md 2>/dev/null | head -1)
+      echo; echo "# SKILL.md (table of contents)"
+      [[ -n "$sk" ]] && awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$sk"
+    } > "$ctx_w"
+    {
+      echo "# README.md"; cat "$base/README.md" 2>/dev/null
+      echo; echo "# Files"; { git -C "$base" ls-files 2>/dev/null || ( cd "$base" && find . -type f ); } | head -400
+      echo; echo "# Source file heads"; cnt=0
+      while IFS= read -r ff; do
+        [[ $cnt -ge 15 ]] && break
+        [[ -f "$base/$ff" ]] || continue
+        echo "--- $ff ---"; head -c 1800 "$base/$ff" 2>/dev/null; echo; cnt=$(( cnt + 1 ))
+      done < <( git -C "$base" ls-files 2>/dev/null | grep -Ei '\.(py|js|ts|go|rs|rb|sh|java|c|cc|cpp|h)$' || true )
+    } > "$ctx_o"
+    for cond in without with; do
+      if [[ "$cond" == "with" ]]; then ctxf="$ctx_w"; else ctxf="$ctx_o"; fi
+      for (( rep=1; rep<=reps; rep++ )); do
+        if [[ $dry -eq 1 ]]; then
+          printf "  %-8s #%d  →  POST %s/chat/completions  model=%s  ctx=%s bytes\n" "$cond" "$rep" "$api_base" "$model" "$(wc -c < "$ctxf" | tr -d ' ')"
+          continue
+        fi
+        _say "querying $cond #$rep  ($(wc -c < "$ctxf" | tr -d ' ') ctx bytes)…"
+        python3 -c 'import json,sys; ctx=open(sys.argv[1]).read(); print(json.dumps({"model":sys.argv[3],"messages":[{"role":"user","content":ctx+"\n\n# Question\n"+sys.argv[2]+"\n\nAnswer concisely; name the files that hold the answer."}],"max_tokens":400,"temperature":0}))' "$ctxf" "$task" "$model" > "$runs/payload.json"
+        t0=$(date +%s)
+        curl -sS --max-time 180 "$api_base/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d @"$runs/payload.json" > "$runs/${cond}-${rep}.out" 2>/dev/null || true
+        t1=$(date +%s)
+        printf '%s\t%d\t%d\t%s\n' "$cond" "$rep" "$(( t1 - t0 ))" "${cond}-${rep}.out" >> "$runs/index.tsv"
+      done
+    done
+  else
   for cond in without with; do
     for (( rep=1; rep<=reps; rep++ )); do
       work="$(mktemp -d)"
@@ -2259,6 +2309,7 @@ cmd_bench() {
       rm -rf "$work"
     done
   done
+  fi
 
   if [[ $dry -eq 1 ]]; then
     _say "dry-run — no agents invoked."
@@ -2306,17 +2357,28 @@ if os.path.exists(idx):
                     rec["parse_error"]="no result event in output"
             except Exception as ex:
                 rec["parse_error"]=str(ex)
+        elif parser=="openai":
+            try:
+                d=json.loads(raw)
+                if "error" in d: rec["parse_error"]=str(d["error"])[:120]
+                u=d.get("usage") or {}
+                rec["input_tokens"]=u.get("prompt_tokens") or 0
+                rec["output_tokens"]=u.get("completion_tokens") or 0
+                rec["num_turns"]=1
+            except Exception as ex:
+                rec["parse_error"]=str(ex)
         rows.append(rec)
 
-metrics=(["input_tokens","output_tokens","num_turns","cost_usd","wall_s"] if parser=="claude"
-         else ["output_chars","wall_s"])
+if parser=="claude": metrics=["input_tokens","output_tokens","num_turns","cost_usd","wall_s"]
+elif parser=="openai": metrics=["input_tokens","output_tokens","num_turns","wall_s"]
+else: metrics=["output_chars","wall_s"]
 def agg(cond,key):
     vals=[r[key] for r in rows if r["condition"]==cond and isinstance(r.get(key),(int,float))]
     return round(statistics.mean(vals),4) if vals else None
 summary={c:{m:agg(c,m) for m in metrics} for c in ("without","with")}
 json.dump({"meta":meta,"task":task,"runs":rows,"summary":summary},open(base_path+".json","w"),indent=2)
 
-prim="input_tokens" if parser=="claude" else "output_chars"
+prim="input_tokens" if parser in ("claude","openai") else "output_chars"
 wo,wi=summary["without"].get(prim),summary["with"].get(prim)
 ratio=pct=None
 if wo and wi and wi>0: ratio=wo/wi; pct=(1-wi/wo)*100
