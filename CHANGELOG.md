@@ -8,7 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-_Nothing yet — the next `git push --tags` cuts a release._
+### Fixed
+
+- PPA build: `build-ppa.sh` now passes `-d` (skip the local build-dependency check — source-only builds compile on Launchpad, not in CI) and `--no-lintian`. Fixes the `release-ppa` `dpkg-checkbuilddeps: Unmet build dependencies` failure.
 
 ---
 

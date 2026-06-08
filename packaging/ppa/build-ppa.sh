@@ -55,7 +55,11 @@ atlas ($DEBVER) $SERIES; urgency=medium
 EOF
 
 echo "[ppa] debuild -S (signing source package)"
-args=(-S -sa)
+# -d: skip the local build-dependency check — this is a SOURCE-only build;
+#     Launchpad installs build-deps and compiles the binary on its own builders.
+# --no-lintian: Launchpad runs its own QA + emails results; don't let a lintian
+#     nitpick fail the automated upload.
+args=(--no-lintian -S -sa -d)
 [[ -n "${GPGKEY:-}" ]] && args+=("-k$GPGKEY")
 ( cd "$SRC" && debuild "${args[@]}" )
 
