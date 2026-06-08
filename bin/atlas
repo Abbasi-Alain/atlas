@@ -2458,11 +2458,13 @@ cmd_bench() {
 
       _say "running $cond #$rep …"
       t0=$(date +%s)
+      # < /dev/null: headless agents (codex --json) otherwise block "Reading
+      # additional input from stdin…" and hang. keep stderr (a silent 2>/dev/null
+      # once hid a runtime that bailed at 0s — SCARS §BENCH-NEEDS-GIT).
       if [[ "$runtime" == "generic" ]]; then
-        ( cd "$work" && ATLAS_BENCH_TASK="$task" bash -c "$exec_tpl" ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
+        ( cd "$work" && ATLAS_BENCH_TASK="$task" bash -c "$exec_tpl" < /dev/null ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
       else
-        # keep stderr (a silent 2>/dev/null once hid a runtime that bailed at 0s — SCARS §BENCH-NEEDS-GIT)
-        ( cd "$work" && "${agent[@]}" ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
+        ( cd "$work" && "${agent[@]}" < /dev/null ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
       fi
       t1=$(date +%s)
       printf '%s\t%d\t%d\t%s\n' "$cond" "$rep" "$(( t1 - t0 ))" "${cond}-${rep}.out" >> "$runs/index.tsv"
@@ -2579,7 +2581,7 @@ if os.path.exists(idx):
             # codex `exec --json` emits JSONL events. Token usage rides on
             # payload.type=="token_count" (info.total_token_usage); count
             # agent_message events as turns. ($ cost is plan-based, not reported.)
-            inp=outp=turns=0; last=None; seen=False
+            turns=0; last=None; seen=False
             for ln in raw.splitlines():
                 ln=ln.strip()
                 if not ln: continue
@@ -2588,18 +2590,27 @@ if os.path.exists(idx):
                 seen=True
                 pl=e.get("payload") if isinstance(e.get("payload"),dict) else e
                 pt=pl.get("type")
+                # turn markers vary by codex version: agent_message (rollout) or an
+                # item.completed carrying an assistant message (exec --json stream).
                 if pt in ("agent_message","agent_reasoning"): turns+=1
+                elif pt in ("item.completed","item_completed"):
+                    it=pl.get("item") or e.get("item") or {}
+                    if str(it.get("type") or "").endswith("message") and (it.get("role")=="assistant" or "text" in it): turns+=1
                 if pt=="token_count":
                     info=pl.get("info") or {}
                     tu=info.get("total_token_usage") or info.get("last_token_usage") or {}
                     if tu: last=tu
+                u2=pl.get("usage") or (pl.get("response") or {}).get("usage")
+                if isinstance(u2,dict) and (u2.get("input_tokens") or u2.get("prompt_tokens")): last=u2
                 if pl.get("model"): detected_models.add(pl["model"])
             if last:
-                inp=last.get("input_tokens") or 0; outp=last.get("output_tokens") or 0
-            rec["input_tokens"]=inp; rec["output_tokens"]=outp
-            rec["num_turns"]=turns or (1 if seen else 0)
+                rec["input_tokens"]=last.get("input_tokens") or last.get("prompt_tokens") or 0
+                rec["output_tokens"]=last.get("output_tokens") or last.get("completion_tokens") or 0
+            if turns>0: rec["num_turns"]=turns   # else: fall back to wall_s (never fake a turn count)
             if not seen and not rec.get("parse_error"):
                 rec["parse_error"]="codex: no JSONL events parsed (is --json supported?)"
+            elif seen and turns==0 and last is None and not rec.get("parse_error"):
+                rec["parse_error"]="codex: events parsed but no turn/usage markers — headlining wall_s"
         rows.append(rec)
 
 # Record the model the runtime *actually* resolved (e.g. "default" → claude-opus-4-8),
