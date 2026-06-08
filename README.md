@@ -189,6 +189,7 @@ Mix-and-match works: a style only overrides files it ships. Missing files fall b
 atlas init [--style <preset>] [--force]   # bootstrap the trio
 atlas check                               # validate ATLAS+SKILL; unique anchors
 atlas measure [--badge]                   # estimate orientation-token savings (with vs without)
+atlas bench [--runtime claude|codex]      # A/B a task with vs without ATLAS via a real headless agent
 atlas doctor                              # diagnose install + harness + runtime-export drift
 atlas export --to <runtime>               # fan the trio out: codex|copilot|gemini|cursor|llms-txt|all
 atlas badge                               # print a 'Powered by ATLAS' README badge

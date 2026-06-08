@@ -13,9 +13,9 @@ others can cite — not a marketing number.
 
 ## Two measurements (don't conflate them)
 
-| | `atlas measure` (shipped) | `atlas bench` (roadmap) |
+| | `atlas measure` (shipped) | `atlas bench` (shipped — MVP) |
 |---|---|---|
-| What | Static byte/token estimate of the orientation *surface* | Live A/B: run real tasks with real agents |
+| What | Static byte/token estimate of the orientation *surface* | Live A/B: same task with vs without the quartet, via a headless agent |
 | Cost | Instant, offline | Expensive (API + wall time) |
 | Use | A quick proxy + a shareable badge | The citable result |
 
@@ -24,7 +24,11 @@ an agent skims to self-orient" (README + file tree + heads of top source
 files), at ~4 bytes/token. It is an **estimate** and says so. It is not a
 substitute for the live benchmark below.
 
-## The live protocol (`atlas bench`, to build)
+## The live protocol (`atlas bench`)
+
+> The MVP is shipped: `atlas bench --runtime claude` (or `codex`) runs the
+> two conditions below for the **ATLAS vs none** comparison and writes JSON.
+> Extending it to the B/C/D baselines + more tasks is the next step.
 
 Hold everything constant except the presence of ATLAS.
 

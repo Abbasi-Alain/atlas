@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - **SCARS.md** — a fourth canonical file at the repo root: hard-won failure memory (the stable `§ANCHOR` playbook). The trio is now a **quartet**: ATLAS (structural) + SKILL (procedural how-to) + SCARS (failure memory) + CLAUDE/AGENTS (behavioral). `atlas init` scaffolds it; `atlas check` / `anchors` / `anchor add` operate on it; the SessionStart hook surfaces its ToC; SPEC, templates, dogfood, and the sub-agent adapter updated.
+- `atlas bench [--runtime claude|codex] [--task …] [--reps N] [--dry-run]` — real A/B benchmark: runs the same task on a repo copy **with** vs **with the quartet hidden** through a headless agent, parses the runtime's usage JSON, and reports the token/turn/cost/time delta (results written as JSON under `docs/benchmarks/`). The measured foundation for the README's claims (CRITICS #1).
 
 ### Changed
 
