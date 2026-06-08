@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+_Nothing yet — the next `git push --tags` cuts a release._
+
+---
+
+## [0.1.4] — 2026-06-08
+
 ### Added
 
 - **SCARS.md** — a fourth canonical file at the repo root: hard-won failure memory (the stable `§ANCHOR` playbook). The trio is now a **quartet**: ATLAS (structural) + SKILL (procedural how-to) + SCARS (failure memory) + CLAUDE/AGENTS (behavioral). `atlas init` scaffolds it; `atlas check` / `anchors` / `anchor add` operate on it; the SessionStart hook surfaces its ToC; SPEC, templates, dogfood, and the sub-agent adapter updated.
@@ -109,7 +115,8 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/Abbasi-Alain/atlas/releases/tag/v0.1.0
