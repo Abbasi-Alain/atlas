@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-06-09
+
 ### Added
 
 - **`atlas mcp` — a Model Context Protocol server** (`bin/atlas-mcp`, Python stdlib, zero deps). Serves this project's map to *any* MCP client (Claude Code, Cursor, OpenClaw, Codex, Gemini…) via four local tools: **`atlas_orient`** (the §0 map + SKILL/SCARS ToCs — call it first instead of grepping), **`atlas_find`**, **`atlas_scars`**, **`atlas_measure`**. stdio transport (the OS process boundary is the auth — no token needed locally); `atlas mcp --config` prints the registration snippet. Deep tools (**`atlas_graph` / `atlas_deepsearch` / `atlas_recall`**) appear *only* when `ATLAS_MCP_BACKEND_URL` is set, proxying to an opt-in graph+vector+memory backend (e.g. FuseGraph/FuseRAG) with an optional bearer token — ATLAS stays 100% local + free by default.
@@ -150,7 +152,8 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.3...v0.1.4

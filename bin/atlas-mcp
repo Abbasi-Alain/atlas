@@ -24,7 +24,7 @@
 # Spec:    docs/SPEC.md · part of the ATLAS standard (https://github.com/Abbasi-Alain/atlas)
 import sys, os, re, json, glob, subprocess, urllib.request, http.server
 
-VERSION = "0.1.6"
+VERSION = "0.1.7"
 DEFAULT_PROTO = "2025-06-18"
 
 
