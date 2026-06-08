@@ -33,6 +33,7 @@
 **Benchmarking** *(`atlas bench`)*
 - [§BENCH-NEEDS-GIT — `codex exec` bails (0s, no output) in a `git archive` dir; keep stderr](#bench-needs-git)
 - [§BENCH-TOKEN-SUM-CACHE — summed per-turn `input_tokens` double-counts cache; use turns/cost](#bench-token-sum-cache)
+- [§OPENCODE-PURE-JSON — opencode floods stdout with plugin logs; run `--pure`](#opencode-pure-json)
 
 ---
 
@@ -222,6 +223,26 @@ once and is reproducible. That single-shot path is the source of the headline
 
 **Where.** `bin/atlas` `cmd_bench` (`prim`/`plabel` selection + the claude
 parser); `docs/benchmarks/methodology.md`; `docs/benchmarks/RESULTS.md`.
+
+---
+
+### §OPENCODE-PURE-JSON — opencode floods stdout with plugin logs; run `--pure`
+
+**Symptom.** `atlas bench --runtime opencode` produced unparseable output (or
+hung): the JSON was preceded by `[TelegramRemote] …` / `[Config] …` plugin log
+lines, and a no-`-m` invocation waited forever on model selection.
+
+**Root cause.** opencode loads user plugins that log to **stdout**, corrupting
+`--format json`; and `opencode run` with no model blocks on selection when headless.
+
+**Do.** Invoke `opencode run --pure --format json -m <provider>/<model> …` —
+`--pure` skips user plugins so stdout is clean JSON, and `-m` is required (the CLI
+`_die`s without it rather than hang). The parser still defensively scans for the
+first `[`/`{` in case a stray line slips through. opencode messages carry
+`tokens:{input,output,…}` + `cost` + `modelID`; sum them, count assistant messages
+as turns (same cache caveat as [[§BENCH-TOKEN-SUM-CACHE]] → headline **turns**).
+
+**Where.** `bin/atlas` `cmd_bench` (opencode agent array + the `opencode` parser).
 
 ---
 

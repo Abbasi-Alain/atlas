@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - `atlas init --analyze` — scans the repo (languages, build/test commands, CI, entry points, top-level inventory with guessed roles) and injects a pre-filled **§0.5 Auto-detected map** into ATLAS.md, so the map isn't a blank page. The auto-draft lever from CRITICS #8.
 - `atlas check --changed-files[=REF]` — **drift gate**: fails if files were added/moved/removed without updating `ATLAS.md` (the map is stale). Wire it into CI to enforce the spec's *"a stale ATLAS is worse than none"* (CRITICS #7).
+- `atlas measure` now reports a **range**, not a single point — orientation reduction against a *smart skim* (mid) **and** a *whole-repo dump* (upper bound): **−93% to −99%** on this repo. It now measures the same front-loaded **spine** the benchmark does (ATLAS §0-1 + SKILL/SCARS ToCs) instead of the whole files, so `measure` and `bench` finally agree; the `--badge` shows the range.
+- `atlas bench` gained **first-class `codex` and `opencode` parsers** (no longer "generic"): codex via `exec --json` (counts turns, reads `token_count` usage), opencode via `run --pure --format json` (per-message `tokens` + `cost` + `modelID`). Both headline **turns** with a `wall_s` fallback when token parsing isn't available. `--pure` fixes opencode's plugin-log stdout pollution (SCARS §OPENCODE-PURE-JSON), and opencode now requires `--model` so it can't hang on selection. Both parsers are unit-tested against real stored sessions.
 
 ### Fixed
 
