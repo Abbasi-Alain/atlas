@@ -2548,17 +2548,24 @@ if os.path.exists(idx):
             except Exception as ex:
                 rec["parse_error"]=str(ex)
         elif parser=="opencode":
-            # opencode `run --pure --format json` emits the session messages; each
-            # assistant message carries tokens:{input,output,reasoning,cache}+cost+modelID.
+            # opencode `run --pure --format json` may emit a single JSON doc OR a
+            # JSONL event stream. Collect every parseable object either way; each
+            # assistant message carries tokens:{input,output,…}+cost+modelID.
+            objs=[]
             try:
-                d=json.loads(raw)
+                objs=[json.loads(raw)]
             except Exception:
-                d=None
-                for i in (raw.find("["), raw.find("{")):
-                    if i>=0:
-                        try: d=json.loads(raw[i:]); break
-                        except Exception: pass
-            if d is None:
+                for ln in raw.splitlines():
+                    ln=ln.strip()
+                    if not ln or ln[0] not in "[{": continue   # skip any stray log lines
+                    try: objs.append(json.loads(ln))
+                    except Exception: pass
+                if not objs:
+                    for i in (raw.find("["), raw.find("{")):
+                        if i>=0:
+                            try: objs.append(json.loads(raw[i:])); break
+                            except Exception: pass
+            if not objs:
                 if not rec.get("parse_error"): rec["parse_error"]="opencode: no JSON in output"
             else:
                 acc={"inp":0,"outp":0,"cost":0.0,"turns":0}
@@ -2572,11 +2579,12 @@ if os.path.exists(idx):
                         for v in o.values(): _visit(v)
                     elif isinstance(o,list):
                         for v in o: _visit(v)
-                _visit(d)
-                rec["input_tokens"]=acc["inp"]; rec["output_tokens"]=acc["outp"]
-                rec["cost_usd"]=round(acc["cost"],6); rec["num_turns"]=acc["turns"] or 1
-                if acc["turns"]==0 and not rec.get("parse_error"):
-                    rec["parse_error"]="opencode: JSON parsed but no token-bearing messages"
+                for o in objs: _visit(o)
+                if acc["inp"] or acc["outp"]: rec["input_tokens"]=acc["inp"]; rec["output_tokens"]=acc["outp"]
+                if acc["cost"]: rec["cost_usd"]=round(acc["cost"],6)
+                if acc["turns"]>0: rec["num_turns"]=acc["turns"]   # else fall back to wall_s
+                if acc["turns"]==0 and acc["inp"]==0 and not rec.get("parse_error"):
+                    rec["parse_error"]="opencode: parsed %d obj(s) but no token-bearing messages — using wall_s"%len(objs)
         elif parser=="codex":
             # codex `exec --json` emits JSONL events. Token usage rides on
             # payload.type=="token_count" (info.total_token_usage); count
@@ -2611,6 +2619,11 @@ if os.path.exists(idx):
                 rec["parse_error"]="codex: no JSONL events parsed (is --json supported?)"
             elif seen and turns==0 and last is None and not rec.get("parse_error"):
                 rec["parse_error"]="codex: events parsed but no turn/usage markers — headlining wall_s"
+        # On any parse miss, keep the raw output next to the report so the schema
+        # can be inspected without re-running (the temp run dir is cleaned).
+        if rec.get("parse_error") and raw.strip():
+            try: open("%s-%s-%d.rawout"%(base_path,cond,rec["rep"]),"w").write(raw[:30000])
+            except Exception: pass
         rows.append(rec)
 
 # Record the model the runtime *actually* resolved (e.g. "default" → claude-opus-4-8),
