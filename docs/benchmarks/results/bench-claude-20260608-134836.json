@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "runtime": "claude",
+    "runtime_version": "2.1.168 (Claude Code)",
+    "model": "claude-haiku-4-5-20251001",
+    "effort": "high",
+    "atlas_version": "0.1.5",
+    "date_utc": "2026-06-08T11:46:02Z",
+    "repo": "Atlas@da57423",
+    "reps": "1",
+    "parser": "claude"
+  },
+  "task": "In as few steps as possible, answer: where is the release pipeline configured, and what are the exact steps to add a new package channel? List every file you opened to find out.",
+  "runs": [
+    {
+      "condition": "without",
+      "rep": 1,
+      "wall_s": 72,
+      "output_chars": 107669,
+      "num_turns": 15,
+      "cost_usd": 0.07776765000000001,
+      "input_tokens": 58346,
+      "output_tokens": 56,
+      "is_error": false
+    },
+    {
+      "condition": "with",
+      "rep": 1,
+      "wall_s": 80,
+      "output_chars": 107700,
+      "num_turns": 10,
+      "cost_usd": 0.08104700000000001,
+      "input_tokens": 69975,
+      "output_tokens": 49,
+      "is_error": false
+    }
+  ],
+  "summary": {
+    "without": {
+      "num_turns": 15,
+      "cost_usd": 0.0778,
+      "wall_s": 72,
+      "input_tokens": 58346,
+      "output_tokens": 56
+    },
+    "with": {
+      "num_turns": 10,
+      "cost_usd": 0.081,
+      "wall_s": 80,
+      "input_tokens": 69975,
+      "output_tokens": 49
+    }
+  }
+}

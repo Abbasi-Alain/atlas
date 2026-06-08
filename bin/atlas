@@ -2568,7 +2568,7 @@ else:
     md.append(f"_(no delta computed — check runs for errors. N={n}.)_")
 if parser=="claude":
     md.append("")
-    md.append("> _Agentic note: summed `input_tokens` over-counts cached context across turns (it can climb even as **cost falls**), so the headline here is **turns** — cost + wall-time shown alongside. The clean, reproducible token-reduction figure is the deterministic `openai` / `atlas measure` mode (see [RESULTS.md](../RESULTS.md))._")
+    md.append("> _Agentic note: summed `input_tokens` over-counts cached context across turns — it moves independently of real cost (it can rise even when turns, output, or **cost** fall), so the headline here is **turns**, with cost + wall-time shown alongside. On a small repo / short task the quartet's fixed injection may not amortize, so cost can go either way. The clean, reproducible token-reduction figure is the deterministic `openai` / `atlas measure` mode (see [RESULTS.md](../RESULTS.md))._")
 md+=["","<details><summary>raw per-run</summary>","","```json",json.dumps(rows,indent=2),"```","</details>"]
 open(base_path+".md","w").write("\n".join(md)+"\n")
 
@@ -2594,6 +2594,8 @@ LL=["# ATLAS benchmark ledger","",
     "|"+"|".join(["---"]*len(cols))+"|"]
 for e in entries:
     LL.append("| "+" | ".join((str(e.get(c)) if e.get(c) is not None else "—") for c in cols)+" |")
+LL+=["",
+     "> **Reading this table.** `openai` rows are the **deterministic single-shot** headline — tokenize a *fixed* context once (reproducible, model-independent) — the source of **−92% / 12.8×**. `claude` (agentic) rows are a live task loop: metric = **turns** (lower-is-better), N per `reps`, **directional**. Their cost/wall vary with model, task, and repo size — on a tiny repo the quartet's fixed injection may not amortize, so agentic *cost* can rise even when turns fall. Don't headline agentic token counts (SCARS §BENCH-TOKEN-SUM-CACHE). See [methodology](methodology.md)."]
 open(res_md,"w").write("\n".join(LL)+"\n")
 
 W=16
