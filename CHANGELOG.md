@@ -8,9 +8,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+_Nothing yet — the next `git push --tags` cuts a release._
+
+---
+
+## [0.1.3] — 2026-06-08
+
 ### Fixed
 
 - PPA build: `build-ppa.sh` now passes `-d` (skip the local build-dependency check — source-only builds compile on Launchpad, not in CI) and `--no-lintian`. Fixes the `release-ppa` `dpkg-checkbuilddeps: Unmet build dependencies` failure.
+- Release pipeline: all channel workflows trigger on `push: tags` instead of `release: published`, which never fired (a release created by the built-in `GITHUB_TOKEN` does not cascade events). AUR self-skips until `AUR_SSH_PRIVATE_KEY` is set.
 
 ---
 
@@ -95,6 +102,7 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.0...v0.1.2
 [0.1.0]: https://github.com/Abbasi-Alain/atlas/releases/tag/v0.1.0
