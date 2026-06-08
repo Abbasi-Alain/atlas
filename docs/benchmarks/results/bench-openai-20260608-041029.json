@@ -5,8 +5,8 @@
     "model": "qwen3.6-35b",
     "effort": "default",
     "atlas_version": "0.1.4",
-    "date_utc": "2026-06-08T01:55:48Z",
-    "repo": "Atlas@757e98b",
+    "date_utc": "2026-06-08T02:10:14Z",
+    "repo": "Atlas@cf801fe",
     "reps": "1",
     "parser": "openai"
   },
@@ -16,33 +16,35 @@
       "condition": "without",
       "rep": 1,
       "wall_s": 8,
-      "output_chars": 2077,
-      "input_tokens": 17365,
-      "output_tokens": 400,
-      "num_turns": 1
+      "output_chars": 2119,
+      "input_tokens": 16571,
+      "num_turns": 1,
+      "endpoint_prompt_tokens": 17419,
+      "output_tokens": 400
     },
     {
       "condition": "with",
       "rep": 1,
-      "wall_s": 5,
-      "output_chars": 2142,
-      "input_tokens": 3554,
-      "output_tokens": 400,
-      "num_turns": 1
+      "wall_s": 4,
+      "output_chars": 2130,
+      "input_tokens": 1297,
+      "num_turns": 1,
+      "endpoint_prompt_tokens": 1408,
+      "output_tokens": 400
     }
   ],
   "summary": {
     "without": {
-      "input_tokens": 17365,
+      "input_tokens": 16571,
       "output_tokens": 400,
       "num_turns": 1,
       "wall_s": 8
     },
     "with": {
-      "input_tokens": 3554,
+      "input_tokens": 1297,
       "output_tokens": 400,
       "num_turns": 1,
-      "wall_s": 5
+      "wall_s": 4
     }
   }
 }

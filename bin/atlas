@@ -2227,7 +2227,8 @@ cmd_bench() {
     # Single-shot: feed the quartet vs the raw repo as context; measure prompt_tokens.
     local ctx_w="$runs/ctx-with.txt" ctx_o="$runs/ctx-without.txt" ctxf sk cnt ff
     {
-      echo "# ATLAS.md"; cat "$base/ATLAS.md" 2>/dev/null
+      echo "# ATLAS.md (orientation spine §0-1 — what the hook injects first)"
+      awk '/^## 2\./{exit} 1' "$base/ATLAS.md" 2>/dev/null
       echo; echo "# SCARS.md (table of contents)"
       awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$base/SCARS.md" 2>/dev/null
       sk=$(find "$base/.agents/skill" -name SKILL.md 2>/dev/null | head -1)
@@ -2326,6 +2327,11 @@ cmd_bench() {
   python3 - "$runs" "$base_path" <<'PY'
 import json, sys, os, statistics
 runs_dir, base_path = sys.argv[1:3]
+def count_tokens(text):
+    try:
+        import tiktoken; return len(tiktoken.get_encoding("cl100k_base").encode(text))
+    except Exception:
+        return max(1, len(text)//4)
 meta=json.load(open(os.path.join(runs_dir,"meta.json")))
 task=open(os.path.join(runs_dir,"task.txt")).read()
 parser=meta["parser"]
@@ -2358,13 +2364,19 @@ if os.path.exists(idx):
             except Exception as ex:
                 rec["parse_error"]=str(ex)
         elif parser=="openai":
+            # Deterministic + endpoint-independent: tokenize the fixed context
+            # (reproducible for the ledger). The endpoint's reported usage is
+            # recorded separately as a cross-check — it can be unreliable under
+            # server-side prefix caching (observed on a local vLLM).
+            ctxf=os.path.join(runs_dir,"ctx-%s.txt"%cond)
+            rec["input_tokens"]=count_tokens(open(ctxf).read()) if os.path.exists(ctxf) else 0
+            rec["num_turns"]=1
             try:
                 d=json.loads(raw)
                 if "error" in d: rec["parse_error"]=str(d["error"])[:120]
                 u=d.get("usage") or {}
-                rec["input_tokens"]=u.get("prompt_tokens") or 0
+                rec["endpoint_prompt_tokens"]=u.get("prompt_tokens")
                 rec["output_tokens"]=u.get("completion_tokens") or 0
-                rec["num_turns"]=1
             except Exception as ex:
                 rec["parse_error"]=str(ex)
         rows.append(rec)
@@ -2406,6 +2418,30 @@ else:
 md+=["","<details><summary>raw per-run</summary>","","```json",json.dumps(rows,indent=2),"```","</details>"]
 open(base_path+".md","w").write("\n".join(md)+"\n")
 
+# Longitudinal ledger: append this run + regenerate the master comparison table,
+# so results accumulate and ATLAS's reduction is trackable across versions/dates.
+ledger_path=os.path.join(os.path.dirname(base_path),"ledger.jsonl")
+lrec={"date":meta["date_utc"],"atlas_version":meta["atlas_version"],"runtime":meta["runtime"],
+      "runtime_version":meta["runtime_version"],"model":meta["model"],"effort":meta["effort"],
+      "repo":meta["repo"],"reps":meta["reps"],"metric":prim,"without":wo,"with":wi,
+      "reduction_pct":(round(pct,1) if pct is not None else None),
+      "ratio":(round(ratio,2) if ratio is not None else None),
+      "report":os.path.basename(base_path)+".md"}
+open(ledger_path,"a").write(json.dumps(lrec)+"\n")
+entries=[json.loads(l) for l in open(ledger_path) if l.strip()]
+entries.sort(key=lambda r: r.get("date",""))
+res_md=os.path.join(os.path.dirname(os.path.dirname(base_path)),"RESULTS.md")
+cols=["date","atlas_version","runtime","model","effort","repo","metric","without","with","reduction_pct","ratio"]
+LL=["# ATLAS benchmark ledger","",
+    "Every `atlas bench` run is appended here (newest last) for longitudinal comparison —",
+    "track ATLAS's orientation-token reduction across versions, repos, models, and dates.",
+    "Source of truth: `results/ledger.jsonl`. Per-run detail: the linked report.","",
+    "| "+" | ".join(c.replace("_"," ") for c in cols)+" |",
+    "|"+"|".join(["---"]*len(cols))+"|"]
+for e in entries:
+    LL.append("| "+" | ".join((str(e.get(c)) if e.get(c) is not None else "—") for c in cols)+" |")
+open(res_md,"w").write("\n".join(LL)+"\n")
+
 W=16
 print(); print("  "+"condition".ljust(W)+"".join(m.ljust(W) for m in metrics))
 for c in ("without","with"): print("  "+c.ljust(W)+"".join(fn(summary[c][m]).ljust(W) for m in metrics))
@@ -2414,7 +2450,8 @@ if ratio: print(f"  → with ATLAS: {ratio:.1f}× less {prim} ({pct:.0f}% lower)
 else: print(f"  → no delta computed (check for errors). N={n}")
 errs=[r for r in rows if r.get("parse_error") or r.get("is_error")]
 if errs: print(f"  ⚠ {len(errs)} run(s) flagged errors — see the JSON")
-print(f"  report: {base_path}.md"); print(f"  json:   {base_path}.json")
+print(f"  report: {base_path}.md")
+print(f"  ledger: {res_md}  (all runs, for comparison over time)")
 PY
 
   rm -rf "$runs"; [[ -n "$cleanup_base" ]] && rm -rf "$cleanup_base"
