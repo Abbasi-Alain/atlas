@@ -92,6 +92,16 @@ else
   _pass "mcp JSON-RPC tests skipped (no python3)"
 fi
 
+# Task-aware orientation (atlas orient)
+if command -v python3 >/dev/null 2>&1; then
+  "$CLI" orient >/dev/null 2>&1 && _pass "orient (no task) runs" || _fail "orient full"
+  ATLAS_PROJECT="$TMP" "$CLI" orient "add validation" 2>/dev/null | grep -q 'oriented for: add validation' && _pass "orient (task) returns a scoped view" || _fail "orient task-scoped"
+  ATLAS_PROJECT="$TMP" "$CLI" map 2>/dev/null | grep -q 'flowchart' && _pass "map emits a Mermaid graph" || _fail "map mermaid"
+  ATLAS_PROJECT="$TMP" "$CLI" map --html 2>/dev/null | grep -q 'mermaid.min.js' && _pass "map --html emits a standalone page" || _fail "map html"
+else
+  _pass "orient/map tests skipped (no python3)"
+fi
+
 # MCP HTTP transport + token auth (start the server, assert 401 without / 200 with)
 if command -v python3 >/dev/null 2>&1; then
   HPORT=7399

@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Task-aware orientation** — `atlas orient "<task>"` (and the MCP `atlas_orient(task)` tool) returns just the *relevant slice* of the map: the map entries, SKILL anchors, and the **SCARS that bite *this* task**, ranked by keyword overlap (zero-infra, no embeddings). No task → the full §0 map. The agent's first move, conditioned on what it's about to do — nobody else does this.
+- **`atlas map`** — render the repo's structure (ATLAS.md §1) as a **Mermaid** graph (renders natively on GitHub) or a standalone HTML page (`--html [--out F]`) to screenshot. A shareable picture of the repo's brain.
+
 ## [0.1.7] — 2026-06-09
 
 ### Added

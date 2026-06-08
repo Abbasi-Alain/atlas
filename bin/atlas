@@ -22,6 +22,10 @@
 #                                     (claude/codex/opencode/--exec) OR single-shot
 #                                     vs any OpenAI-compatible endpoint (--api-base,
 #                                     e.g. local vLLM). Writes JSON + Markdown.
+#   atlas map [--html] [--out F]      render the repo as a Mermaid graph (or a
+#                                     standalone HTML page) — shareable, GitHub-native
+#   atlas orient ["task"]             print the map — or just the slice relevant
+#                                     to "task" (what the MCP atlas_orient serves)
 #   atlas mcp [--config] [--http]     run the MCP server — serve the map to any
 #                                     MCP client (Claude Code/Cursor/OpenClaw/…)
 #   atlas doctor                      diagnose ATLAS_HOME + adapter/hook wiring
@@ -2731,6 +2735,43 @@ PY
   _say "comparable across runs (version+model+effort+date+sha recorded). Methodology: docs/benchmarks/methodology.md"
 }
 
+# map — render the repo's structure (ATLAS.md §1) as a shareable diagram.
+#   atlas map                    a Mermaid graph (renders natively on GitHub)
+#   atlas map --html [--out f]   a standalone HTML page (mermaid.js) — screenshot it
+cmd_map() {
+  local html=0 out=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --html)  html=1; shift ;;
+      --out)   out="${2:-}"; shift 2 ;;
+      --out=*) out="${1#--out=}"; shift ;;
+      *) shift ;;
+    esac
+  done
+  _have python3 || _die "atlas map needs python3."
+  local server="$ATLAS_HOME/bin/atlas-mcp"
+  [[ -f "$server" ]] || _die "atlas-mcp not found at $server"
+  export ATLAS_PROJECT="${ATLAS_PROJECT:-$PWD}" ATLAS_BIN="$ATLAS_HOME/bin/atlas" ATLAS_VERSION
+  local flag=""; [[ $html -eq 1 ]] && flag="--html"
+  if [[ -n "$out" ]]; then
+    python3 "$server" --map $flag > "$out" && _ok "wrote $out  $(_c_dim '(open it / screenshot for the README)')"
+  else
+    python3 "$server" --map $flag
+  fi
+}
+
+# orient — print the project map, or (with a task) just the relevant slice.
+#   atlas orient                       full §0 map + SKILL/SCARS ToCs
+#   atlas orient "add a CLI command"   only the relevant map rows + playbook + SCARS
+# Same logic the MCP `atlas_orient` tool serves — handy for humans + scripts.
+cmd_orient() {
+  _have python3 || _die "atlas orient needs python3."
+  local server="$ATLAS_HOME/bin/atlas-mcp"
+  [[ -f "$server" ]] || _die "atlas-mcp not found at $server"
+  export ATLAS_PROJECT="${ATLAS_PROJECT:-$PWD}" ATLAS_BIN="$ATLAS_HOME/bin/atlas" ATLAS_VERSION
+  python3 "$server" --orient "$*"
+}
+
 # mcp — launch the ATLAS Model Context Protocol server (stdio, zero-infra).
 #
 # Serves this project's map to any MCP client (Claude Code/Cursor/OpenClaw/Codex):
@@ -2783,6 +2824,8 @@ main() {
     check)    cmd_check "$@" ;;
     measure)  cmd_measure "$@" ;;
     bench)    cmd_bench "$@" ;;
+    map)      cmd_map "$@" ;;
+    orient)   cmd_orient "$@" ;;
     mcp)      cmd_mcp "$@" ;;
     doctor)   cmd_doctor "$@" ;;
     badge)    cmd_badge "$@" ;;

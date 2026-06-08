@@ -78,19 +78,62 @@ def _toc(text):
 
 
 # ---- tools: local (zero-infra) -------------------------------------------
-def t_orient(_args):
+_STOP = set("the a an of to in at on for and or is are be this that it with you your i we our how "
+            "where what when why add fix get set use run make new via from into can does not".split())
+
+
+def _tok(s):
+    return set(w for w in re.findall(r"[a-z0-9_]+", s.lower()) if len(w) > 2 and w not in _STOP)
+
+
+def _rank(lines, qt, top):
+    """Rank lines by keyword overlap with the task tokens (zero-infra relevance)."""
+    scored = sorted(((len(_tok(ln) & qt), ln.strip()) for ln in lines if ln.strip()),
+                    key=lambda x: -x[0])
+    out, seen = [], set()
+    for s, ln in scored:
+        if s and ln not in seen:
+            seen.add(ln)
+            out.append(ln)
+        if len(out) >= top:
+            break
+    return out
+
+
+def t_orient(args):
     a = _read(_atlas_md())
     if not a:
         return "No ATLAS.md in %s — run `atlas init` to scaffold the map." % proj()
-    parts = ["# ATLAS — where things live (read this before you grep)\n",
-             _until(a, r'^## 2\.')]            # §0 quick-orientation + §1 top-level map
+    task = (args.get("task") or "").strip()
+    if not task:
+        parts = ["# ATLAS — where things live (read this before you grep)\n",
+                 _until(a, r'^## 2\.')]        # §0 quick-orientation + §1 top-level map
+        sk = _read(_skill_md())
+        if sk:
+            parts += ["\n## SKILL.md — task playbook (stable anchors)\n", _toc(sk)]
+        sc = _read(_scars_md())
+        if sc:
+            parts += ["\n## SCARS.md — failure memory (don't repeat)\n", _toc(sc)]
+        return "\n".join(p for p in parts if p)
+    # task-aware: return only the RELEVANT slice — map entries + playbook + the
+    # SCARS that bite *this* task — ranked by keyword overlap. No one else does this.
+    qt = _tok(task)
+    map_rows = [l for l in a.splitlines() if "](" in l or ("|" in l and l.count("|") >= 2)]
     sk = _read(_skill_md())
-    if sk:
-        parts += ["\n## SKILL.md — task playbook (stable anchors)\n", _toc(sk)]
+    skill_anchors = [l for l in sk.splitlines() if l.startswith("### ") or l.lstrip().startswith("- [")]
     sc = _read(_scars_md())
-    if sc:
-        parts += ["\n## SCARS.md — failure memory (don't repeat)\n", _toc(sc)]
-    return "\n".join(p for p in parts if p)
+    scar_anchors = [b.splitlines()[0] for b in re.split(r"(?=^### §)", sc, flags=re.M)
+                    if b.strip().startswith("### §")]
+    out = ["# ATLAS — oriented for: %s\n" % task, "## Where to look (most relevant map entries)"]
+    out += (_rank(map_rows, qt, 8) or ["(no direct match — start from ATLAS.md §0)"])
+    sh = _rank(skill_anchors, qt, 5)
+    if sh:
+        out += ["", "## Relevant playbook (SKILL anchors)"] + sh
+    ch = _rank(scar_anchors, qt, 5)
+    if ch:
+        out += ["", "## Watch out for (relevant SCARS — what breaks here)"] + ch
+    out += ["", "_(full map: call atlas_orient with no task, or read ATLAS.md §0)_"]
+    return "\n".join(out)
 
 
 def t_find(args):
@@ -151,6 +194,70 @@ def t_deepsearch(args): return _backend("/search", {"project": proj(), "query": 
 def t_recall(args):     return _backend("/recall", {"project": proj(), "query": args.get("query", "")})
 
 
+# ---- visual map (shareable Mermaid / HTML) -------------------------------
+def _cell_name(s):
+    m = re.search(r"`([^`]+)`", s) or re.search(r"\[([^\]]+)\]", s)
+    return (m.group(1) if m else s).strip().rstrip("/")
+
+
+def _mid(name):
+    return re.sub(r"[^A-Za-z0-9]", "_", name) or "n"
+
+
+def render_map(html=False):
+    """Build a Mermaid graph of the repo from ATLAS.md §1's | Node | Role | Talks-to | table."""
+    a = _read(_atlas_md())
+    if not a:
+        return "No ATLAS.md in %s — run `atlas init`." % proj()
+    nodes, edges, in_tbl = {}, [], False
+    for line in a.splitlines():
+        if re.match(r"^\|\s*Node\s*\|", line):
+            in_tbl = True
+            continue
+        if in_tbl:
+            if not line.lstrip().startswith("|"):
+                break
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if not cells or set("".join(cells)) <= set("-: "):
+                continue
+            name = _cell_name(cells[0])
+            if not name or name.lower() == "node":
+                continue
+            nid = _mid(name)
+            nodes[nid] = name
+            for ref in re.split(r"[,;]", cells[2] if len(cells) >= 3 else ""):
+                rn = _cell_name(ref)
+                if rn and " " not in rn and not rn.startswith("§") and rn.lower() not in ("—", "-", "n/a", "", "(none)", "none", "tbd"):
+                    rid = _mid(rn)
+                    nodes.setdefault(rid, rn)
+                    if rid != nid:
+                        edges.append((nid, rid))
+    if not nodes:
+        return "No module table in ATLAS.md §1 — add a | Node | Role | Talks-to | table, then re-run."
+    mer = ["flowchart LR"]
+    mer += ['  %s["%s"]' % (nid, lab.replace('"', "'")) for nid, lab in nodes.items()]
+    mer += ["  %s --> %s" % (s, d) for (s, d) in dict.fromkeys(edges)]
+    mermaid = "\n".join(mer)
+    if not html:
+        return "```mermaid\n%s\n```" % mermaid
+    return _MAP_HTML % {"title": os.path.basename(proj().rstrip("/")) or "project", "mermaid": mermaid}
+
+
+_MAP_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>%(title)s — ATLAS map</title>
+<style>body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#0b1020;color:#e6e9f0}
+header{padding:18px 24px;border-bottom:1px solid #222a44}h1{margin:0;font-size:18px}
+.sub{color:#8b93a7;font-size:13px;margin-top:4px}.wrap{padding:24px;overflow:auto}
+a{color:#22d3ee}</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'dark'});</script></head>
+<body><header><h1>\U0001f5fa️ %(title)s — ATLAS map</h1>
+<div class="sub">the repo's brain, from ATLAS.md §1 · generated by <code>atlas map</code> ·
+<a href="https://github.com/Abbasi-Alain/atlas">ATLAS</a></div></header>
+<div class="wrap"><pre class="mermaid">%(mermaid)s</pre></div></body></html>"""
+
+
 # ---- registry ------------------------------------------------------------
 def _obj(props, required=()):
     return {"type": "object", "properties": props, "required": list(required)}
@@ -159,7 +266,7 @@ def _obj(props, required=()):
 Q = {"query": {"type": "string", "description": "natural-language query"}}
 
 LOCAL_TOOLS = [
-    ("atlas_orient",  "Where things live: the ATLAS.md §0 map + SKILL/SCARS tables of contents. Call this FIRST to orient in a repo instead of grepping.", _obj({}), t_orient),
+    ("atlas_orient",  "Where things live. Call this FIRST to orient instead of grepping. Pass an optional `task` to get just the RELEVANT slice — the map entries, playbook anchors, and the SCARS that bite *this* task; omit it for the full §0 map + ToCs.", _obj({"task": {"type": "string", "description": "the task you're about to do — returns only the relevant slice of the map"}}), t_orient),
     ("atlas_find",    "Find where something lives in the project map (files/modules/anchors) by keyword.", _obj(Q, ["query"]), t_find),
     ("atlas_scars",   "Hard-won failure lessons (SCARS anchors) — what breaks and how to avoid it. Optionally filter by query.", _obj(Q), t_scars),
     ("atlas_measure", "The measured orientation-token reduction ATLAS buys this repo (vs a smart skim and a whole-repo dump).", _obj({}), t_measure),
@@ -289,7 +396,14 @@ def serve_http(host, port, token):
 
 
 def main():
-    if "--http" in sys.argv[1:]:
+    args = sys.argv[1:]
+    if args and args[0] == "--orient":          # one-shot CLI: `atlas orient [task]`
+        print(t_orient({"task": " ".join(args[1:])}))
+        return
+    if args and args[0] == "--map":             # one-shot CLI: `atlas map [--html]`
+        print(render_map(html=("--html" in args[1:])))
+        return
+    if "--http" in args:
         serve_http(os.environ.get("ATLAS_MCP_HOST", "127.0.0.1"),
                    int(os.environ.get("ATLAS_MCP_PORT", "7332")),
                    os.environ.get("ATLAS_MCP_TOKEN") or None)
