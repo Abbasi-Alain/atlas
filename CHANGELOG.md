@@ -13,6 +13,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `atlas init --analyze` — scans the repo (languages, build/test commands, CI, entry points, top-level inventory with guessed roles) and injects a pre-filled **§0.5 Auto-detected map** into ATLAS.md, so the map isn't a blank page. The auto-draft lever from CRITICS #8.
 - `atlas check --changed-files[=REF]` — **drift gate**: fails if files were added/moved/removed without updating `ATLAS.md` (the map is stale). Wire it into CI to enforce the spec's *"a stale ATLAS is worse than none"* (CRITICS #7).
 
+### Fixed
+
+- `atlas bench` **agentic metric is now honest** (SCARS §BENCH-TOKEN-SUM-CACHE). Summing per-turn `input_tokens` double-counts cached context — it can climb even as **cost falls** — so it is no longer the headline for `--runtime claude\|codex\|opencode`. Those runtimes now report **turns / cost / wall-time** (all lower-is-better) and are logged as *directional*; the deterministic single-shot `openai` / `measure` mode remains the source of the reproducible **−92% / 12.8×**. First agentic datapoint (claude, effort=high, N=1): **5 vs 6 turns, $0.38 vs $0.42, 58s vs 87s** with the quartet.
+- `atlas bench --runtime codex` previously scored **0/0** silently (SCARS §BENCH-NEEDS-GIT): the `git archive` work dir has no `.git`, so `codex exec` refused to run and bailed in ~0s — and its stderr was discarded. Now passes `--skip-git-repo-check`, keeps stderr, and flags empty output as a `parse_error` so a dead run can't masquerade as a datapoint.
+
 ---
 
 ## [0.1.5] — 2026-06-08

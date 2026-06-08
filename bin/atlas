@@ -2410,7 +2410,10 @@ cmd_bench() {
           if [[ -n "$model"  ]]; then agent+=(--model "$model"); fi
           if [[ -n "$effort" ]]; then agent+=(--effort "$effort"); fi ;;
         codex)
-          agent=(codex exec "$task")
+          # --skip-git-repo-check: the work dir is a `git archive` export with no
+          # .git, and `codex exec` otherwise refuses to run there → 0s / no output
+          # (SCARS §BENCH-NEEDS-GIT).
+          agent=(codex exec --skip-git-repo-check "$task")
           if [[ -n "$model"  ]]; then agent+=(--model "$model"); fi
           if [[ -n "$effort" ]]; then agent+=(-c "model_reasoning_effort=$effort"); fi ;;
         opencode)
@@ -2431,9 +2434,10 @@ cmd_bench() {
       _say "running $cond #$rep …"
       t0=$(date +%s)
       if [[ "$runtime" == "generic" ]]; then
-        ( cd "$work" && ATLAS_BENCH_TASK="$task" bash -c "$exec_tpl" ) > "$runs/${cond}-${rep}.out" 2>/dev/null || true
+        ( cd "$work" && ATLAS_BENCH_TASK="$task" bash -c "$exec_tpl" ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
       else
-        ( cd "$work" && "${agent[@]}" ) > "$runs/${cond}-${rep}.out" 2>/dev/null || true
+        # keep stderr (a silent 2>/dev/null once hid a runtime that bailed at 0s — SCARS §BENCH-NEEDS-GIT)
+        ( cd "$work" && "${agent[@]}" ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
       fi
       t1=$(date +%s)
       printf '%s\t%d\t%d\t%s\n' "$cond" "$rep" "$(( t1 - t0 ))" "${cond}-${rep}.out" >> "$runs/index.tsv"
@@ -2465,12 +2469,16 @@ def count_tokens(text):
 meta=json.load(open(os.path.join(runs_dir,"meta.json")))
 task=open(os.path.join(runs_dir,"task.txt")).read()
 parser=meta["parser"]
-rows=[]; idx=os.path.join(runs_dir,"index.tsv")
+rows=[]; detected_models=set(); idx=os.path.join(runs_dir,"index.tsv")
 if os.path.exists(idx):
     for line in open(idx):
         cond,rep,wall,fn=line.rstrip("\n").split("\t")
         raw=open(os.path.join(runs_dir,fn)).read()
         rec={"condition":cond,"rep":int(rep),"wall_s":int(wall),"output_chars":len(raw)}
+        if not raw.strip():
+            ep=os.path.join(runs_dir, fn.rsplit(".",1)[0]+".err")
+            errtxt=open(ep).read().strip() if os.path.exists(ep) else ""
+            rec["parse_error"]="empty output"+((": "+errtxt[:200]) if errtxt else " (runtime produced nothing — check install/auth)")
         if parser=="claude":
             try:
                 d=json.loads(raw); events=d if isinstance(d,list) else [d]
@@ -2478,10 +2486,13 @@ if os.path.exists(idx):
                 for e in events:
                     if not isinstance(e,dict): continue
                     u=e.get("usage") or (e.get("message") or {}).get("usage") or {}
+                    mdl=(e.get("message") or {}).get("model")
+                    if mdl: detected_models.add(mdl)
                     if e.get("type")=="assistant" and u:
                         inp+=(u.get("input_tokens") or 0)+(u.get("cache_creation_input_tokens") or 0)
                         outp+=(u.get("output_tokens") or 0)
                     if e.get("type")=="result" or "total_cost_usd" in e: result=e
+                    for mk in (e.get("modelUsage") or {}): detected_models.add(mk)
                 if result is not None:
                     rec["num_turns"]=result.get("num_turns")
                     rec["cost_usd"]=result.get("total_cost_usd")
@@ -2511,16 +2522,26 @@ if os.path.exists(idx):
                 rec["parse_error"]=str(ex)
         rows.append(rec)
 
-if parser=="claude": metrics=["input_tokens","output_tokens","num_turns","cost_usd","wall_s"]
-elif parser=="openai": metrics=["input_tokens","output_tokens","num_turns","wall_s"]
-else: metrics=["output_chars","wall_s"]
+# Record the model the runtime *actually* resolved (e.g. "default" → claude-opus-4-8),
+# so the ledger never just says "default" (it can't be reconstructed later).
+if detected_models:
+    meta["model"]="+".join(sorted(detected_models))
+
+if parser=="claude": metrics=["num_turns","cost_usd","wall_s","input_tokens","output_tokens"]
+elif parser=="openai": metrics=["input_tokens","output_tokens","wall_s"]
+else: metrics=["wall_s","output_chars"]
 def agg(cond,key):
     vals=[r[key] for r in rows if r["condition"]==cond and isinstance(r.get(key),(int,float))]
     return round(statistics.mean(vals),4) if vals else None
 summary={c:{m:agg(c,m) for m in metrics} for c in ("without","with")}
 json.dump({"meta":meta,"task":task,"runs":rows,"summary":summary},open(base_path+".json","w"),indent=2)
 
-prim="input_tokens" if parser in ("claude","openai") else "output_chars"
+# Headline metric. All three are lower-is-better. For agentic runtimes we use
+# *turns* (orientation efficiency) — NOT summed input_tokens, which double-counts
+# cached context per turn and can climb even as cost falls (SCARS §BENCH-TOKEN-SUM-CACHE).
+prim={"claude":"num_turns","openai":"input_tokens"}.get(parser,"wall_s")
+plabel={"num_turns":"fewer turns","input_tokens":"fewer orientation tokens",
+        "wall_s":"less wall-time","output_chars":"less output"}.get(prim,"less "+prim)
 wo,wi=summary["without"].get(prim),summary["with"].get(prim)
 ratio=pct=None
 if wo and wi and wi>0: ratio=wo/wi; pct=(1-wi/wo)*100
@@ -2542,9 +2563,12 @@ for c in ("without","with"):
     md.append("| "+("without ATLAS" if c=="without" else "with ATLAS")+" | "+" | ".join(fn(summary[c][m]) for m in metrics)+" |")
 md.append("")
 if ratio:
-    md.append(f"**→ with ATLAS uses {ratio:.1f}× less {prim} ({pct:.0f}% lower).**  _[N={n} per condition — estimate; {meta['runtime_version']}, model={meta['model']}, effort={meta['effort']}]_")
+    md.append(f"**→ with ATLAS: {ratio:.1f}× {plabel} ({pct:.0f}% lower).**  _[N={n} per condition — directional; {meta['runtime_version']}, model={meta['model']}, effort={meta['effort']}]_")
 else:
-    md.append(f"_(no token delta computed — check runs for errors. N={n}.)_")
+    md.append(f"_(no delta computed — check runs for errors. N={n}.)_")
+if parser=="claude":
+    md.append("")
+    md.append("> _Agentic note: summed `input_tokens` over-counts cached context across turns (it can climb even as **cost falls**), so the headline here is **turns** — cost + wall-time shown alongside. The clean, reproducible token-reduction figure is the deterministic `openai` / `atlas measure` mode (see [RESULTS.md](../RESULTS.md))._")
 md+=["","<details><summary>raw per-run</summary>","","```json",json.dumps(rows,indent=2),"```","</details>"]
 open(base_path+".md","w").write("\n".join(md)+"\n")
 
@@ -2576,7 +2600,7 @@ W=16
 print(); print("  "+"condition".ljust(W)+"".join(m.ljust(W) for m in metrics))
 for c in ("without","with"): print("  "+c.ljust(W)+"".join(fn(summary[c][m]).ljust(W) for m in metrics))
 print()
-if ratio: print(f"  → with ATLAS: {ratio:.1f}× less {prim} ({pct:.0f}% lower)   [N={n} — estimate]")
+if ratio: print(f"  → with ATLAS: {ratio:.1f}× {plabel} ({pct:.0f}% lower)   [N={n} — directional]")
 else: print(f"  → no delta computed (check for errors). N={n}")
 errs=[r for r in rows if r.get("parse_error") or r.get("is_error")]
 if errs: print(f"  ⚠ {len(errs)} run(s) flagged errors — see the JSON")
