@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **`atlas mcp` — a Model Context Protocol server** (`bin/atlas-mcp`, Python stdlib, zero deps). Serves this project's map to *any* MCP client (Claude Code, Cursor, OpenClaw, Codex, Gemini…) via four local tools: **`atlas_orient`** (the §0 map + SKILL/SCARS ToCs — call it first instead of grepping), **`atlas_find`**, **`atlas_scars`**, **`atlas_measure`**. stdio transport (the OS process boundary is the auth — no token needed locally); `atlas mcp --config` prints the registration snippet. Deep tools (**`atlas_graph` / `atlas_deepsearch` / `atlas_recall`**) appear *only* when `ATLAS_MCP_BACKEND_URL` is set, proxying to an opt-in graph+vector+memory backend (e.g. FuseGraph/FuseRAG) with an optional bearer token — ATLAS stays 100% local + free by default. (`--http` remote transport + token auth is the next increment.)
+
 ## [0.1.6] — 2026-06-08
 
 ### Added

@@ -76,6 +76,22 @@ echo "-- new commands --"
 "$CLI" bench --runtime openai --api-base http://127.0.0.1:1 --model x --dry-run >/dev/null 2>&1 && _pass "bench openai --dry-run runs" || _fail "bench openai dry-run"
 ATLAS_HOME=/opt/cellar/atlas "$CLI" uninstall 2>&1 | grep -qi 'package' && _pass "uninstall defers package-managed installs" || _fail "uninstall defer"
 
+# MCP server: registration snippet + a real JSON-RPC handshake
+"$CLI" mcp --config 2>/dev/null | grep -q '"mcpServers"' && _pass "mcp --config emits registration JSON" || _fail "mcp --config"
+if command -v python3 >/dev/null 2>&1; then
+  MCP_IN='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"atlas_orient","arguments":{}}}'
+  MCP_OUT="$(printf '%s\n' "$MCP_IN" | ATLAS_PROJECT="$TMP" "$CLI" mcp 2>/dev/null)"
+  echo "$MCP_OUT" | grep -q '"serverInfo"'     && _pass "mcp initialize handshake"               || _fail "mcp initialize"
+  echo "$MCP_OUT" | grep -q 'atlas_orient'      && _pass "mcp tools/list lists atlas_orient"      || _fail "mcp tools/list"
+  echo "$MCP_OUT" | grep -q 'where things live' && _pass "mcp atlas_orient returns the map"        || _fail "mcp atlas_orient"
+  echo "$MCP_OUT" | grep -q 'atlas_graph'       && _fail "mcp backend tools must stay hidden"      || _pass "mcp deep tools hidden without a backend"
+  printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | ATLAS_PROJECT="$TMP" ATLAS_MCP_BACKEND_URL="https://x.example" "$CLI" mcp 2>/dev/null | grep -q 'atlas_graph' && _pass "mcp deep tools appear when backend set" || _fail "mcp backend gating"
+else
+  _pass "mcp JSON-RPC tests skipped (no python3)"
+fi
+
 # init --analyze injects an auto-detected map
 TMP_AN="$(mktemp -d)"; pushd "$TMP_AN" >/dev/null
 git init -q -b main 2>/dev/null; echo '{}' > package.json; mkdir -p src; touch src/index.js
