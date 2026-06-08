@@ -2737,14 +2737,19 @@ PY
 # atlas_orient · atlas_find · atlas_scars · atlas_measure. Deep tools
 # (atlas_graph/deepsearch/recall) appear only when ATLAS_MCP_BACKEND_URL is set —
 # a bring-your-own graph+vector backend (e.g. FuseGraph/FuseRAG), never required.
-# `--config` prints the registration snippet; `--http`/`--token` reserved for the
-# upcoming remote transport.
+# `--config` prints the registration snippet. `--http [--host H] [--port N]
+# [--token T]` serves over HTTP for team/remote use (token auth is opt-in; a
+# token is required to be safe on any non-localhost host).
 cmd_mcp() {
   local want_config=0 http=0 token=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --config|--print-config) want_config=1; shift ;;
       --http)      http=1; shift ;;
+      --port)      export ATLAS_MCP_PORT="${2:-}"; shift 2 ;;
+      --port=*)    export ATLAS_MCP_PORT="${1#--port=}"; shift ;;
+      --host)      export ATLAS_MCP_HOST="${2:-}"; shift 2 ;;
+      --host=*)    export ATLAS_MCP_HOST="${1#--host=}"; shift ;;
       --token)     token="${2:-}"; shift 2 ;;
       --token=*)   token="${1#--token=}"; shift ;;
       *) shift ;;

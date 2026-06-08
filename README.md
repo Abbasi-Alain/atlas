@@ -226,6 +226,8 @@ Four local tools — no infra, no embeddings, no API key:
 
 Need deep queries? Set `ATLAS_MCP_BACKEND_URL` and three more tools (`atlas_graph`, `atlas_deepsearch`, `atlas_recall`) light up, proxying to a bring-your-own graph+vector backend. With nothing set, ATLAS stays **100% local and free**.
 
+Sharing with a team? `atlas mcp --http --token "$SECRET"` serves the same tools over HTTP — token auth is opt-in (no token locally, required off-localhost), with `GET /health` for liveness.
+
 ---
 
 ## Style presets — pick a vibe

@@ -92,6 +92,34 @@ else
   _pass "mcp JSON-RPC tests skipped (no python3)"
 fi
 
+# MCP HTTP transport + token auth (start the server, assert 401 without / 200 with)
+if command -v python3 >/dev/null 2>&1; then
+  HPORT=7399
+  ATLAS_PROJECT="$TMP" "$CLI" mcp --http --port "$HPORT" --token testtok >/dev/null 2>&1 &
+  HPID=$!
+  if python3 - "$HPORT" testtok <<'PY'
+import sys, time, urllib.request as u
+port, token = sys.argv[1], sys.argv[2]
+base = "http://127.0.0.1:%s" % port
+for _ in range(25):
+    try: u.urlopen(base + "/health", timeout=1); break
+    except Exception: time.sleep(0.2)
+else: sys.exit(2)
+body = b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+try:
+    u.urlopen(u.Request(base + "/", data=body, headers={"Content-Type": "application/json"}), timeout=3)
+    sys.exit(3)                                   # should have been rejected
+except u.HTTPError as e:
+    if e.code != 401: sys.exit(3)
+r = u.urlopen(u.Request(base + "/", data=body, headers={"Content-Type": "application/json", "Authorization": "Bearer " + token}), timeout=3)
+sys.exit(0 if b"atlas_orient" in r.read() else 4)
+PY
+  then _pass "mcp --http: token auth (401 without, 200+tools with)"; else _fail "mcp --http auth"; fi
+  kill "$HPID" 2>/dev/null
+else
+  _pass "mcp --http test skipped (no python3)"
+fi
+
 # init --analyze injects an auto-detected map
 TMP_AN="$(mktemp -d)"; pushd "$TMP_AN" >/dev/null
 git init -q -b main 2>/dev/null; echo '{}' > package.json; mkdir -p src; touch src/index.js
