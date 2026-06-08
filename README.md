@@ -149,11 +149,20 @@ brew install atlas
 npx @alainabbasi/atlas init
 ```
 
-### Debian / Ubuntu / Mint / PopOS *(.deb from the GitHub release)*
+### Debian / Ubuntu / Mint / Pop!_OS
+
+**`apt install` via the PPA** *(recommended — tracks releases, auto-updates):*
 
 ```bash
-curl -L https://github.com/Abbasi-Alain/atlas/releases/latest/download/atlas_0.1.0_all.deb \
-  -o /tmp/atlas.deb && sudo dpkg -i /tmp/atlas.deb
+sudo add-apt-repository ppa:alainabbasi/atlas
+sudo apt update && sudo apt install atlas
+```
+
+**Or a one-off `.deb`** from the [latest release](https://github.com/Abbasi-Alain/atlas/releases/latest):
+
+```bash
+curl -L https://github.com/Abbasi-Alain/atlas/releases/latest/download/atlas_0.1.5_all.deb \
+  -o /tmp/atlas.deb && sudo apt install /tmp/atlas.deb
 ```
 
 ### Arch / Manjaro *(AUR)*
@@ -502,7 +511,7 @@ ATLAS doesn't replace your CLAUDE.md — it formalises *where the rest of the do
 
 ## Examples
 
-See [`examples/sample-project/`](examples/sample-project/) for a minimal trio (a hypothetical TypeScript API project — `User vs Account` SKILL anchor, Postgres data model, runtime topology).
+See [`examples/sample-project/`](examples/sample-project/) for a minimal quartet (a hypothetical TypeScript API project — `User vs Account` SKILL anchor, Postgres data model, runtime topology).
 
 ## Used by
 
