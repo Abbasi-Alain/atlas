@@ -221,8 +221,8 @@ Mix-and-match works: a style only overrides files it ships. Missing files fall b
 ## Subcommands
 
 ```bash
-atlas init [--style <preset>] [--force]   # bootstrap the quartet
-atlas check                               # validate ATLAS+SKILL; unique anchors
+atlas init [--style <preset>] [--force] [--analyze]   # scaffold the quartet (--analyze auto-drafts the map)
+atlas check [--changed-files]             # validate the quartet; --changed-files gates stale-map drift
 atlas measure [--badge]                   # estimate orientation-token savings (with vs without)
 atlas bench [--runtime claude|codex]      # A/B a task with vs without ATLAS via a real headless agent
 atlas doctor                              # diagnose install + harness + runtime-export drift

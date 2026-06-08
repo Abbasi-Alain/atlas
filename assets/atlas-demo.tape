@@ -1,84 +1,83 @@
-# atlas-demo.tape — vhs script for the public README hero GIF.
+# atlas-demo.tape — vhs script for the README hero GIF.
 #
-# Generate with: vhs assets/atlas-demo.tape
-# Re-run when CLI surface or logo changes.
+# Generate from the repo root:  vhs assets/atlas-demo.tape
 #
-# Designed to be readable by a HUMAN — slow typing, long pauses,
-# basic commands + real value-prop usage. Targets ~75 seconds.
-#
-# Note: shell '#' comments are NOT used as Type'd input — zsh interactive
-# mode doesn't enable interactive_comments by default and would error.
+# Deliberately SLOW (130ms typing + 4–6s pauses) so a human can read every
+# result. On-screen narration uses `echo` (not `#`) so it works in any shell.
+# These `#` lines are vhs tape comments — they are NOT typed into the shell.
 
 Output assets/atlas-demo.gif
 
-Set FontSize 18
+Set Shell "bash"
+Set FontSize 20
 Set Width 1200
-Set Height 720
-Set Theme "Catppuccin Mocha"
-Set TypingSpeed 80ms
-Set PlaybackSpeed 1.0
-Set Padding 30
-Set Shell zsh
+Set Height 760
+Set Padding 26
+Set TypingSpeed 130ms
 
-# Land in a fresh tmpdir so each take is reproducible.
+# ─── setup (hidden): put atlas on PATH + make a tiny demo repo ───────
 Hide
-Type "cd $(mktemp -d) && git init -q -b main && clear" Enter
-Sleep 800ms
+Type "export ATLAS_HOME=$PWD PATH=$PWD/bin:$PATH PS1='$ '"
+Enter
+Type "cd $(mktemp -d) && git init -q -b main"
+Enter
+Type "mkdir -p cmd internal"
+Enter
+Type "echo 'module shop' > go.mod; echo 'go 1.21' >> go.mod"
+Enter
+Type "touch cmd/main.go internal/cart.go internal/order.go README.md"
+Enter
+Type "clear"
+Enter
 Show
 
-# ─── 1. Show the logo + tagline ─────────────────────────────────────
+# ─── 1. the logo + tagline ──────────────────────────────────────────
 Type "atlas version"
-Sleep 500ms
+Sleep 1500ms
 Enter
-Sleep 4000ms
+Sleep 4s
 
-# ─── 2. Show the help banner so the surface is visible ────────────
-Type "atlas help | head -20"
-Sleep 500ms
+# ─── 2. scaffold the quartet + auto-draft the map from the repo ─────
+Type "echo '— scaffold the 4-file quartet, and auto-draft the map —'"
 Enter
-Sleep 5000ms
-
-# ─── 3. Bootstrap a real project ────────────────────────────────────
-Type "atlas init --style karpathy"
-Sleep 500ms
+Sleep 1500ms
+Type "atlas init --analyze"
+Sleep 1s
 Enter
-Sleep 4500ms
+Sleep 6s
 
-# ─── 4. Show what landed (the trio + EXAMPLES + AGENTS mirror) ──────
-Type "ls -la"
-Sleep 400ms
-Enter
-Sleep 4000ms
-
-# ─── 5. Validate (anchors unique, structure correct) ───────────────
+# ─── 3. validate ────────────────────────────────────────────────────
 Type "atlas check"
-Sleep 500ms
+Sleep 1s
 Enter
-Sleep 4000ms
+Sleep 4s
 
-# ─── 6. Show the SKILL anchors ──────────────────────────────────────
-Type "atlas anchors"
-Sleep 500ms
+# ─── 4. the value: orientation tokens saved ────────────────────────
+Type "echo '— how many orientation tokens does it save? —'"
 Enter
-Sleep 4000ms
-
-# ─── 7. Wire ATLAS into Claude Code (real installation) ─────────────
-Type "atlas install --runtime claude-code"
-Sleep 500ms
+Sleep 1500ms
+Type "atlas measure"
+Sleep 1s
 Enter
-Sleep 4500ms
+Sleep 6s
 
-# ─── 8. Set up the mirror (GitLab → GitHub guardrail) ──────────────
-Type "atlas mirror init"
-Sleep 500ms
+# ─── 5. fan out to every runtime from one source ───────────────────
+Type "echo '— one source, every runtime —'"
 Enter
-Sleep 4500ms
-
-# ─── 9. Confirm what would push (auth status check) ────────────────
-Type "atlas mirror status"
-Sleep 500ms
+Sleep 1500ms
+Type "atlas export --to all"
+Sleep 1s
 Enter
-Sleep 4500ms
+Sleep 5s
 
-# Hold the final frame so the reader can absorb it.
-Sleep 3000ms
+# ─── 6. real A/B benchmark (dry-run, nothing burned) ───────────────
+Type "echo '— real A/B benchmark (dry-run) —'"
+Enter
+Sleep 1500ms
+Type "atlas bench --dry-run"
+Sleep 1s
+Enter
+Sleep 6s
+
+# hold the final frame
+Sleep 3s
