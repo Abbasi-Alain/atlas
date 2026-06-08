@@ -28,6 +28,7 @@
 **Release / packaging**
 - [§TAG-TRIGGER-NOT-RELEASE — channel workflows must fire on tag push](#tag-trigger-not-release)
 - [§PPA-PLACEHOLDER-SECRET — a `<placeholder>` LAUNCHPAD_PPA silently drops uploads](#ppa-placeholder-secret)
+- [§CLI-VERSION-DRIFT — bump ATLAS_VERSION in bin/atlas with every release](#cli-version-drift)
 
 ---
 
@@ -146,6 +147,24 @@ uploads to a nonexistent `~<your-launchpad-user>/atlas` path → Launchpad drops
 fast if the secret contains `<`/`>`.
 
 **Where.** `.github/workflows/release-ppa.yml`.
+
+---
+
+<a id="cli-version-drift"></a>
+### §CLI-VERSION-DRIFT — bump ATLAS_VERSION in bin/atlas with every release
+
+**Symptom.** `atlas version` (and `atlas bench` metadata) report an old version
+while npm/AUR/etc. ship a newer one.
+
+**Root cause.** The version lives in **two** places: `package.json` (bumped at
+release) and the hardcoded `ATLAS_VERSION="…"` in `bin/atlas`. The `.deb`/AUR
+packages ship `bin/` without `package.json`, so the constant can't be derived —
+it must be bumped by hand. It silently drifted 0.1.0 → 0.1.4.
+
+**Do.** In the cut-release recipe, bump `ATLAS_VERSION` in `bin/atlas` in the
+same commit as `package.json`. (A CI check comparing the two would prevent this.)
+
+**Where.** `bin/atlas` (top), `package.json`.
 
 ---
 

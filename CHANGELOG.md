@@ -8,7 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-_Nothing yet — the next `git push --tags` cuts a release._
+### Added
+
+- `atlas bench` is now **provider-agnostic + reproducible**: `--model`, `--effort`, and `--exec '<cmd>'` (any provider via `$ATLAS_BENCH_TASK`); records runtime version + model + effort + date + repo sha; writes a **Markdown report** (with tables) alongside the JSON; claude token parsing now handles the streamed JSON-array output (sums per-turn input tokens, reads cost/turns from the result event).
+
+### Fixed
+
+- `bin/atlas` `ATLAS_VERSION` was stuck at `0.1.0`, so the shipped CLI reported the wrong version. Bumped to match the release; SCARS §CLI-VERSION-DRIFT documents keeping it in sync with `package.json`.
 
 ---
 

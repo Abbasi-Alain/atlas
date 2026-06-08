@@ -13,9 +13,11 @@
 #   atlas check                       lint files, verify anchors unique
 #   atlas measure [--badge]           estimate orientation-token savings (with
 #                                     vs without ATLAS); --badge prints a shield
-#   atlas bench [--runtime claude|codex] [--task "…"] [--reps N] [--dry-run]
+#   atlas bench [--runtime claude|codex] [--model M] [--effort L] [--exec CMD]
+#               [--task "…"] [--reps N] [--repo P] [--dry-run]
 #                                     A/B a task with vs without ATLAS via a real
-#                                     headless agent; reports token/turn/time delta
+#                                     headless agent (any provider via --exec);
+#                                     writes JSON + Markdown report w/ token delta
 #   atlas doctor                      diagnose ATLAS_HOME + adapter/hook wiring
 #   atlas badge [--for-the-badge]     print a 'Powered by ATLAS' README badge
 #   atlas export --to <runtime>       fan the canonical trio out to another
@@ -81,7 +83,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.1.0"
+ATLAS_VERSION="0.1.4"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -2130,18 +2132,29 @@ cmd_uninstall() {
 # ---------------------------------------------------------------------------
 # bench — A/B the orientation cost of a task WITH vs WITHOUT ATLAS.
 #
-# Runs the SAME task twice on a copy of a repo — once with the quartet present,
-# once with it hidden — via a headless agent, and reports the token/turn/time
-# delta. Honest + bounded: small N, per-run numbers, labelled estimate.
-# Needs python3 + the runtime CLI (claude / codex). --dry-run previews without
-# invoking any agent. Results are JSON under docs/benchmarks/results/.
+# Runs the SAME task twice on a copy of a repo (quartet present vs hidden) via a
+# headless agent, and writes a JSON + a Markdown report with the token/turn/
+# cost/time delta and full reproducibility metadata (runtime version, model,
+# effort, date, repo sha). Provider-agnostic:
+#   --runtime claude            claude -p … --output-format json  (rich tokens)
+#   --runtime codex             codex exec …                       (wall + output)
+#   --exec '<cmd>'              ANY provider; reference the prompt as
+#                               "$ATLAS_BENCH_TASK" in the command
+#   --model <m> --effort <lvl>  passed to the runtime + recorded
+# --dry-run previews without invoking anything. Needs python3 + the runtime CLI.
 # ---------------------------------------------------------------------------
 cmd_bench() {
-  local runtime="claude" task="" task_file="" repo="$PWD" reps=1 out="" dry=0
+  local runtime="claude" model="" effort="" exec_tpl="" task="" task_file="" repo="$PWD" reps=1 out="" dry=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --runtime)    runtime="${2:-}"; shift 2 ;;
       --runtime=*)  runtime="${1#--runtime=}"; shift ;;
+      --model)      model="${2:-}"; shift 2 ;;
+      --model=*)    model="${1#--model=}"; shift ;;
+      --effort)     effort="${2:-}"; shift 2 ;;
+      --effort=*)   effort="${1#--effort=}"; shift ;;
+      --exec)       exec_tpl="${2:-}"; runtime="generic"; shift 2 ;;
+      --exec=*)     exec_tpl="${1#--exec=}"; runtime="generic"; shift ;;
       --task)       task="${2:-}"; shift 2 ;;
       --task=*)     task="${1#--task=}"; shift ;;
       --task-file)  task_file="${2:-}"; shift 2 ;;
@@ -2156,34 +2169,46 @@ cmd_bench() {
   [[ -n "$task_file" && -f "$task_file" ]] && task="$(cat "$task_file")"
   [[ -z "$task" ]] && task="In as few steps as possible, answer: where is the release pipeline configured, and what are the exact steps to add a new package channel? List every file you opened to find out."
 
-  local rt_cmd
+  local parser rt_check
   case "$runtime" in
-    claude) rt_cmd="claude" ;;
-    codex)  rt_cmd="codex" ;;
-    *) _die "unknown --runtime '$runtime' (claude | codex)" ;;
+    claude)   parser="claude";  rt_check="claude" ;;
+    codex)    parser="generic"; rt_check="codex" ;;
+    opencode) parser="generic"; rt_check="opencode" ;;
+    generic)  parser="generic"; rt_check=""; [[ -z "$exec_tpl" ]] && _die "--runtime generic needs --exec '<cmd referencing \$ATLAS_BENCH_TASK>'" ;;
+    *) _die "unknown --runtime '$runtime' (claude | codex | opencode | generic via --exec)" ;;
   esac
   if [[ $dry -ne 1 ]]; then
-    _have "$rt_cmd" || _die "'$rt_cmd' not on PATH — install the runtime CLI, or pass --dry-run to preview."
-    _have python3   || _die "atlas bench needs python3 for parsing + aggregation."
+    _have python3 || _die "atlas bench needs python3 for parsing + the report."
+    if [[ -n "$rt_check" ]]; then _have "$rt_check" || _die "'$rt_check' not on PATH — install it, or pass --dry-run."; fi
   fi
 
-  _banner "📊" "atlas bench  $(_c_dim "(runtime=$runtime · reps=$reps)")"
-  _say "task: ${task:0:160}…"
+  # Reproducibility metadata.
+  local rt_ver date_utc base cleanup_base="" repo_sha="n/a" repo_label
+  date_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  case "$runtime" in
+    claude)   rt_ver="$(claude --version 2>/dev/null | head -1)" ;;
+    codex)    rt_ver="$(codex --version 2>/dev/null | head -1)" ;;
+    opencode) rt_ver="$(opencode --version 2>/dev/null | head -1)" ;;
+    generic)  rt_ver="exec: $exec_tpl" ;;
+  esac
 
-  # 1. Acquire the base repo (clone if a URL).
-  local base cleanup_base=""
+  _banner "📊" "atlas bench  $(_c_dim "(runtime=$runtime · reps=$reps${model:+ · $model}${effort:+ · effort=$effort})")"
+  _say "task: ${task:0:150}…"
+
   if [[ "$repo" == http*://* || "$repo" == git@* || "$repo" == *.git ]]; then
     base="$(mktemp -d)"; cleanup_base="$base"
-    if [[ $dry -eq 1 ]]; then _say "(dry-run) would clone $repo → $base"
+    if [[ $dry -eq 1 ]]; then _say "(dry-run) would clone $repo"
     else _say "cloning $repo"; git clone --depth 1 "$repo" "$base" >/dev/null 2>&1 || _die "clone failed"; fi
   else
     base="$(cd "$repo" && pwd)"
   fi
+  git -C "$base" rev-parse --short HEAD >/dev/null 2>&1 && repo_sha="$(git -C "$base" rev-parse --short HEAD)"
+  repo_label="$(basename "$base")@${repo_sha}"
 
   local quartet=(ATLAS.md SCARS.md CLAUDE.md AGENTS.md EXAMPLES.md llms.txt .agents)
   local runs; runs="$(mktemp -d)"
+  printf '%s' "$task" > "$runs/task.txt"
 
-  # 2. Run each condition × rep.
   local cond rep work f t0 t1
   for cond in without with; do
     for (( rep=1; rep<=reps; rep++ )); do
@@ -2199,18 +2224,36 @@ cmd_bench() {
 
       local agent=()
       case "$runtime" in
-        claude) agent=("$rt_cmd" -p "$task" --output-format json) ;;
-        codex)  agent=("$rt_cmd" exec "$task") ;;
+        claude)
+          agent=(claude -p "$task" --output-format json)
+          if [[ -n "$model"  ]]; then agent+=(--model "$model"); fi
+          if [[ -n "$effort" ]]; then agent+=(--effort "$effort"); fi ;;
+        codex)
+          agent=(codex exec "$task")
+          if [[ -n "$model"  ]]; then agent+=(--model "$model"); fi
+          if [[ -n "$effort" ]]; then agent+=(-c "model_reasoning_effort=$effort"); fi ;;
+        opencode)
+          agent=(opencode run "$task")
+          if [[ -n "$model"  ]]; then agent+=(-m "$model"); fi
+          if [[ -n "$effort" ]]; then agent+=(--variant "$effort"); fi ;;
       esac
 
       if [[ $dry -eq 1 ]]; then
-        printf "  %-8s #%d  →  (cd %s && %s)\n" "$cond" "$rep" "$work" "${agent[*]}"
+        if [[ "$runtime" == "generic" ]]; then
+          printf "  %-8s #%d  →  (cd %s && ATLAS_BENCH_TASK=… bash -c %q)\n" "$cond" "$rep" "$work" "$exec_tpl"
+        else
+          printf "  %-8s #%d  →  (cd %s && %s)\n" "$cond" "$rep" "$work" "${agent[*]}"
+        fi
         rm -rf "$work"; continue
       fi
 
       _say "running $cond #$rep …"
       t0=$(date +%s)
-      ( cd "$work" && "${agent[@]}" ) > "$runs/${cond}-${rep}.out" 2>/dev/null || true
+      if [[ "$runtime" == "generic" ]]; then
+        ( cd "$work" && ATLAS_BENCH_TASK="$task" bash -c "$exec_tpl" ) > "$runs/${cond}-${rep}.out" 2>/dev/null || true
+      else
+        ( cd "$work" && "${agent[@]}" ) > "$runs/${cond}-${rep}.out" 2>/dev/null || true
+      fi
       t1=$(date +%s)
       printf '%s\t%d\t%d\t%s\n' "$cond" "$rep" "$(( t1 - t0 ))" "${cond}-${rep}.out" >> "$runs/index.tsv"
       rm -rf "$work"
@@ -2223,54 +2266,97 @@ cmd_bench() {
     return 0
   fi
 
-  # 3. Parse + aggregate + report.
+  # Metadata file (python writes it so json escaping is safe).
+  python3 -c 'import json,sys; json.dump(dict(zip(["runtime","runtime_version","model","effort","atlas_version","date_utc","repo","reps","parser"],sys.argv[2:])),open(sys.argv[1],"w"))' \
+    "$runs/meta.json" "$runtime" "$rt_ver" "${model:-default}" "${effort:-default}" "$ATLAS_VERSION" "$date_utc" "$repo_label" "$reps" "$parser"
+
   mkdir -p "$out"
-  local stamp result; stamp="$(date +%Y%m%d-%H%M%S)"; result="$out/bench-${runtime}-${stamp}.json"
-  python3 - "$runs" "$runtime" "$task" "$result" <<'PY'
+  local stamp base_path; stamp="$(date +%Y%m%d-%H%M%S)"; base_path="$out/bench-${runtime}-${stamp}"
+  python3 - "$runs" "$base_path" <<'PY'
 import json, sys, os, statistics
-runs_dir, runtime, task, result_path = sys.argv[1:5]
+runs_dir, base_path = sys.argv[1:3]
+meta=json.load(open(os.path.join(runs_dir,"meta.json")))
+task=open(os.path.join(runs_dir,"task.txt")).read()
+parser=meta["parser"]
 rows=[]; idx=os.path.join(runs_dir,"index.tsv")
 if os.path.exists(idx):
     for line in open(idx):
         cond,rep,wall,fn=line.rstrip("\n").split("\t")
         raw=open(os.path.join(runs_dir,fn)).read()
-        rec={"condition":cond,"rep":int(rep),"wall_s":int(wall)}
-        if runtime=="claude":
+        rec={"condition":cond,"rep":int(rep),"wall_s":int(wall),"output_chars":len(raw)}
+        if parser=="claude":
             try:
-                d=json.loads(raw); u=d.get("usage",{}) or {}
-                rec["input_tokens"]=u.get("input_tokens") or 0
-                rec["output_tokens"]=u.get("output_tokens") or 0
-                rec["num_turns"]=d.get("num_turns")
-                rec["cost_usd"]=d.get("total_cost_usd")
-            except Exception:
-                rec["parse_error"]=True
-        else:
-            rec["output_chars"]=len(raw)
+                d=json.loads(raw); events=d if isinstance(d,list) else [d]
+                result=None; inp=0; outp=0
+                for e in events:
+                    if not isinstance(e,dict): continue
+                    u=e.get("usage") or (e.get("message") or {}).get("usage") or {}
+                    if e.get("type")=="assistant" and u:
+                        inp+=(u.get("input_tokens") or 0)+(u.get("cache_creation_input_tokens") or 0)
+                        outp+=(u.get("output_tokens") or 0)
+                    if e.get("type")=="result" or "total_cost_usd" in e: result=e
+                if result is not None:
+                    rec["num_turns"]=result.get("num_turns")
+                    rec["cost_usd"]=result.get("total_cost_usd")
+                    ru=result.get("usage") or {}
+                    rec["input_tokens"]=inp or (ru.get("input_tokens") or 0)
+                    rec["output_tokens"]=outp or (ru.get("output_tokens") or 0)
+                    rec["is_error"]=result.get("is_error")
+                else:
+                    rec["parse_error"]="no result event in output"
+            except Exception as ex:
+                rec["parse_error"]=str(ex)
         rows.append(rec)
 
+metrics=(["input_tokens","output_tokens","num_turns","cost_usd","wall_s"] if parser=="claude"
+         else ["output_chars","wall_s"])
 def agg(cond,key):
     vals=[r[key] for r in rows if r["condition"]==cond and isinstance(r.get(key),(int,float))]
-    return round(statistics.mean(vals),3) if vals else None
-
-metrics=["input_tokens","num_turns","cost_usd","wall_s"] if runtime=="claude" else ["output_chars","wall_s"]
+    return round(statistics.mean(vals),4) if vals else None
 summary={c:{m:agg(c,m) for m in metrics} for c in ("without","with")}
-json.dump({"runtime":runtime,"task":task,"runs":rows,"summary":summary},open(result_path,"w"),indent=2)
+json.dump({"meta":meta,"task":task,"runs":rows,"summary":summary},open(base_path+".json","w"),indent=2)
 
-def f(v): return "—" if v is None else (f"{v:.3f}" if isinstance(v,float) and v<10 else (f"{v:.0f}" if isinstance(v,float) else str(v)))
-W=15
+prim="input_tokens" if parser=="claude" else "output_chars"
+wo,wi=summary["without"].get(prim),summary["with"].get(prim)
+ratio=pct=None
+if wo and wi and wi>0: ratio=wo/wi; pct=(1-wi/wo)*100
+n=len([r for r in rows if r["condition"]=="with"])
+def fn(v):
+    if v is None: return "—"
+    if isinstance(v,float): return (f"{v:.4f}".rstrip("0").rstrip(".")) if v<10 else f"{v:.0f}"
+    return str(v)
+
+md=[f"# ATLAS benchmark — {meta['runtime']} ({meta['date_utc']})",""]
+md+=["| field | value |","|---|---|"]
+for k in ["date_utc","runtime","runtime_version","model","effort","atlas_version","repo","reps"]:
+    md.append(f"| {k} | {meta[k]} |")
+md.append(f"| task | {task.strip()[:300]} |")
+md+=["","## Results (mean per condition)","",
+     "| condition | "+" | ".join(metrics)+" |",
+     "|---|"+"|".join(["---"]*len(metrics))+"|"]
+for c in ("without","with"):
+    md.append("| "+("without ATLAS" if c=="without" else "with ATLAS")+" | "+" | ".join(fn(summary[c][m]) for m in metrics)+" |")
+md.append("")
+if ratio:
+    md.append(f"**→ with ATLAS uses {ratio:.1f}× less {prim} ({pct:.0f}% lower).**  _[N={n} per condition — estimate; {meta['runtime_version']}, model={meta['model']}, effort={meta['effort']}]_")
+else:
+    md.append(f"_(no token delta computed — check runs for errors. N={n}.)_")
+md+=["","<details><summary>raw per-run</summary>","","```json",json.dumps(rows,indent=2),"```","</details>"]
+open(base_path+".md","w").write("\n".join(md)+"\n")
+
+W=16
 print(); print("  "+"condition".ljust(W)+"".join(m.ljust(W) for m in metrics))
-for c in ("without","with"): print("  "+c.ljust(W)+"".join(f(summary[c][m]).ljust(W) for m in metrics))
-prim="input_tokens" if runtime=="claude" else "output_chars"
-wo,wi=summary["without"][prim],summary["with"][prim]
+for c in ("without","with"): print("  "+c.ljust(W)+"".join(fn(summary[c][m]).ljust(W) for m in metrics))
 print()
-if wo and wi and wi>0:
-    n=len([r for r in rows if r["condition"]=="with"])
-    print(f"  → with ATLAS: {wo/wi:.1f}x less {prim}  ({(1-wi/wo)*100:.0f}% lower)   [N={n} per condition — estimate]")
-print(f"  results: {result_path}")
+if ratio: print(f"  → with ATLAS: {ratio:.1f}× less {prim} ({pct:.0f}% lower)   [N={n} — estimate]")
+else: print(f"  → no delta computed (check for errors). N={n}")
+errs=[r for r in rows if r.get("parse_error") or r.get("is_error")]
+if errs: print(f"  ⚠ {len(errs)} run(s) flagged errors — see the JSON")
+print(f"  report: {base_path}.md"); print(f"  json:   {base_path}.json")
 PY
 
   rm -rf "$runs"; [[ -n "$cleanup_base" ]] && rm -rf "$cleanup_base"
-  _say "raise --reps for a real spread; results are JSON for re-analysis. Methodology: docs/benchmarks/methodology.md"
+  _say "comparable across runs (version+model+effort+date+sha recorded). Methodology: docs/benchmarks/methodology.md"
 }
 
 # --- dispatch -------------------------------------------------------------
