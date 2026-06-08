@@ -62,6 +62,20 @@ else
   _fail "duplicates not detected"
 fi
 
+# --- new commands (smoke) ------------------------------------------------
+echo ""
+echo "-- new commands --"
+
+"$CLI" measure >/dev/null 2>&1 && _pass "measure runs" || _fail "measure"
+"$CLI" measure --badge 2>/dev/null | grep -q 'shields.io' && _pass "measure --badge emits a shield" || _fail "measure --badge"
+"$CLI" doctor >/dev/null 2>&1 && _pass "doctor runs" || _fail "doctor"
+"$CLI" badge 2>/dev/null | grep -q 'shields.io' && _pass "badge emits markdown" || _fail "badge"
+"$CLI" export --to llms-txt >/dev/null 2>&1 && [[ -f "$TMP/llms.txt" ]] && _pass "export --to llms-txt writes llms.txt" || _fail "export llms-txt"
+"$CLI" export --to all >/dev/null 2>&1 && [[ -f "$TMP/.github/copilot-instructions.md" ]] && _pass "export --to all fans out" || _fail "export all"
+"$CLI" bench --dry-run >/dev/null 2>&1 && _pass "bench --dry-run runs (no agent invoked)" || _fail "bench dry-run"
+"$CLI" bench --runtime openai --api-base http://127.0.0.1:1 --model x --dry-run >/dev/null 2>&1 && _pass "bench openai --dry-run runs" || _fail "bench openai dry-run"
+ATLAS_HOME=/opt/cellar/atlas "$CLI" uninstall 2>&1 | grep -qi 'package' && _pass "uninstall defers package-managed installs" || _fail "uninstall defer"
+
 # --- public style presets ------------------------------------------------
 echo ""
 echo "-- style presets --"

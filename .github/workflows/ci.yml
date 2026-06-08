@@ -18,7 +18,7 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y shellcheck
           shellcheck bin/atlas hooks/atlas-skill-loader.sh install.sh \
-                     adapters/*/install.sh
+                     adapters/*/install.sh packaging/ppa/build-ppa.sh
       - name: bootstrap test
         run: bash tests/bootstrap.test.sh
       - name: self-check the example

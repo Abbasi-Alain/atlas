@@ -2228,15 +2228,15 @@ cmd_bench() {
     local ctx_w="$runs/ctx-with.txt" ctx_o="$runs/ctx-without.txt" ctxf sk cnt ff
     {
       echo "# ATLAS.md (orientation spine §0-1 — what the hook injects first)"
-      awk '/^## 2\./{exit} 1' "$base/ATLAS.md" 2>/dev/null
+      awk '/^## 2\./{exit} 1' "$base/ATLAS.md" 2>/dev/null || true
       echo; echo "# SCARS.md (table of contents)"
-      awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$base/SCARS.md" 2>/dev/null
+      awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$base/SCARS.md" 2>/dev/null || true
       sk=$(find "$base/.agents/skill" -name SKILL.md 2>/dev/null | head -1)
       echo; echo "# SKILL.md (table of contents)"
-      [[ -n "$sk" ]] && awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$sk"
+      { [[ -n "$sk" ]] && awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$sk"; } || true
     } > "$ctx_w"
     {
-      echo "# README.md"; cat "$base/README.md" 2>/dev/null
+      echo "# README.md"; cat "$base/README.md" 2>/dev/null || true
       echo; echo "# Files"; { git -C "$base" ls-files 2>/dev/null || ( cd "$base" && find . -type f ); } | head -400
       echo; echo "# Source file heads"; cnt=0
       while IFS= read -r ff; do
@@ -2264,8 +2264,8 @@ cmd_bench() {
   for cond in without with; do
     for (( rep=1; rep<=reps; rep++ )); do
       work="$(mktemp -d)"
-      if git -C "$base" rev-parse --git-dir >/dev/null 2>&1; then
-        git -C "$base" archive HEAD | tar -x -C "$work"
+      if git -C "$base" rev-parse HEAD >/dev/null 2>&1; then
+        git -C "$base" archive HEAD 2>/dev/null | tar -x -C "$work"
       else
         cp -R "$base/." "$work/" 2>/dev/null || true
       fi

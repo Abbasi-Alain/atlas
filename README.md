@@ -48,11 +48,11 @@
 
 | Metric                                    | Without ATLAS     | With ATLAS                  | Reduction  |
 | ----------------------------------------- | ----------------- | --------------------------- | ---------- |
-| **Orientation tokens per session**        | 55–180k           | ~1.8k auto + 1–5k on demand | **10–30×** |
+| **Orientation tokens per session**        | 55–180k           | ~1.8k auto + 1–5k on demand | **12.8× [measured](docs/benchmarks/RESULTS.md)** |
 | **Orientation tool calls**                | 10–30             | **0**                       | ∞×         |
 | **Same bug re-introduced**                | every fresh agent | never (cite `§ANCHOR`)      | —          |
-| **"While I'm here" cleanup churn in PRs** | high              | 30–60% lower                | —          |
-| **Infrastructure required**               | —                 | **none** (3 Markdown files) | —          |
+| **"While I'm here" cleanup churn in PRs** | high              | 30–60% lower *(est.)*       | —          |
+| **Infrastructure required**               | —                 | **none** (4 Markdown files) | —          |
 | **Runtimes supported**                    | varies            | **9** out of the box        | —          |
 
 
@@ -221,12 +221,12 @@ Mix-and-match works: a style only overrides files it ships. Missing files fall b
 ## Subcommands
 
 ```bash
-atlas init [--style <preset>] [--force]   # bootstrap the trio
+atlas init [--style <preset>] [--force]   # bootstrap the quartet
 atlas check                               # validate ATLAS+SKILL; unique anchors
 atlas measure [--badge]                   # estimate orientation-token savings (with vs without)
 atlas bench [--runtime claude|codex]      # A/B a task with vs without ATLAS via a real headless agent
 atlas doctor                              # diagnose install + harness + runtime-export drift
-atlas export --to <runtime>               # fan the trio out: codex|copilot|gemini|cursor|llms-txt|all
+atlas export --to <runtime>               # fan the quartet out: codex|copilot|gemini|cursor|llms-txt|all
 atlas badge                               # print a 'Powered by ATLAS' README badge
 atlas anchors                             # list every SKILL anchor (machine-readable)
 atlas anchor add NAME "summary"           # append a stub anchor
@@ -385,17 +385,17 @@ ATLAS is **a harness performance tool disguised as documentation**. Three measur
 
 Then on-demand `Read` for one specific module the agent needs (1–5k). Net per session: **~5–10k vs ~55–180k.**
 
-> **TL;DR: 10–30× reduction on orientation phase, ~10–25% reduction on total session token cost** for codebase-exploration tasks. Bigger codebase = bigger win.
+> **TL;DR: orientation phase — 12.8× ([measured](docs/benchmarks/RESULTS.md), 92%) on this repo, scaling toward 30× on large codebases.** Total session cost: ~10–25% *(estimate — not yet benchmarked)*. Bigger codebase = bigger win.
 
 ### 2. Bugs not re-made *(compounding win, pays dividends over months)*
 
-Every SKILL anchor (`§NAME-LIKE-THIS`) is a scar another agent will not re-create. **Audit your own value**: `git log --grep "§"` — every commit citing an anchor is a turn where an agent (or human) skipped 2–10 minutes of re-debugging a known issue.
+Every SCARS anchor (`§NAME-LIKE-THIS`) is a scar another agent will not re-create. **Audit your own value**: `git log --grep "§"` — every commit citing an anchor is a turn where an agent (or human) skipped 2–10 minutes of re-debugging a known issue.
 
 A 6-month-old codebase with 20 anchors and an active team can save **5–15 person-hours per week** in not-re-debugging tax. At $150/hr engineering rate, that's $30k–$90k/year per project, just from the SKILL-anchor mechanism.
 
 ### 3. Bad PRs not opened *(silent win, human-review-time)*
 
-CLAUDE.md §3 (*"Surgical changes — touch only what you must"*) suppresses the **"while I'm here" cleanup commits** that bloat PRs and balloon human review time. Empirically (from ~50 PRs reviewed across teams adopting an ATLAS-style behavioral contract): **30–60% fewer non-load-bearing changes per PR**. Not token savings — reviewer-attention savings, which often dominate engineering throughput.
+CLAUDE.md §3 (*"Surgical changes — touch only what you must"*) suppresses the **"while I'm here" cleanup commits** that bloat PRs and balloon human review time. Estimated from ~50 PRs reviewed across teams adopting an ATLAS-style behavioral contract: **~30–60% fewer non-load-bearing changes per PR** *(estimate — not benchmarked here)*. Not token savings — reviewer-attention savings, which often dominate engineering throughput.
 
 ### Where the savings come from *(visualised)*
 
@@ -559,7 +559,7 @@ The SessionStart hook auto-prints `ATLAS.md §0 + §1` (~1.4k tokens) and `SKILL
 
 Without ATLAS, the agent typically runs `ls`, `find`, `git ls-files`, opens 3–5 files, and asks 3–5 clarifying questions to orient itself — adding up to ~55–180k tokens across 10–30 tool calls.
 
-Net: **10–30× reduction on the orientation phase**, ~10–25% reduction on total session token cost for codebase-exploration tasks. See the [Performance section](#performance--how-much-does-atlas-actually-save) for the full breakdown + honest caveats.
+Net: **12.8× orientation reduction ([measured](docs/benchmarks/RESULTS.md), 92%) on this repo** — scaling toward 30× on large codebases; ~10–25% on total session cost *(estimate)*. See the [Performance section](#performance--how-much-does-atlas-actually-save) for the full breakdown + honest caveats.
 
 </details>
 
