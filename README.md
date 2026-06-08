@@ -1,13 +1,21 @@
 # ATLAS — Agentic Harness Standard — for better multi agents performance, agents token and context reduction by design, graph based. Zero infrastructure. 
 
-> ## 10–30× fewer orientation tokens. Zero infrastructure.
+> ## −92% agent orientation tokens (12.8×) — *measured, not claimed*. Bigger on larger repos.
 >
-> Stop your agents from burning **100k+ tokens per session** on `ls`, `find`, `grep`, and `git ls-files` just to figure out where things live. **Three Markdown files** ship the project graph, the scar playbook, and the behavior contract into context **before the first tool call** — every Claude / Codex / Cursor / Gemini / Zed / OpenCode / Copilot / Hermes session.
+> Stop your agents from burning **100k+ tokens per session** on `ls`, `find`, `grep`, and `git ls-files` just to figure out where things live. **Four Markdown files** ship the project map, the task playbook, the scar memory, and the behavior contract into context **before the first tool call** — every Claude / Codex / Cursor / Gemini / Zed / OpenCode / Copilot / Hermes session.
+>
+> Not a claim — **[benchmarked + logged](docs/benchmarks/RESULTS.md)**: 12.8× (92%) on this very repo, reproducible with `atlas bench`.
 >
 > **Don't grep. Don't guess. Don't repeat.**
 
 <p align="center">
   <img src="assets/logo.svg" alt="ATLAS" width="180" />
+</p>
+
+<p align="center">
+  <a href="docs/benchmarks/RESULTS.md"><img src="https://img.shields.io/badge/orientation_tokens-%E2%88%9292%25_measured-06b6d4?style=for-the-badge&logo=markdown&logoColor=white" alt="92% fewer orientation tokens (measured)"></a>
+  <a href="docs/benchmarks/RESULTS.md"><img src="https://img.shields.io/badge/benchmark-reproducible-22c55e?style=for-the-badge" alt="reproducible benchmark"></a>
+  <a href="#install--pick-your-flavor"><img src="https://img.shields.io/badge/install-npm·brew·apt·AUR·PPA-f59e0b?style=for-the-badge" alt="install channels"></a>
 </p>
 
 <p align="center">
@@ -90,6 +98,33 @@ The hook fires once per session, before the agent's first action.
 Plus `[EXAMPLES.md](templates/EXAMPLES.md.tmpl)` — vague→concrete transformations that teach the patterns by contrast.
 
 **Net:** ~1.8k tokens of project orientation lands in the agent's context **before the first tool call**, eliminating 10–30 redundant `ls`/`find`/`grep`/`read` round trips per session.
+
+---
+
+## Benchmarks — measured, not just claimed
+
+ATLAS ships an A/B benchmark (`atlas bench`) and appends every run to a
+[ledger](docs/benchmarks/RESULTS.md) so the reduction is trackable across
+versions, models, and dates. First result on **this repo** (deterministic, reproducible):
+
+| Orientation context | tokens |
+|---|---|
+| Raw-repo sweep (README + file tree + source heads) | 16,571 |
+| ATLAS §0–1 spine (auto-injected before the first tool call) | 1,297 |
+| **Reduction** | **92% — 12.8×** |
+
+```bash
+# any OpenAI-compatible endpoint (incl. a local vLLM), free + deterministic:
+atlas bench --runtime openai --api-base http://localhost:8000/v1 --model <model>
+# or a live agentic A/B with a real coding agent:
+atlas bench --runtime claude   # or codex | opencode
+```
+
+The raw sweep grows with codebase size while the spine stays ~constant, so on
+large repos the reduction climbs toward 97%. In **multi-agent** setups it
+compounds — every sub-agent pays the orientation tax independently, and ATLAS
+pays it once into the shared quartet. Methodology + honesty rules:
+[docs/benchmarks/methodology.md](docs/benchmarks/methodology.md).
 
 ---
 

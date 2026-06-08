@@ -1,7 +1,7 @@
 {
   "name": "@alainabbasi/atlas",
-  "version": "0.1.4",
-  "description": "ATLAS — Agentic Harness Standard. 10–30× fewer orientation tokens. Zero infrastructure. Three Markdown files every Claude/Codex/Cursor/Gemini/Zed/OpenCode/Copilot/Hermes session reads first.",
+  "version": "0.1.5",
+  "description": "ATLAS — Agentic Harness Standard. ~92% fewer agent orientation tokens (measured, reproducible). Zero infrastructure. Four Markdown files every Claude/Codex/Cursor/Gemini/Zed/OpenCode/Copilot/Hermes session reads first.",
   "license": "MIT",
   "homepage": "https://github.com/Abbasi-Alain/atlas#readme",
   "repository": {

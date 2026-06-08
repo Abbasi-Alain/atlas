@@ -8,13 +8,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+_Nothing yet — the next `git push --tags` cuts a release._
+
+---
+
+## [0.1.5] — 2026-06-08
+
 ### Added
 
-- `atlas bench` is now **provider-agnostic + reproducible**: `--model`, `--effort`, and `--exec '<cmd>'` (any provider via `$ATLAS_BENCH_TASK`); records runtime version + model + effort + date + repo sha; writes a **Markdown report** (with tables) alongside the JSON; claude token parsing now handles the streamed JSON-array output (sums per-turn input tokens, reads cost/turns from the result event). Built-in runtimes: **claude, codex, opencode, and `openai`** — the last a deterministic single-shot mode that points at any OpenAI-compatible endpoint (`--api-base`, e.g. a local vLLM/Qwen) and measures `prompt_tokens` for the quartet vs the raw repo. First measured result (qwen3.6-35b, atlas repo): **80% fewer input tokens**.
+- `atlas bench` is now **provider-agnostic + reproducible**: `--model`, `--effort`, and `--exec '<cmd>'` (any provider via `$ATLAS_BENCH_TASK`); records runtime version + model + effort + date + repo sha; writes a **Markdown report** (with tables) alongside the JSON; claude token parsing now handles the streamed JSON-array output (sums per-turn input tokens, reads cost/turns from the result event). Built-in runtimes: **claude, codex, opencode, and `openai`** — the last a deterministic single-shot mode that points at any OpenAI-compatible endpoint (`--api-base`, e.g. a local vLLM/Qwen) and measures the orientation context (the §0-1 spine vs the raw repo) with **deterministic local tokenization** — reproducible + endpoint-independent (the endpoint's `usage` is recorded only as a cross-check, after a local vLLM reported inconsistent counts under prefix caching). Every run appends to a **ledger** (`docs/benchmarks/RESULTS.md` + `results/ledger.jsonl`) for longitudinal comparison. First measured result (atlas repo): **92% fewer orientation tokens — 12.8×**.
 
 ### Fixed
 
 - `bin/atlas` `ATLAS_VERSION` was stuck at `0.1.0`, so the shipped CLI reported the wrong version. Bumped to match the release; SCARS §CLI-VERSION-DRIFT documents keeping it in sync with `package.json`.
+
+### Changed
+
+- README + GitHub now lead with the **measured** −92% (12.8×) orientation-token result + a one-command reproduce + benchmark badges; `package.json` description updated; hero reflects the quartet (four files). Turns CRITICS #1's claim into proof.
 
 ---
 
@@ -121,7 +131,8 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.0...v0.1.2
