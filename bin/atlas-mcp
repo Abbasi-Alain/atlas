@@ -235,8 +235,45 @@ def _mid(name):
     return re.sub(r"[^A-Za-z0-9]", "_", name) or "n"
 
 
-def render_map(html=False):
-    """Build a Mermaid graph of the repo from ATLAS.md §1's | Node | Role | Talks-to | table."""
+def _render_ascii(title, nodes, edges):
+    """A terminal-friendly Unicode graph: fan-out adjacency + standalone modules."""
+    out_adj, indeg, seen = {}, {nid: 0 for nid in nodes}, set()
+    for s, d in edges:
+        if (s, d) in seen:
+            continue
+        seen.add((s, d))
+        out_adj.setdefault(s, []).append(d)
+        indeg[d] = indeg.get(d, 0) + 1
+    L = ["  \U0001f5fa  %s — module map" % title,
+         "  " + "─" * 46 + "  from ATLAS.md §1", ""]
+    any_edge = False
+    for nid in nodes:
+        tgts = out_adj.get(nid)
+        if not tgts:
+            continue
+        any_edge = True
+        if len(tgts) == 1:
+            L.append("  %s ──▶ %s" % (nodes[nid], nodes[tgts[0]]))
+        else:
+            L.append("  %s" % nodes[nid])
+            for i, t in enumerate(tgts):
+                conn = "└─▶" if i == len(tgts) - 1 else "├─▶"
+                L.append("    %s %s" % (conn, nodes[t]))
+    iso = [nodes[nid] for nid in nodes if nid not in out_adj and indeg.get(nid, 0) == 0]
+    if iso:
+        if any_edge:
+            L.append("")
+        L.append("  ○ standalone: " + "   ".join(iso))
+    L += ["", "  %d modules · %d links   (--mermaid for Markdown · --html for a page)"
+          % (len(nodes), len(seen))]
+    return "\n".join(L)
+
+
+def render_map(html=False, fmt=None):
+    """Render the repo graph from ATLAS.md §1's | Node | Role | Talks-to | table.
+    fmt: 'ascii' (terminal), 'mermaid' (Markdown), or 'html'. html=True ⇒ 'html'."""
+    if fmt is None:
+        fmt = "html" if html else "mermaid"
     a = _read(_atlas_md())
     if not a:
         return "No ATLAS.md in %s — run `atlas init`." % proj()
@@ -265,13 +302,16 @@ def render_map(html=False):
                         edges.append((nid, rid))
     if not nodes:
         return "No module table in ATLAS.md §1 — add a | Node | Role | Talks-to | table, then re-run."
+    title = os.path.basename(proj().rstrip("/")) or "project"
+    if fmt == "ascii":
+        return _render_ascii(title, nodes, edges)
     mer = ["flowchart LR"]
     mer += ['  %s["%s"]' % (nid, lab.replace('"', "'")) for nid, lab in nodes.items()]
     mer += ["  %s --> %s" % (s, d) for (s, d) in dict.fromkeys(edges)]
     mermaid = "\n".join(mer)
-    if not html:
+    if fmt != "html":
         return "```mermaid\n%s\n```" % mermaid
-    return _MAP_HTML % {"title": os.path.basename(proj().rstrip("/")) or "project", "mermaid": mermaid}
+    return _MAP_HTML % {"title": title, "mermaid": mermaid}
 
 
 _MAP_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -435,8 +475,10 @@ def main():
     if args and args[0] == "--orient":          # one-shot CLI: `atlas orient [task]`
         print(t_orient({"task": " ".join(args[1:])}))
         return
-    if args and args[0] == "--map":             # one-shot CLI: `atlas map [--html]`
-        print(render_map(html=("--html" in args[1:])))
+    if args and args[0] == "--map":             # one-shot CLI: `atlas map [--ascii|--mermaid|--html]`
+        rest = args[1:]
+        fmt = "html" if "--html" in rest else "ascii" if "--ascii" in rest else "mermaid"
+        print(render_map(fmt=fmt))
         return
     if "--http" in args:
         serve_http(os.environ.get("ATLAS_MCP_HOST", "127.0.0.1"),

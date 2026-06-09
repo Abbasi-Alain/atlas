@@ -96,7 +96,8 @@ fi
 if command -v python3 >/dev/null 2>&1; then
   "$CLI" orient >/dev/null 2>&1 && _pass "orient (no task) runs" || _fail "orient full"
   ATLAS_PROJECT="$TMP" "$CLI" orient "add validation" 2>/dev/null | grep -q 'oriented for: add validation' && _pass "orient (task) returns a scoped view" || _fail "orient task-scoped"
-  ATLAS_PROJECT="$TMP" "$CLI" map 2>/dev/null | grep -q 'flowchart' && _pass "map emits a Mermaid graph" || _fail "map mermaid"
+  ATLAS_PROJECT="$TMP" "$CLI" map 2>/dev/null | grep -q 'flowchart' && _pass "map emits a Mermaid graph (piped → Markdown)" || _fail "map mermaid"
+  ATLAS_PROJECT="$TMP" "$CLI" map --ascii 2>/dev/null | grep -q 'module map' && _pass "map --ascii draws a Unicode graph" || _fail "map ascii"
   ATLAS_PROJECT="$TMP" "$CLI" map --html 2>/dev/null | grep -q 'mermaid.min.js' && _pass "map --html emits a standalone page" || _fail "map html"
 else
   _pass "orient/map tests skipped (no python3)"

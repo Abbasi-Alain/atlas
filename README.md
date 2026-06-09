@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/atlas-demo.gif" alt="atlas CLI — version · help · init · check · anchors · install --runtime · mirror init" width="900" />
+  <img src="assets/atlas-demo.gif" alt="atlas CLI — onboard (scaffold + auto-draft map + measure) · map · mcp · hooks · check" width="900" />
 </p>
 
 <p align="center">
@@ -268,8 +268,18 @@ Sharing with a team? `atlas mcp --http --token "$SECRET"` serves the same tools 
 
 ## Superpowers
 
+<p align="center">
+  <img src="assets/atlas-orient.gif" alt="atlas orient &quot;fix the release tag workflow&quot; — only the relevant slice of the map, the playbook anchor, and the SCARS that bite this task" width="820" />
+  <br><em><code>atlas orient "&lt;task&gt;"</code> — the relevant slice of the map + the SCARS that bite <em>this</em> task.</em>
+</p>
+
+<p align="center">
+  <img src="assets/atlas-map.gif" alt="atlas map — a Unicode graph of the repo in your terminal; Mermaid when piped to a Markdown file" width="820" />
+  <br><em><code>atlas map</code> — a Unicode graph in the terminal; pipe it to a <code>.md</code> for GitHub-rendered Mermaid.</em>
+</p>
+
 - **Task-aware orientation** — `atlas orient "fix the failing auth test"` returns *only* the relevant slice of the map **plus the SCARS that bite that task** — not the whole file. Over MCP too (`atlas_orient(task)`). The agent's first move, conditioned on the job. Nobody else does this.
-- **A picture of your repo** — `atlas map` emits a **Mermaid** graph (renders right here on GitHub) or `atlas map --html` for a standalone page to screenshot.
+- **A picture of your repo** — `atlas map` draws a **Unicode graph right in your terminal**; pipe it to a file (`atlas map > map.md`) and it's a **Mermaid** diagram that renders on GitHub, or `atlas map --html` for a standalone page to screenshot.
 - **The ATLAS PR bot** — drop `uses: Abbasi-Alain/atlas@v1` into a workflow and every PR gets a sticky comment with the measured **−92→99% orientation savings** + map-drift status. Zero hosting — runs in your CI. *(This repo runs it on its own PRs.)*
 - **A map that never goes stale** — `atlas hooks install --auto` adds a git pre-commit hook that auto-refreshes `ATLAS.md §0.5` on structural change and stages it *into the commit*. Docs-as-code that can't rot.
 - **ATLAS conducts the ecosystem** — the MCP deep tools (`atlas_graph`, `atlas_deepsearch`) light up when **graphify** or **CodeGraphContext** is installed and route the query to it. Orient free via ATLAS, drill down via whatever you've got.
