@@ -23,6 +23,8 @@ after a one-command `atlas onboard` (an **auto-drafted** map, no hand-tuning).
 | [expressjs/express](https://github.com/expressjs/express) | 213 | ~7,136 → ~1,332 tok | **−81%** | ~130× |
 | [django/django](https://github.com/django/django) | 7,063 | ~6,822 → ~1,533 tok | **−78%** | ~3500× |
 | [curl/curl](https://github.com/curl/curl) | ~4,000 | ~7,730 → ~1,721 tok | **−78%** | 1961× |
+| [langchain-ai/langgraph](https://github.com/langchain-ai/langgraph) | 665 | ~11,583 → ~1,314 tok | **−89%** | — |
+| [langchain-ai/langchain](https://github.com/langchain-ai/langchain) | 2,898 | ~11,206 → ~1,366 tok | **−88%** | — |
 | [gin-gonic/gin](https://github.com/gin-gonic/gin) | 130 | ~8,913 → ~1,930 tok | **−78%** | ~100× |
 | [pallets/flask](https://github.com/pallets/flask) | 236 | ~5,428 → ~1,362 tok | **−75%** | ~150× |
 
@@ -41,7 +43,12 @@ atlas measure      # the numbers above
 No agent, no API key, no spend — `atlas measure` tokenizes a *fixed* context
 locally, so the result is reproducible and endpoint-independent.
 
-> Honest caveats: the "with ATLAS" spine is the **auto-drafted** map from
-> `atlas init --analyze` (a hand-refined ATLAS.md is tighter still); and the
-> whole-repo column is an upper bound (few tools load the entire repo). The
-> **−75–94% vs a smart skim is the number to trust.**
+> **Honest caveats.** These numbers measure the **orientation *surface*** — how
+> much smaller the context an agent loads to self-orient becomes. They are **not**
+> whole-task performance. In an N=1 *agentic* run on fastapi, a **raw auto-drafted**
+> map actually made claude take *more* turns (it added context without pointing at
+> the answer) — the agentic win needs a **hand-curated** §0 ("where X lives"), which
+> the auto-draft isn't yet. So: the **−75–94% surface reduction is real and
+> reproducible**; the end-to-end agentic payoff depends on map *quality* and grows
+> as the map is refined (see [ROADMAP](ROADMAP.md) — "ATLAS gets better with usage").
+> The whole-repo column is an upper bound (few tools load the entire repo).
