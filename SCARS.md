@@ -112,7 +112,17 @@ the exit. Add a regression test that runs `measure` on a **>400-file** repo.
 <a id="bash-monolith"></a>
 ### §BASH-MONOLITH — `bin/atlas` is one ~2k-line file; keep it green
 
-**Do NOT.** Add a runtime dependency (node/python/jq) to the core path.
+**Why one file (deliberate).** ATLAS ships as a single zero-dep script that
+`install.sh`, the npm wrapper, brew, `.deb`, AUR and PPA all distribute *as-is*.
+Splitting into `lib/*.sh` would mean every install path ships and `source`s the
+right files from the right location — real distribution risk for ~no user
+benefit. So the monolith stays. Rigor comes from `shellcheck` + the 80+ test
+`tests/bootstrap.test.sh` + the macOS/Linux CI matrix, **not** from modularizing.
+
+**Do NOT.** Add a runtime dependency (node/python/jq) to the core path. Don't
+split the monolith into modules. Don't add a blocking `shfmt` gate — it would
+force a full reformat of the hand-tuned file; `shellcheck` already guards
+correctness (contributors may run `shfmt -d` locally if they like).
 
 **Do.** Keep changes `shellcheck`-clean (CI enforces). Mirror the existing
 `cmd_*` + flag-parse + dispatch + header-doc pattern when adding a command.

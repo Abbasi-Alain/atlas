@@ -21,7 +21,10 @@ git push origin main --tags
 
 1. **`release.yml`** fires on the tag push.
    - Extracts the CHANGELOG entry for the new version.
-   - Creates the GitHub release with that body.
+   - Builds a reproducible source tarball (`atlas-X.Y.Z.tar.gz` via `git archive`) + `checksums.txt`.
+   - Signs **SLSA build provenance** for the tarball (keyless, Sigstore — `actions/attest-build-provenance`; needs `id-token: write` + `attestations: write`).
+   - Creates the GitHub release with that body + the tarball + checksums attached.
+   - Verify later with `gh attestation verify atlas-X.Y.Z.tar.gz --repo Abbasi-Alain/atlas`.
    - The release `published` event then triggers all the channel-specific workflows in parallel:
 
 2. **`release-npm.yml`** — publishes `@alainabbasi/atlas@X.Y.Z` to npm with provenance.
