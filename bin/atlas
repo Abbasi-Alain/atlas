@@ -24,6 +24,8 @@
 #                                     e.g. local vLLM). Writes JSON + Markdown.
 #   atlas map [--html] [--out F]      render the repo as a Mermaid graph (or a
 #                                     standalone HTML page) — shareable, GitHub-native
+#   atlas hooks install [--auto]      git pre-commit hook so ATLAS.md never goes stale
+#                                     (--auto: auto-refresh §0.5 + stage it)
 #   atlas orient ["task"]             print the map — or just the slice relevant
 #                                     to "task" (what the MCP atlas_orient serves)
 #   atlas mcp [--config] [--http]     run the MCP server — serve the map to any
@@ -93,7 +95,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.1.8"
+ATLAS_VERSION="0.1.9"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -304,13 +306,16 @@ _analyze_inject() {
 | Top-level | Likely role |
 |---|---|
 ${inv}"
-  local before after
-  before="$(awk '/^## 1\./{exit} {print}' "$atlas")"
-  after="$(awk '/^## 1\./{p=1} p' "$atlas")"
+  # idempotent: strip any prior auto-detected block (## 0.5 … up to the next ##)
+  # so re-running (e.g. from the self-maintaining hook) refreshes instead of duplicating.
+  local cleaned before after
+  cleaned="$(awk '/^## 0\.5 Auto-detected/{skip=1; next} skip&&/^## /{skip=0} !skip' "$atlas")"
+  before="$(printf '%s\n' "$cleaned" | awk '/^## 1\./{exit} {print}')"
+  after="$(printf '%s\n' "$cleaned" | awk '/^## 1\./{p=1} p')"
   if [[ -n "$after" ]]; then
     printf '%s\n\n%s\n%s\n' "$before" "$block" "$after" > "$atlas"
   else
-    printf '%s\n\n%s\n' "$(cat "$atlas")" "$block" > "$atlas"
+    printf '%s\n\n%s\n' "$cleaned" "$block" > "$atlas"
   fi
 }
 
@@ -1987,10 +1992,11 @@ cmd_help() {
 # --badge prints a shields.io badge with the savings %, for the README.
 # ---------------------------------------------------------------------------
 cmd_measure() {
-  local want_badge=0
+  local want_badge=0 want_share=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --badge) want_badge=1; shift ;;
+      --share) want_share=1; shift ;;
       *)       shift ;;
     esac
   done
@@ -2068,6 +2074,26 @@ cmd_measure() {
   _say "method: 'with' = ATLAS+SKILL+SCARS+CLAUDE spine; 'without' ranges from a"
   _say "        smart skim (README+tree+heads) to the whole repo. Estimate (bytes÷4)."
   _say "shareable README badge:  $(_c_dim 'atlas measure --badge')"
+
+  if [[ $want_share -eq 1 ]]; then
+    local repo date_s row title body url
+    repo="$(basename "$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || echo "$PWD")")"
+    date_s="$(date +%Y-%m-%d)"
+    row="| ${repo} | ~${without_t} → ${with_t} tok | −${pct}% to −${pct_hi}% | ${date_s} |"
+    echo ""
+    _banner "🏆" "share your savings $(_c_dim '(grow the leaderboard)')"
+    echo "  Leaderboard row (paste into docs/LEADERBOARD.md or the issue):"
+    echo "    ${row}"
+    if _have python3; then
+      title="ATLAS savings: ${repo} (−${pct}% to −${pct_hi}%)"
+      body="Add my repo to the leaderboard:  ${row}  — reproduced with 'atlas measure'."
+      url="$(python3 -c 'import sys,urllib.parse as u; print("https://github.com/Abbasi-Alain/atlas/issues/new?labels=leaderboard&title=%s&body=%s"%(u.quote(sys.argv[1]),u.quote(sys.argv[2])))' "$title" "$body")"
+      echo ""
+      echo "  One-click submit:"
+      echo "    $(_c_dim "$url")"
+    fi
+    _say "the board lives at docs/LEADERBOARD.md"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -2735,6 +2761,51 @@ PY
   _say "comparable across runs (version+model+effort+date+sha recorded). Methodology: docs/benchmarks/methodology.md"
 }
 
+# hooks — install a git pre-commit hook that keeps ATLAS.md from going stale.
+#   atlas hooks install [--auto]   warn on map drift (--auto: refresh §0.5 + stage it)
+#   atlas hooks uninstall          remove the atlas hook block
+#   atlas hooks status             is it installed?
+cmd_hooks() {
+  local sub="${1:-status}"; [[ $# -gt 0 ]] && shift
+  local auto=0 a; for a in "$@"; do [[ "$a" == "--auto" ]] && auto=1; done
+  local gd; gd="$(git rev-parse --git-dir 2>/dev/null)" || _die "not a git repository."
+  local hook="$gd/hooks/pre-commit"
+  local START="# >>> atlas self-maintaining map >>>" END="# <<< atlas self-maintaining map <<<"
+  case "$sub" in
+    install)
+      mkdir -p "$gd/hooks"
+      local body="#!/usr/bin/env bash"
+      if [[ -f "$hook" ]]; then
+        body="$(awk -v s="$START" -v e="$END" '$0==s{skip=1} !skip{print} $0==e{skip=0}' "$hook")"
+        [[ "$body" == *'#!'* ]] || body="#!/usr/bin/env bash"$'\n'"$body"
+      fi
+      local action
+      if [[ $auto -eq 1 ]]; then
+        action='atlas init --analyze >/dev/null 2>&1 && git add ATLAS.md && echo "atlas: refreshed ATLAS.md §0.5 — map kept current"'
+      else
+        action='echo "atlas: structural change without an ATLAS.md update — run: atlas init --analyze  (or: atlas hooks install --auto)" >&2'
+      fi
+      {
+        printf '%s\n' "$body" "$START" \
+          'command -v atlas >/dev/null 2>&1 || exit 0' \
+          'atlas check --changed-files >/dev/null 2>&1 && exit 0' \
+          "$action" "$END"
+      } > "$hook"
+      chmod +x "$hook"
+      _ok "installed pre-commit hook$([[ $auto -eq 1 ]] && echo ' (--auto: auto-refreshes §0.5)') → $(_c_dim "$hook")"
+      ;;
+    uninstall)
+      [[ -f "$hook" ]] || { _say "no pre-commit hook."; return 0; }
+      awk -v s="$START" -v e="$END" '$0==s{skip=1} !skip{print} $0==e{skip=0}' "$hook" > "$hook.tmp" && mv "$hook.tmp" "$hook"
+      _ok "removed the atlas hook block."
+      ;;
+    status)
+      if [[ -f "$hook" ]] && grep -qF "$START" "$hook"; then _ok "self-maintaining hook is installed."; else _say "not installed — run 'atlas hooks install'."; fi
+      ;;
+    *) _die "usage: atlas hooks <install [--auto] | uninstall | status>" ;;
+  esac
+}
+
 # map — render the repo's structure (ATLAS.md §1) as a shareable diagram.
 #   atlas map                    a Mermaid graph (renders natively on GitHub)
 #   atlas map --html [--out f]   a standalone HTML page (mermaid.js) — screenshot it
@@ -2825,6 +2896,7 @@ main() {
     measure)  cmd_measure "$@" ;;
     bench)    cmd_bench "$@" ;;
     map)      cmd_map "$@" ;;
+    hooks)    cmd_hooks "$@" ;;
     orient)   cmd_orient "$@" ;;
     mcp)      cmd_mcp "$@" ;;
     doctor)   cmd_doctor "$@" ;;
