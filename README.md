@@ -228,14 +228,28 @@ Open a new agent session in any project with these files. The agent's first acti
 
 ## Plug into any agent — the MCP server
 
-ATLAS ships a **zero-dependency Model Context Protocol server**, so *any* MCP client — Claude Code, Cursor, OpenClaw, Codex, Gemini — reads the map directly instead of grepping:
+ATLAS ships a **zero-dependency Model Context Protocol server**, so *any* MCP client — Claude Code, Cursor, OpenClaw, NemoClaw, Codex, Gemini — reads the map directly instead of grepping:
 
 ```bash
 atlas mcp --config                  # prints the registration snippet
 claude mcp add atlas -- atlas mcp   # or paste the snippet into .mcp.json / Cursor
 ```
 
-**One snippet, every platform.** Claude Code · Cursor · OpenClaw · opencrust · NVIDIA NemoClaw · Hermes · zeroclaw · Codex · Gemini · Windsurf · Zed all register MCP servers the same way → [add ATLAS to any of them in 30 seconds](docs/INTEGRATIONS.md#-the-30-second-way--mcp-works-in-every-modern-agent).
+**One snippet, every platform — and there's no per-platform code to write.** MCP is a
+*standard*: every MCP-native runtime loads the **same** `mcpServers` block. The server is
+conformance-tested (protocol `2024-11-05`; tools `atlas_orient · atlas_find · atlas_scars ·
+atlas_measure`), so if a platform speaks MCP, ATLAS already works in it:
+
+| Platform | Drop the `mcpServers` block into… |
+|---|---|
+| **Claude Code** | `claude mcp add atlas -- atlas mcp`  ·  or project `.mcp.json` |
+| **Cursor · Windsurf · Zed** | `~/.cursor/mcp.json` · `windsurf/mcp_config.json` · `settings.json → context_servers` |
+| **OpenClaw · opencrust** | the platform's MCP registry / config file |
+| **NVIDIA NemoClaw** | the OpenShell MCP config |
+| **zeroclaw · Qwen** (qwen-code) | `mcpServers` + the auto-generated `AGENTS.md` — a fully local, free stack |
+| **Codex · Gemini · any MCP client** | paste the `atlas mcp --config` block verbatim |
+
+→ [full matrix + exact paths](docs/INTEGRATIONS.md#-the-30-second-way--mcp-works-in-every-modern-agent).
 
 Four local tools — no infra, no embeddings, no API key:
 
@@ -410,6 +424,7 @@ Either way, `atlas auth login` automates the setup — interactive picker, or pa
 | [Zed](https://zed.dev)                                            | ✅ supported   | `[adapters/zed/](adapters/zed/)` — `.zed/atlas.md` + agents.md               |
 | [GitHub Copilot Chat](https://github.com/features/copilot)        | ✅ supported   | `[adapters/copilot/](adapters/copilot/)` — `.github/copilot-instructions.md` |
 | [Hermes](https://github.com/NousResearch/Hermes-Function-Calling) | ✅ supported   | `[adapters/hermes/](adapters/hermes/)` — system-prompt fragment              |
+| **MCP-native** — OpenClaw · NemoClaw · opencrust · zeroclaw · Qwen · Windsurf | ✅ via MCP | the `atlas mcp` server — one `mcpServers` snippet, [30-sec setup](docs/INTEGRATIONS.md#-the-30-second-way--mcp-works-in-every-modern-agent) |
 | Any other                                                         | ✅ generic     | `[adapters/generic/](adapters/generic/)` — manual hook                       |
 
 
