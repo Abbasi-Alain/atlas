@@ -31,7 +31,8 @@ Drop that block into the platform's MCP config:
 | **opencrust** | its config (see opencrust `docs/src/mcp.md`) |
 | **OpenClaw** | MCP registry / `~/.openclaw/…` |
 | **NVIDIA NemoClaw** | the OpenShell MCP config |
-| **Hermes · zeroclaw · Gemini · Codex** | their `mcpServers` config |
+| **Qwen** (qwen-code CLI · Qwen-Agent) | `AGENTS.md` (auto-generated) + `mcpServers` — a fully *local, free* stack with Qwen3-Coder |
+| **Hermes · zeroclaw · Gemini · Codex** | their `mcpServers` config (zeroclaw also reads the auto-generated `AGENTS.md`) |
 | **any MCP client** | paste the `atlas mcp --config` block |
 
 Your agents now get `atlas_orient`, `atlas_find`, `atlas_scars`, `atlas_measure`
