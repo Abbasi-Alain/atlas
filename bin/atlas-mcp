@@ -22,9 +22,9 @@
 #
 # Launch:  atlas mcp                 (stdio — what Claude Code/Cursor/OpenClaw spawn)
 # Spec:    docs/SPEC.md · part of the ATLAS standard (https://github.com/Abbasi-Alain/atlas)
-import sys, os, re, json, glob, subprocess, urllib.request, http.server
+import sys, os, re, json, glob, subprocess, shutil, urllib.request, http.server
 
-VERSION = "0.1.8"
+VERSION = "0.1.9"
 DEFAULT_PROTO = "2025-06-18"
 
 
@@ -189,9 +189,40 @@ def _backend(path, payload):
         return r.read().decode("utf-8", "replace")
 
 
-def t_graph(args):      return _backend("/graph",  {"project": proj(), "query": args.get("query", "")})
-def t_deepsearch(args): return _backend("/search", {"project": proj(), "query": args.get("query", "")})
-def t_recall(args):     return _backend("/recall", {"project": proj(), "query": args.get("query", "")})
+def _which(*names):
+    for n in names:
+        if shutil.which(n):
+            return n
+    return None
+
+
+def _route_deep(kind, query):
+    """ATLAS as conductor: prefer the configured backend (FuseGraph/FuseRAG); else
+    route to an installed ecosystem tool (graphify, CodeGraphContext). Free + local first."""
+    if os.environ.get("ATLAS_MCP_BACKEND_URL"):
+        return _backend({"search": "/search", "graph": "/graph", "recall": "/recall"}[kind],
+                        {"project": proj(), "query": query})
+    gf = _which("graphify")
+    if gf and kind in ("search", "graph"):
+        return _shell([gf, "query", query], "graphify")
+    cgc = _which("cgc", "codegraphcontext")
+    if cgc and kind == "graph":
+        return _shell([cgc, "query", query], "CodeGraphContext")
+    return ("No deep-%s backend available. Either set ATLAS_MCP_BACKEND_URL (e.g. FuseGraph/FuseRAG), "
+            "or install graphify / CodeGraphContext — ATLAS routes to whatever's present." % kind)
+
+
+def _shell(cmd, name):
+    try:
+        r = subprocess.run(cmd, cwd=proj(), capture_output=True, text=True, timeout=120)
+        return (r.stdout or r.stderr or "").strip() or "(%s returned nothing)" % name
+    except Exception as e:
+        return "%s error: %s" % (name, e)
+
+
+def t_graph(args):      return _route_deep("graph",  args.get("query", ""))
+def t_deepsearch(args): return _route_deep("search", args.get("query", ""))
+def t_recall(args):     return _route_deep("recall", args.get("query", ""))
 
 
 # ---- visual map (shareable Mermaid / HTML) -------------------------------
@@ -272,15 +303,19 @@ LOCAL_TOOLS = [
     ("atlas_measure", "The measured orientation-token reduction ATLAS buys this repo (vs a smart skim and a whole-repo dump).", _obj({}), t_measure),
 ]
 BACKEND_TOOLS = [
-    ("atlas_graph",      "Deep structural query (callers/callees, call chains, dead code) via the configured graph backend.", _obj(Q, ["query"]), t_graph),
-    ("atlas_deepsearch", "Semantic code/doc search via the configured vector backend.", _obj(Q, ["query"]), t_deepsearch),
-    ("atlas_recall",     "Recall relevant context from prior sessions via the configured backend.", _obj(Q, ["query"]), t_recall),
+    ("atlas_graph",      "Deep structural query (callers/callees, call chains, dead code). ATLAS routes to the configured backend (FuseGraph) or an installed graph tool (CodeGraphContext / graphify).", _obj(Q, ["query"]), t_graph),
+    ("atlas_deepsearch", "Semantic code/doc search. Routes to the configured vector backend (FuseRAG) or an installed tool (graphify).", _obj(Q, ["query"]), t_deepsearch),
+    ("atlas_recall",     "Recall relevant context from prior sessions (needs a configured backend, e.g. FuseRAG).", _obj(Q, ["query"]), t_recall),
 ]
+
+
+def _router_available():
+    return bool(os.environ.get("ATLAS_MCP_BACKEND_URL")) or bool(_which("graphify", "cgc", "codegraphcontext"))
 
 
 def tools():
     t = list(LOCAL_TOOLS)
-    if os.environ.get("ATLAS_MCP_BACKEND_URL"):
+    if _router_available():     # deep tools appear when a backend OR an ecosystem tool is present
         t += BACKEND_TOOLS
     return t
 

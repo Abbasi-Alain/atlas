@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Self-maintaining map** — `atlas hooks install [--auto]` adds a git pre-commit hook that catches map drift; `--auto` runs `atlas init --analyze` and stages the refreshed **§0.5 into the commit**, so ATLAS.md never goes stale. (`atlas hooks status` / `uninstall`.) Also made `init --analyze` **idempotent** — re-running refreshes §0.5 instead of duplicating it (it duplicated before).
+- **MCP router** — ATLAS now *conducts the ecosystem*: the deep tools (`atlas_graph` / `atlas_deepsearch`) appear when a backend **or** an installed graph/vector CLI (**graphify**, **CodeGraphContext**) is present, and ATLAS routes the query to it. Orient free via ATLAS, drill down via whatever's installed; a configured `ATLAS_MCP_BACKEND_URL` (FuseGraph/FuseRAG) still takes precedence.
+- **Leaderboard + share** — `atlas measure --share` prints your repo's leaderboard row **and a one-click pre-filled GitHub-issue link**; `docs/LEADERBOARD.md` is the board. Turns the −92→99% number into social proof.
+
 ## [0.1.8] — 2026-06-09
 
 ### Added

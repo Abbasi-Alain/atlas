@@ -266,5 +266,35 @@ n=$(grep -c "atlas-bootstrap:start" "$TMP_GEM/GEMINI.md")
 rm -rf "$TMP_GEM"
 
 echo ""
+echo "-- batch 2: self-maintaining map · leaderboard · router --"
+
+# init --analyze is idempotent (re-running refreshes §0.5, never duplicates it)
+TMP_ID="$(mktemp -d)"; ( cd "$TMP_ID" && git init -q && echo '{}'>package.json && mkdir s && touch s/a.js \
+  && "$CLI" init >/dev/null 2>&1 && "$CLI" init --analyze >/dev/null 2>&1 && "$CLI" init --analyze >/dev/null 2>&1 \
+  && [ "$(grep -c '0.5 Auto-detected' ATLAS.md)" = "1" ] ) && _pass "init --analyze is idempotent (1 §0.5 block)" || _fail "analyze idempotent"
+rm -rf "$TMP_ID"
+
+# self-maintaining map hook
+TMP_HK="$(mktemp -d)"; ( cd "$TMP_HK" && git init -q && "$CLI" init >/dev/null 2>&1 \
+  && "$CLI" hooks install --auto >/dev/null 2>&1 && [ -x .git/hooks/pre-commit ] ) \
+  && _pass "hooks install writes an executable pre-commit hook" || _fail "hooks install"
+( cd "$TMP_HK" && "$CLI" hooks status 2>&1 | grep -qi 'is installed' ) && _pass "hooks status: installed" || _fail "hooks status"
+( cd "$TMP_HK" && "$CLI" hooks uninstall >/dev/null 2>&1 && "$CLI" hooks status 2>&1 | grep -qi 'not installed' ) && _pass "hooks uninstall removes the block" || _fail "hooks uninstall"
+rm -rf "$TMP_HK"
+
+# leaderboard share
+( cd "$TMP" && "$CLI" measure --share 2>/dev/null | grep -q 'share your savings' ) && _pass "measure --share prints a submission" || _fail "measure --share"
+
+# MCP router: deep tools light up + route when an ecosystem CLI (stub graphify) is on PATH
+if command -v python3 >/dev/null 2>&1; then
+  GFD="$(mktemp -d)"; printf '#!/usr/bin/env bash\necho ok\n' > "$GFD/graphify"; chmod +x "$GFD/graphify"
+  printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | PATH="$GFD:$PATH" ATLAS_PROJECT="$TMP" "$CLI" mcp 2>/dev/null | grep -q 'atlas_graph' \
+    && _pass "mcp router: deep tools appear when graphify is on PATH" || _fail "mcp router detection"
+  rm -rf "$GFD"
+else
+  _pass "mcp router test skipped (no python3)"
+fi
+
+echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

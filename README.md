@@ -230,11 +230,14 @@ Sharing with a team? `atlas mcp --http --token "$SECRET"` serves the same tools 
 
 ---
 
-## Three more superpowers
+## Superpowers
 
 - **Task-aware orientation** — `atlas orient "fix the failing auth test"` returns *only* the relevant slice of the map **plus the SCARS that bite that task** — not the whole file. Over MCP too (`atlas_orient(task)`). The agent's first move, conditioned on the job. Nobody else does this.
 - **A picture of your repo** — `atlas map` emits a **Mermaid** graph (renders right here on GitHub) or `atlas map --html` for a standalone page to screenshot.
 - **The ATLAS PR bot** — drop `uses: Abbasi-Alain/atlas@v1` into a workflow and every PR gets a sticky comment with the measured **−92→99% orientation savings** + map-drift status. Zero hosting — runs in your CI. *(This repo runs it on its own PRs.)*
+- **A map that never goes stale** — `atlas hooks install --auto` adds a git pre-commit hook that auto-refreshes `ATLAS.md §0.5` on structural change and stages it *into the commit*. Docs-as-code that can't rot.
+- **ATLAS conducts the ecosystem** — the MCP deep tools (`atlas_graph`, `atlas_deepsearch`) light up when **graphify** or **CodeGraphContext** is installed and route the query to it. Orient free via ATLAS, drill down via whatever you've got.
+- **Leaderboard** — `atlas measure --share` prints your savings + a one-click submit link. See the [board](docs/LEADERBOARD.md).
 
 ---
 
