@@ -453,7 +453,8 @@ _check_drift() {
   [[ -z "$changed" ]] && { _ok "no drift (no changes vs ${ref:-HEAD})"; return 0; }
   atlas_changed=""
   printf '%s\n' "$changed" | grep -qE 'ATLAS\.md$' && atlas_changed=1
-  structural="$(printf '%s\n' "$changed" | grep -E '^[ADR]' | grep -vE 'ATLAS\.md|SCARS\.md|SKILL\.md|CLAUDE\.md|AGENTS\.md|EXAMPLES\.md|llms\.txt|\.md$|^.[[:space:]]+CHANGELOG|README' || true)"
+  # docs/ (benchmarks, leaderboard, flagship data, SPEC…) is not structural code.
+  structural="$(printf '%s\n' "$changed" | grep -E '^[ADR]' | grep -vE 'ATLAS\.md|SCARS\.md|SKILL\.md|CLAUDE\.md|AGENTS\.md|EXAMPLES\.md|llms\.txt|\.md$|(^|/)docs/|^.[[:space:]]+CHANGELOG|README' || true)"
   if [[ -n "$structural" && -z "$atlas_changed" ]]; then
     _fail "structural changes (add/move/remove) without an ATLAS.md update — the map may be stale (SCARS §ATLAS-IS-INDEX):"
     printf '%s\n' "$structural" | head -8 | sed 's/^/      /'
