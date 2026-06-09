@@ -2,7 +2,7 @@
   "meta": {
     "runtime": "codex",
     "runtime_version": "codex-cli 0.130.0",
-    "model": "default",
+    "model": "gpt-5.5",
     "effort": "high",
     "atlas_version": "0.1.5",
     "date_utc": "2026-06-08T13:32:22Z",

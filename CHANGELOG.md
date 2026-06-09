@@ -10,6 +10,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **`atlas onboard [--pr]`** — drop ATLAS into any repo in one command: scaffold the quartet, auto-draft the map, measure the savings, and (with `--pr`) open a pull request via `gh`. The zero-friction "spread" path.
+- **Deeper `init --analyze`** — the auto-draft now generates a real **§0 "Where to look" table** *and* a **§1 module graph** with detected **talks-to** dependency edges (grep-based, language-agnostic). A fresh repo gets a near-complete map — and a real `atlas map` picture — out of the box, so the first 60 seconds don't start from a blank page.
+
+### Fixed
+
+- `atlas bench --runtime codex` now records codex's **real model** (read from `~/.codex/config.toml` when no `--model` is passed) instead of `default` — `codex exec --json`'s stdout never carries it. Existing codex ledger rows back-filled to `gpt-5.5`.
+- `atlas measure` no longer prints a nonsensical negative reduction on a **tiny repo** (where the quartet spine exceeds the whole repo); it shows an honest "light overhead now, grows with the codebase" note.
+
+## [0.1.9] — 2026-06-09
+
+### Added
+
 - **Self-maintaining map** — `atlas hooks install [--auto]` adds a git pre-commit hook that catches map drift; `--auto` runs `atlas init --analyze` and stages the refreshed **§0.5 into the commit**, so ATLAS.md never goes stale. (`atlas hooks status` / `uninstall`.) Also made `init --analyze` **idempotent** — re-running refreshes §0.5 instead of duplicating it (it duplicated before).
 - **MCP router** — ATLAS now *conducts the ecosystem*: the deep tools (`atlas_graph` / `atlas_deepsearch`) appear when a backend **or** an installed graph/vector CLI (**graphify**, **CodeGraphContext**) is present, and ATLAS routes the query to it. Orient free via ATLAS, drill down via whatever's installed; a configured `ATLAS_MCP_BACKEND_URL` (FuseGraph/FuseRAG) still takes precedence.
 - **Leaderboard + share** — `atlas measure --share` prints your repo's leaderboard row **and a one-click pre-filled GitHub-issue link**; `docs/LEADERBOARD.md` is the board. Turns the −92→99% number into social proof.
@@ -166,7 +178,9 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.9...v0.1.10
+[0.1.9]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.5...v0.1.6
