@@ -8,6 +8,41 @@ This guide covers the supported runtimes. Each integration aims to give your age
 
 ---
 
+## ⚡ The 30-second way — MCP (works in *every* modern agent)
+
+ATLAS ships a Model Context Protocol server, and **every MCP-native platform
+registers servers with the same `mcpServers` JSON** — Claude Code, Cursor,
+OpenClaw, **opencrust**, NVIDIA **NemoClaw**, **Hermes**, **zeroclaw**, Codex,
+Gemini, Windsurf, Zed. So *one snippet* wires ATLAS into all of them:
+
+```bash
+atlas mcp --config
+# → { "mcpServers": { "atlas": { "command": "atlas", "args": ["mcp"] } } }
+```
+
+Drop that block into the platform's MCP config:
+
+| Platform | Where the `mcpServers` block goes |
+|---|---|
+| **Claude Code** | `claude mcp add atlas -- atlas mcp`  (or project `.mcp.json`) |
+| **Cursor** | `~/.cursor/mcp.json` |
+| **Windsurf** | `~/.codeium/windsurf/mcp_config.json` |
+| **Zed** | `settings.json` → `context_servers` |
+| **opencrust** | its config (see opencrust `docs/src/mcp.md`) |
+| **OpenClaw** | MCP registry / `~/.openclaw/…` |
+| **NVIDIA NemoClaw** | the OpenShell MCP config |
+| **Hermes · zeroclaw · Gemini · Codex** | their `mcpServers` config |
+| **any MCP client** | paste the `atlas mcp --config` block |
+
+Your agents now get `atlas_orient`, `atlas_find`, `atlas_scars`, `atlas_measure`
+out of the box — and `atlas_graph` / `atlas_deepsearch` light up the moment a
+graph/vector tool (graphify, CodeGraphContext) or a backend is present. **Orient
+free, drill down when you need depth.**
+
+> Remote/team? `atlas mcp --http --token "$SECRET"` serves the same tools over HTTP.
+
+---
+
 ## Claude Code
 
 ```bash
