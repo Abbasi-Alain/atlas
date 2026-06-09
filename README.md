@@ -230,6 +230,14 @@ Sharing with a team? `atlas mcp --http --token "$SECRET"` serves the same tools 
 
 ---
 
+## Three more superpowers
+
+- **Task-aware orientation** — `atlas orient "fix the failing auth test"` returns *only* the relevant slice of the map **plus the SCARS that bite that task** — not the whole file. Over MCP too (`atlas_orient(task)`). The agent's first move, conditioned on the job. Nobody else does this.
+- **A picture of your repo** — `atlas map` emits a **Mermaid** graph (renders right here on GitHub) or `atlas map --html` for a standalone page to screenshot.
+- **The ATLAS PR bot** — drop `uses: Abbasi-Alain/atlas@v1` into a workflow and every PR gets a sticky comment with the measured **−92→99% orientation savings** + map-drift status. Zero hosting — runs in your CI. *(This repo runs it on its own PRs.)*
+
+---
+
 ## Style presets — pick a vibe
 
 Not every project wants the same temperament. `atlas init --style <preset>` picks the templates:

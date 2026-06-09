@@ -45,7 +45,7 @@
 | [`hooks/`](hooks/) | `atlas-skill-loader.sh` — Claude Code SessionStart hook | adapters/claude-code |
 | [`packaging/`](packaging/) | aur / debian / homebrew / ppa manifests (§6) | .github/workflows |
 | [`docs/`](docs/) | [SPEC](docs/SPEC.md), [RELEASING](docs/RELEASING.md), [CONTRIBUTING](docs/CONTRIBUTING.md), [INTEGRATIONS](docs/INTEGRATIONS.md) | — |
-| [`.github/workflows/`](.github/workflows/) | CI + release fan-out (§6) | packaging/ |
+| [`.github/workflows/`](.github/workflows/) | CI + release fan-out (§6) + `atlas-pr.yml` (the PR bot — dogfoods [`action.yml`](action.yml)) | packaging/ |
 | [`tests/`](tests/) | `bootstrap.test.sh` smoke test (§5) | bin/atlas |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history (drives release notes) | §6 |
 
