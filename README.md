@@ -238,6 +238,7 @@ Sharing with a team? `atlas mcp --http --token "$SECRET"` serves the same tools 
 - **A map that never goes stale** — `atlas hooks install --auto` adds a git pre-commit hook that auto-refreshes `ATLAS.md §0.5` on structural change and stages it *into the commit*. Docs-as-code that can't rot.
 - **ATLAS conducts the ecosystem** — the MCP deep tools (`atlas_graph`, `atlas_deepsearch`) light up when **graphify** or **CodeGraphContext** is installed and route the query to it. Orient free via ATLAS, drill down via whatever you've got.
 - **Leaderboard** — `atlas measure --share` prints your savings + a one-click submit link. See the [board](docs/LEADERBOARD.md).
+- **Onboard any repo in one command** — `atlas onboard` scaffolds the quartet, **auto-drafts a real map** (a §0 "where to look" table + a §1 dependency graph, not a blank page), and measures the savings; `--pr` opens the pull request for you.
 
 ---
 

@@ -295,6 +295,25 @@ else
   _pass "mcp router test skipped (no python3)"
 fi
 
+# deepened analyzer: a real module graph with talks-to edges (cmd → internal)
+TMP_DG="$(mktemp -d)"; ( cd "$TMP_DG" && git init -q && echo m>go.mod && mkdir cmd internal \
+  && echo 'import "x/internal/y"' > cmd/main.go && touch internal/y.go \
+  && "$CLI" init >/dev/null 2>&1 && "$CLI" init --analyze >/dev/null 2>&1 \
+  && grep -q 'Module graph' ATLAS.md && grep -qE '\| .cmd/. \|.*internal' ATLAS.md ) \
+  && _pass "analyze builds a module graph with talks-to edges" || _fail "analyze module graph"
+rm -rf "$TMP_DG"
+
+# one-command onboard scaffolds the quartet + measures
+TMP_OB="$(mktemp -d)"; ( cd "$TMP_OB" && git init -q && echo m>go.mod && mkdir cmd && echo x>cmd/main.go \
+  && "$CLI" onboard >/dev/null 2>&1 && [ -f ATLAS.md ] && [ -f SCARS.md ] && [ -f AGENTS.md ] ) \
+  && _pass "onboard scaffolds + measures in one command" || _fail "onboard"
+rm -rf "$TMP_OB"
+
+# measure stays graceful on a tiny repo (no nonsensical negative %)
+TMP_TY="$(mktemp -d)"; ( cd "$TMP_TY" && git init -q && echo m>go.mod && "$CLI" init >/dev/null 2>&1 \
+  && "$CLI" measure 2>/dev/null | grep -q 'overhead' ) && _pass "measure is graceful on a tiny repo" || _fail "measure tiny-repo guard"
+rm -rf "$TMP_TY"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

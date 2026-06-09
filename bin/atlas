@@ -24,6 +24,8 @@
 #                                     e.g. local vLLM). Writes JSON + Markdown.
 #   atlas map [--html] [--out F]      render the repo as a Mermaid graph (or a
 #                                     standalone HTML page) — shareable, GitHub-native
+#   atlas onboard [--pr]              drop ATLAS into this repo (scaffold + draft the
+#                                     map + measure); --pr opens a pull request via gh
 #   atlas hooks install [--auto]      git pre-commit hook so ATLAS.md never goes stale
 #                                     (--auto: auto-refresh §0.5 + stage it)
 #   atlas orient ["task"]             print the map — or just the slice relevant
@@ -95,7 +97,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.1.9"
+ATLAS_VERSION="0.1.10"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -288,23 +290,51 @@ _analyze_inject() {
   local ents=(bin/* cmd/* main.* src/main.* index.*)
   entry="${ents[*]:0:6}"
   [[ -z "$entry" ]] && entry="_(main / CLI entry — fill in)_"
+  # top-level dirs — used to detect a real "talks-to" dependency graph below.
+  local dirs=() d talks
+  for e in *; do
+    case "$e" in .git|.DS_Store|node_modules|target|dist|build|vendor|.agents|ATLAS.md|SCARS.md|CLAUDE.md|AGENTS.md|EXAMPLES.md|llms.txt) continue ;; esac
+    [[ -d "$e" ]] && dirs+=("$e")
+  done
   inv=""
   for e in *; do
     case "$e" in
       .git|.DS_Store|node_modules|target|dist|build|vendor|.agents|ATLAS.md|SCARS.md|CLAUDE.md|AGENTS.md|EXAMPLES.md|llms.txt) continue ;;
     esac
-    if [[ -d "$e" ]]; then typ="$e/"; role="$(_role_dir "$e")"; else typ="$e"; role="$(_role_file "$e")"; fi
-    inv+="| \`$typ\` | $role |"$'\n'
+    if [[ -d "$e" ]]; then
+      typ="\`$e/\`"; role="$(_role_dir "$e")"; talks=""
+      # which other top-level dirs does this one reference (import/path)?
+      for d in "${dirs[@]:0:12}"; do
+        [[ "$d" == "$e" ]] && continue
+        if grep -rqIF -- "$d/" "$e" 2>/dev/null; then talks+="\`$d/\`, "; fi
+      done
+      talks="${talks%, }"; [[ -z "$talks" ]] && talks="—"
+    else
+      typ="\`$e\`"; role="$(_role_file "$e")"; talks="—"
+    fi
+    inv+="| $typ | $role | $talks |"$'\n'
   done
   shopt -u nullglob dotglob
+  local codedir="_(your source dir)_"
+  for d in src lib app cmd internal pkg core source; do [[ -d "$d" ]] && { codedir="\`$d/\`"; break; }; done
   block="## 0.5 Auto-detected map  *(from \`atlas init --analyze\` — verify, refine, then delete this note)*
 
 - **Languages:** ${langs}
-- **Build file:** \`${build_file}\`  ·  **Tests:** \`${test_cmd}\`  ·  **CI:** ${ci}
+- **Build:** \`${build_file}\`  ·  **Tests:** \`${test_cmd}\`  ·  **CI:** ${ci}
 - **Entry points:** ${entry}
 
-| Top-level | Likely role |
+### Where to look
+| You want to … | Start here |
 |---|---|
+| Build / run it | \`${build_file}\` |
+| Run the tests | \`${test_cmd}\` |
+| CI / release | ${ci} |
+| Find the entry point | ${entry} |
+| Most of the code | ${codedir} |
+
+### Module graph  *(\`atlas map\` renders this)*
+| Node | Role | Talks-to |
+|---|---|---|
 ${inv}"
   # idempotent: strip any prior auto-detected block (## 0.5 … up to the next ##)
   # so re-running (e.g. from the self-maintaining hook) refreshes instead of duplicating.
@@ -2053,11 +2083,12 @@ cmd_measure() {
   [[ $without_b -lt 1 ]] && without_b=1
   [[ $full_b -lt $without_b ]] && full_b=$without_b
   local with_t=$(( with_b / 4 )) without_t=$(( without_b / 4 )) full_t=$(( full_b / 4 ))
-  local ratio pct ratio_hi pct_hi
+  local ratio pct ratio_hi pct_hi tiny=0
   ratio=$(awk    -v a="$without_t" -v b="$with_t" 'BEGIN{ if(b<1)b=1; printf "%.1f", a/b }')
-  pct=$(awk      -v a="$without_t" -v b="$with_t" 'BEGIN{ if(a<1)a=1; printf "%.0f", 100*(a-b)/a }')
+  pct=$(awk      -v a="$without_t" -v b="$with_t" 'BEGIN{ if(a<1)a=1; r=100*(a-b)/a; if(r<0)r=0; printf "%.0f", r }')
   ratio_hi=$(awk -v a="$full_t"    -v b="$with_t" 'BEGIN{ if(b<1)b=1; printf "%.1f", a/b }')
-  pct_hi=$(awk   -v a="$full_t"    -v b="$with_t" 'BEGIN{ if(a<1)a=1; printf "%.0f", 100*(a-b)/a }')
+  pct_hi=$(awk   -v a="$full_t"    -v b="$with_t" 'BEGIN{ if(a<1)a=1; r=100*(a-b)/a; if(r<0)r=0; printf "%.0f", r }')
+  [[ $full_t -le $with_t ]] && tiny=1   # whole repo smaller than the spine → ATLAS is light overhead *now*
 
   if [[ $want_badge -eq 1 ]]; then
     echo "[![ATLAS](https://img.shields.io/badge/ATLAS-%E2%88%92${pct}%25%E2%80%93${pct_hi}%25%20orientation%20tokens-06b6d4)](https://github.com/Abbasi-Alain/atlas)"
@@ -2066,10 +2097,17 @@ cmd_measure() {
 
   _banner "📊" "atlas measure  $(_c_dim "(estimate · bytes ÷ 4)")"
   printf "  %-30s %s\n" "with ATLAS (quartet spine):" "$(_c_green  "~${with_t} tok")"
-  printf "  %-30s %s %s %s %s\n" "without — smart skim:"      "$(_c_yellow "~${without_t} tok")" "$(_c_dim '→')" "$(_c_bold "−${pct}%")"    "$(_c_dim "(${ratio}×)")"
-  printf "  %-30s %s %s %s %s\n" "without — whole-repo dump:" "$(_c_yellow "~${full_t} tok")"    "$(_c_dim '→')" "$(_c_bold "−${pct_hi}%")" "$(_c_dim "(${ratio_hi}×)")"
-  echo ""
-  printf "  %s %s\n" "$(_c_bold "ATLAS cuts orientation −${pct}% to −${pct_hi}%")" "$(_c_dim '(smart-skim → whole-repo baseline)')"
+  if [[ $tiny -eq 1 ]]; then
+    printf "  %-30s %s\n" "this whole repo:" "$(_c_yellow "~${full_t} tok")"
+    echo ""
+    printf "  %s\n" "$(_c_bold "Repo's smaller than the ATLAS spine — ~$(( with_t - full_t )) tok of light overhead for now.")"
+    _say "the win grows fast with the codebase: ~5–15× on a medium repo, 50–100× on a monorepo."
+  else
+    printf "  %-30s %s %s %s %s\n" "without — smart skim:"      "$(_c_yellow "~${without_t} tok")" "$(_c_dim '→')" "$(_c_bold "−${pct}%")"    "$(_c_dim "(${ratio}×)")"
+    printf "  %-30s %s %s %s %s\n" "without — whole-repo dump:" "$(_c_yellow "~${full_t} tok")"    "$(_c_dim '→')" "$(_c_bold "−${pct_hi}%")" "$(_c_dim "(${ratio_hi}×)")"
+    echo ""
+    printf "  %s %s\n" "$(_c_bold "ATLAS cuts orientation −${pct}% to −${pct_hi}%")" "$(_c_dim '(smart-skim → whole-repo baseline)')"
+  fi
   echo ""
   _say "method: 'with' = ATLAS+SKILL+SCARS+CLAUDE spine; 'without' ranges from a"
   _say "        smart skim (README+tree+heads) to the whole repo. Estimate (bytes÷4)."
@@ -2388,6 +2426,11 @@ cmd_bench() {
     openai)   rt_ver="openai-compat: $api_base ($model)" ;;
     generic)  rt_ver="exec: $exec_tpl" ;;
   esac
+  # codex's `exec --json` stdout never carries the model name — fall back to its
+  # configured default so the ledger records the real model, not "default".
+  if [[ "$runtime" == "codex" && -z "$model" && -f "$HOME/.codex/config.toml" ]]; then
+    model="$(grep -m1 -E '^model[[:space:]]*=' "$HOME/.codex/config.toml" 2>/dev/null | sed -E 's/^model[[:space:]]*=[[:space:]]*"?([^"#[:space:]]+).*/\1/' || true)"
+  fi
 
   _banner "📊" "atlas bench  $(_c_dim "(runtime=$runtime · reps=$reps${model:+ · $model}${effort:+ · effort=$effort})")"
   _say "task: ${task:0:150}…"
@@ -2761,6 +2804,53 @@ PY
   _say "comparable across runs (version+model+effort+date+sha recorded). Methodology: docs/benchmarks/methodology.md"
 }
 
+# onboard — drop ATLAS into THIS repo in one shot: scaffold the quartet, auto-draft
+# the map, measure the savings, and (with --pr) open a pull request. The spread engine.
+#   atlas onboard            scaffold + analyze + measure (local)
+#   atlas onboard --pr       also: branch, commit the quartet, open a PR via gh
+cmd_onboard() {
+  local do_pr=0 branch="atlas-onboard"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pr)       do_pr=1; shift ;;
+      --branch)   branch="${2:-atlas-onboard}"; shift 2 ;;
+      --branch=*) branch="${1#--branch=}"; shift ;;
+      *) shift ;;
+    esac
+  done
+  git rev-parse --git-dir >/dev/null 2>&1 || _die "not a git repository — run inside the repo you want to onboard."
+  _banner "🚀" "onboarding $(basename "$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")") to ATLAS"
+  cmd_init --analyze
+  echo ""
+  local measure; measure="$(cmd_measure 2>/dev/null | grep -v 'atlas:' || true)"
+  printf '%s\n' "$measure"
+  if [[ $do_pr -eq 0 ]]; then
+    echo ""; _say "review the quartet, then commit — or re-run with --pr to open a PR."
+    return 0
+  fi
+  _have gh || _die "--pr needs the gh CLI — install it, or commit the quartet yourself."
+  git remote get-url origin >/dev/null 2>&1 || _die "--pr needs an 'origin' remote."
+  git checkout -b "$branch" 2>/dev/null || git checkout "$branch" 2>/dev/null || _die "couldn't switch to branch '$branch'."
+  git add ATLAS.md SCARS.md CLAUDE.md AGENTS.md EXAMPLES.md llms.txt .agents >/dev/null 2>&1 || true
+  if git diff --cached --quiet; then _die "nothing to commit (already onboarded?)."; fi
+  git commit -q -m "chore: add ATLAS — agent orientation map, behavioral contract, failure memory"
+  git push -u origin "$branch" >/dev/null 2>&1 || _die "push failed (check your remote + auth)."
+  local body
+  body="## Add ATLAS — the map your agents read first
+
+Adds the ATLAS quartet (ATLAS.md + SKILL.md + SCARS.md + CLAUDE.md/AGENTS.md) so any AI agent (Claude Code, Cursor, Codex, OpenClaw, …) orients from a curated map instead of grepping.
+
+\`\`\`
+${measure}
+\`\`\`
+
+\`atlas check\` validates it · \`atlas map\` draws it · \`atlas mcp\` serves it over MCP. The §0.5 map was auto-drafted by \`atlas init --analyze\` — refine it, then delete the note.
+
+Powered by [ATLAS](https://github.com/Abbasi-Alain/atlas)."
+  gh pr create --title "Add ATLAS — agent orientation map" --body "$body" 2>&1 | tail -1
+  _ok "opened the onboarding PR."
+}
+
 # hooks — install a git pre-commit hook that keeps ATLAS.md from going stale.
 #   atlas hooks install [--auto]   warn on map drift (--auto: refresh §0.5 + stage it)
 #   atlas hooks uninstall          remove the atlas hook block
@@ -2896,6 +2986,7 @@ main() {
     measure)  cmd_measure "$@" ;;
     bench)    cmd_bench "$@" ;;
     map)      cmd_map "$@" ;;
+    onboard)  cmd_onboard "$@" ;;
     hooks)    cmd_hooks "$@" ;;
     orient)   cmd_orient "$@" ;;
     mcp)      cmd_mcp "$@" ;;
