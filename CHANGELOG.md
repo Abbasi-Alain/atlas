@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`atlas map` draws a real graph in the terminal** — a Unicode box-and-arrow diagram (fan-out adjacency + standalone modules), not just a Mermaid code block. In a terminal you get the picture; piped or `--out`'d it still emits Mermaid for GitHub. `--ascii` / `--mermaid` force either.
 - **Explicit MCP platform compatibility in the README** — OpenClaw · NemoClaw · opencrust · zeroclaw · Qwen · Windsurf: one `mcpServers` snippet, conformance-tested (protocol `2024-11-05`, 4 tools) — verified with a live JSON-RPC handshake.
 - **Refreshed brand assets** — social card on the measured **−92%** + four-file framing; a more detailed hero GIF (onboard → map → mcp → hooks → check) plus dedicated **map** and **orient** GIFs, driven by a reproducible `assets/demo-fixture.sh`.
+- **Signed releases (supply-chain)** — the GitHub release now ships a reproducible source tarball + `checksums.txt` with **SLSA build provenance**, signed keyless via Sigstore (`actions/attest-build-provenance`); npm already publishes with provenance. Verify with `gh attestation verify atlas-X.Y.Z.tar.gz --repo Abbasi-Alain/atlas`. (README → "Verify a release".)
 
 ### Fixed
 

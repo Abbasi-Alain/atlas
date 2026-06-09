@@ -205,6 +205,22 @@ sudo apt update && sudo apt upgrade atlas         # apt (PPA)
 
 > **Cut your agent's orientation cost too?** ⭐ [Star the repo](https://github.com/Abbasi-Alain/atlas), run `atlas measure --share` to add yours to the [leaderboard](docs/LEADERBOARD.md), and see the [measured proof on famous repos](docs/FLAGSHIP.md) (−75% to −94%).
 
+### Verify a release *(supply-chain)*
+
+Every release ships **signed [SLSA build provenance](https://slsa.dev)** (keyless, via Sigstore) plus a `checksums.txt`, and the npm package is published with **npm provenance**. Verify before you trust:
+
+```bash
+# GitHub release tarball — provenance + signature (needs gh ≥ 2.49):
+gh attestation verify atlas-X.Y.Z.tar.gz --repo Abbasi-Alain/atlas
+sha256sum -c checksums.txt                 # integrity
+
+# npm — published with provenance:
+npm audit signatures                        # after install, or:
+npm view @alainabbasi/atlas dist.attestations
+```
+
+A failed verification means the artifact was **not** built by this repo's release workflow — don't run it.
+
 ---
 
 ## 60-second start

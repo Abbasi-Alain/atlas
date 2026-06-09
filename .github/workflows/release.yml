@@ -20,7 +20,9 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: write       # create the release + upload assets
+  id-token: write       # Sigstore OIDC — keyless signing for provenance
+  attestations: write   # store the SLSA build-provenance attestation
 
 jobs:
   create-release:
@@ -47,6 +49,22 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Build release tarball + checksums
+        id: artifacts
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARBALL="atlas-${VERSION}.tar.gz"
+          # Reproducible source tarball of the exact tagged tree.
+          git archive --format=tar.gz --prefix="atlas-${VERSION}/" \
+            "${GITHUB_REF_NAME}" -o "$TARBALL"
+          sha256sum "$TARBALL" > checksums.txt
+          echo "tarball=$TARBALL" >> $GITHUB_OUTPUT
+
+      - name: Sign + attest provenance (SLSA, keyless via Sigstore)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.artifacts.outputs.tarball }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -56,3 +74,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: false
+          files: |
+            ${{ steps.artifacts.outputs.tarball }}
+            checksums.txt
