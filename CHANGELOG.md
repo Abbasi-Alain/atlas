@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.8] — 2026-06-09
+
 ### Added
 
 - **Task-aware orientation** — `atlas orient "<task>"` (and the MCP `atlas_orient(task)` tool) returns just the *relevant slice* of the map: the map entries, SKILL anchors, and the **SCARS that bite *this* task**, ranked by keyword overlap (zero-infra, no embeddings). No task → the full §0 map. The agent's first move, conditioned on what it's about to do — nobody else does this.
@@ -158,7 +160,8 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.4...v0.1.5
