@@ -235,6 +235,8 @@ atlas mcp --config                  # prints the registration snippet
 claude mcp add atlas -- atlas mcp   # or paste the snippet into .mcp.json / Cursor
 ```
 
+**One snippet, every platform.** Claude Code · Cursor · OpenClaw · opencrust · NVIDIA NemoClaw · Hermes · zeroclaw · Codex · Gemini · Windsurf · Zed all register MCP servers the same way → [add ATLAS to any of them in 30 seconds](docs/INTEGRATIONS.md#-the-30-second-way--mcp-works-in-every-modern-agent).
+
 Four local tools — no infra, no embeddings, no API key:
 
 | tool | what the agent gets |
