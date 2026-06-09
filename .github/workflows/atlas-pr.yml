@@ -29,7 +29,7 @@ jobs:
           else
             drift="⚠️ files changed without updating \`ATLAS.md\` — run \`atlas init --analyze\` or update §1"
           fi
-          measure="$(atlas measure 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || true)"
+          measure="$(atlas measure 2>/dev/null | grep -v 'atlas:' | sed 's/\x1b\[[0-9;]*m//g' || true)"
           body="$(printf '%s\n' \
             "<!-- atlas-bot -->" \
             "## 🗺️ ATLAS — *(this repo runs its own bot)*" \
