@@ -314,6 +314,13 @@ TMP_TY="$(mktemp -d)"; ( cd "$TMP_TY" && git init -q && echo m>go.mod && "$CLI" 
   && "$CLI" measure 2>/dev/null | grep -q 'overhead' ) && _pass "measure is graceful on a tiny repo" || _fail "measure tiny-repo guard"
 rm -rf "$TMP_TY"
 
+# measure must NOT abort on a >400-file repo (the `| head -400` SIGPIPE-under-pipefail trap):
+# it must still print its banner (the abort would happen *before* the banner).
+TMP_BIG="$(mktemp -d)"; ( cd "$TMP_BIG" && git init -q && mkdir s && i=0 && while [ $i -lt 450 ]; do echo x > "s/f$i.go"; i=$((i+1)); done \
+  && echo 'package s'>s/m.go && "$CLI" init >/dev/null 2>&1 \
+  && "$CLI" measure 2>/dev/null | grep -q 'atlas measure' ) && _pass "measure survives a >400-file repo (no SIGPIPE abort)" || _fail "measure big-repo SIGPIPE"
+rm -rf "$TMP_BIG"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

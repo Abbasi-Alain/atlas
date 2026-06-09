@@ -131,6 +131,16 @@ independently, and ATLAS pays it once into the shared quartet. Methodology +
 honesty rules:
 [docs/benchmarks/methodology.md](docs/benchmarks/methodology.md).
 
+### 🚩 Not just on this repo — measured on the ones you know
+
+The same deterministic `atlas measure`, after a one-command `atlas onboard`, on famous repos:
+
+| | openclaw | graphify | ECC | hermes-agent | fastapi | django | curl |
+|---|---|---|---|---|---|---|---|
+| **orientation cut** | **−94%** | −93% | −92% | −82% | −89% | −78% | −78% |
+
+**−75% to −94% vs a smart skim**, across the AI-agent ecosystem *and* general OSS — free + reproducible. Full table + how to reproduce: **[docs/FLAGSHIP.md](docs/FLAGSHIP.md)**.
+
 ---
 
 ## Install — pick your flavor

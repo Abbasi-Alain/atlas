@@ -21,6 +21,7 @@
 
 **Bash / CLI** *(this repo's real scars)*
 - [§SET-E-AND-AND — `A && B` as a standalone line can abort under `set -e`](#set-e-and-and)
+- [§PIPE-HEAD-SIGPIPE — `cmd | head` SIGPIPEs the producer; aborts under pipefail](#pipe-head-sigpipe)
 - [§BASH-MONOLITH — `bin/atlas` is one file; keep shellcheck green](#bash-monolith)
 - [§MACOS-SED — `sed -i` is not portable; use the `.bak` + `rm` idiom](#macos-sed)
 - [§PRIVATE-STYLE-OVERLAY — never commit the `abbasi` style symlink](#private-style-overlay)
@@ -80,6 +81,31 @@ multi-step guards with `&&`.
 **Do.** `count=$(( count + 1 ))`; use `if [[ cond ]]; then …; fi` for guards.
 
 **Where.** `bin/atlas::cmd_measure`, `cmd_doctor`.
+
+---
+
+<a id="pipe-head-sigpipe"></a>
+### §PIPE-HEAD-SIGPIPE — `cmd | head` SIGPIPEs the producer; aborts under pipefail
+
+**Symptom.** `atlas measure` printed **nothing** (silently aborted) on any repo
+with **>400 files** — but worked on small repos. Found the instant the flagship
+ran it on fastapi (2,978 files); it had shipped broken for every real repo.
+
+**Root cause.** `tree_b=$(git ls-files | head -400 | wc -c)`. `head -400` closes
+the pipe after 400 lines → `git ls-files` gets **SIGPIPE** (exit 141). Under
+`bin/atlas`'s `set -o pipefail`, the whole pipeline returns 141, so the command
+substitution fails, and `set -e` aborts the function **before it prints anything**.
+Small repos (< 400 files) never close the pipe early, so it never surfaced in tests.
+
+**Do NOT.** Leave a `… | head -N | …` command substitution bare under
+`set -euo pipefail`. The producer *will* SIGPIPE on big inputs.
+
+**Do.** Wrap it: `count=$( { producer | head -N | wc -c; } || true )` — the count
+is already on stdout before the failure, so `|| true` keeps the value and clears
+the exit. Add a regression test that runs `measure` on a **>400-file** repo.
+
+**Where.** `bin/atlas::cmd_measure` (tree count), `cmd_bench` (openai context).
+`tests/bootstrap.test.sh` (the >400-file guard).
 
 ---
 
