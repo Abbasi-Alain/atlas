@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATLAS — the map your AI agents read first</title>
+<meta name="description" content="A 4-file Markdown standard that cuts agent orientation tokens 75–94% — measured on FastAPI, Django, curl, OpenClaw, Hermes and more. Zero infrastructure.">
+<meta property="og:title" content="ATLAS — the map your AI agents read first">
+<meta property="og:description" content="−75% to −94% agent orientation tokens, measured on repos you know. Zero infra. Works with Claude Code, Cursor, Codex, OpenClaw, Gemini.">
+<style>
+  :root{--bg:#0b1020;--card:#121a33;--bd:#243056;--fg:#e8ecf6;--mut:#9aa6c4;--cy:#22d3ee;--gr:#34d399;--am:#f59e0b}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:
+    radial-gradient(1200px 600px at 70% -10%,#16203f 0,var(--bg) 55%);color:var(--fg);line-height:1.55}
+  a{color:var(--cy);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:920px;margin:0 auto;padding:0 22px}
+  header{padding:64px 0 28px;text-align:center}
+  .logo{font-weight:800;letter-spacing:.5px;font-size:14px;color:var(--mut)}
+  h1{font-size:clamp(30px,5vw,52px);margin:14px 0 6px;line-height:1.1}
+  h1 .hl{background:linear-gradient(90deg,var(--cy),var(--gr));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--mut);font-size:clamp(16px,2.4vw,20px);max-width:680px;margin:8px auto 0}
+  .cta{margin:26px 0 6px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .btn{background:var(--cy);color:#04121a;font-weight:700;padding:11px 18px;border-radius:10px}
+  .btn.alt{background:transparent;color:var(--fg);border:1px solid var(--bd)}
+  .badges{margin-top:18px;color:var(--mut);font-size:13px}
+  section{padding:26px 0}
+  h2{font-size:24px;margin:6px 0 14px}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px 20px}
+  pre{background:#0a1228;border:1px solid var(--bd);border-radius:10px;padding:14px;overflow:auto;font-size:13.5px}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--bd);text-align:left}
+  th{color:var(--mut);font-weight:600} td.n{color:var(--gr);font-weight:700;text-align:right}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .grid h3{margin:0 0 6px;font-size:16px}
+  .grid p{margin:0;color:var(--mut);font-size:14px}
+  .big{font-size:clamp(38px,8vw,72px);font-weight:800;line-height:1;
+    background:linear-gradient(90deg,var(--cy),var(--gr));-webkit-background-clip:text;background-clip:text;color:transparent}
+  footer{padding:40px 0;color:var(--mut);font-size:13px;text-align:center;border-top:1px solid var(--bd);margin-top:30px}
+  .mut{color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">🗺️ ATLAS — Agentic Harness Standard</div>
+    <h1>The map your AI agents <span class="hl">read first</span>.</h1>
+    <p class="sub">Four Markdown files that cut what an agent loads to orient itself by
+      <strong>75–94%</strong> — measured, reproducible, zero infrastructure. Works with Claude&nbsp;Code,
+      Cursor, Codex, OpenClaw, Gemini.</p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/Abbasi-Alain/atlas">★ GitHub</a>
+      <a class="btn alt" href="https://github.com/Abbasi-Alain/atlas/blob/main/docs/FLAGSHIP.md">See the proof</a>
+    </div>
+    <div class="badges">npm · brew · apt · AUR · PPA &nbsp;·&nbsp; MIT &nbsp;·&nbsp; zero deps</div>
+  </header>
+
+  <section style="text-align:center">
+    <div class="big">−92%</div>
+    <p class="mut">orientation tokens on this repo (deterministic, reproducible) — up to −99% vs a whole-repo dump.</p>
+  </section>
+
+  <section>
+    <h2>🚩 Measured on the repos you know</h2>
+    <div class="card">
+      <table>
+        <tr><th>repo</th><th>files</th><th>orientation cut (vs a smart skim)</th></tr>
+        <tr><td>openclaw/openclaw</td><td>19,878</td><td class="n">−94%</td></tr>
+        <tr><td>safishamsi/graphify</td><td>567</td><td class="n">−93%</td></tr>
+        <tr><td>affaan-m/ecc</td><td>3,143</td><td class="n">−92%</td></tr>
+        <tr><td>fastapi/fastapi</td><td>2,978</td><td class="n">−89%</td></tr>
+        <tr><td>NousResearch/hermes-agent</td><td>4,902</td><td class="n">−82%</td></tr>
+        <tr><td>django/django · curl/curl · gin</td><td>7,063 · ~4k · 130</td><td class="n">−78%</td></tr>
+      </table>
+      <p class="mut" style="margin:12px 0 0">Auto-drafted maps (one <code>atlas onboard</code>), deterministic
+        <code>atlas measure</code> — no agent, no API key, no spend. <a href="https://github.com/Abbasi-Alain/atlas/blob/main/docs/FLAGSHIP.md">Full table + reproduce →</a></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>60-second start</h2>
+    <pre><code>npm i -g @alainabbasi/atlas        <span class="mut"># or: brew install atlas</span>
+cd your-project/
+atlas onboard                      <span class="mut"># scaffold + auto-draft the map + measure</span>
+atlas mcp --config                 <span class="mut"># serve it to any agent over MCP</span></code></pre>
+  </section>
+
+  <section>
+    <h2>Why it spreads</h2>
+    <div class="grid">
+      <div class="card"><h3>🎯 Task-aware</h3><p><code>atlas orient "fix the auth test"</code> returns just the relevant slice of the map + the bugs that bite that task.</p></div>
+      <div class="card"><h3>🔌 MCP-native</h3><p>Every agent reads it through one server — and ATLAS <em>routes</em> deep queries to graphify / CodeGraphContext when present.</p></div>
+      <div class="card"><h3>🔄 Self-maintaining</h3><p>A git hook keeps the map current on every commit. Docs-as-code that can't rot.</p></div>
+      <div class="card"><h3>🤖 Proves itself</h3><p>The PR bot comments the measured savings on every pull request. Zero hosting.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <a href="https://github.com/Abbasi-Alain/atlas">github.com/Abbasi-Alain/atlas</a> ·
+    <a href="https://github.com/Abbasi-Alain/atlas/blob/main/docs/SPEC.md">spec</a> ·
+    <a href="https://github.com/Abbasi-Alain/atlas/blob/main/docs/LEADERBOARD.md">leaderboard</a> ·
+    <a href="https://github.com/Abbasi-Alain/atlas/blob/main/docs/FLAGSHIP.md">flagship</a><br>
+    Don't grep. Don't guess. Don't repeat.
+  </footer>
+
+</div>
+</body>
+</html>
