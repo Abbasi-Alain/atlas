@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/atlas-demo.gif" alt="atlas CLI — version · help · init · check · anchors · install --runtime · mirror init" width="900" />
+  <img src="assets/atlas-demo.gif" alt="atlas CLI — onboard (scaffold + auto-draft map + measure) · map · mcp · hooks · check" width="900" />
 </p>
 
 <p align="center">
@@ -228,14 +228,28 @@ Open a new agent session in any project with these files. The agent's first acti
 
 ## Plug into any agent — the MCP server
 
-ATLAS ships a **zero-dependency Model Context Protocol server**, so *any* MCP client — Claude Code, Cursor, OpenClaw, Codex, Gemini — reads the map directly instead of grepping:
+ATLAS ships a **zero-dependency Model Context Protocol server**, so *any* MCP client — Claude Code, Cursor, OpenClaw, NemoClaw, Codex, Gemini — reads the map directly instead of grepping:
 
 ```bash
 atlas mcp --config                  # prints the registration snippet
 claude mcp add atlas -- atlas mcp   # or paste the snippet into .mcp.json / Cursor
 ```
 
-**One snippet, every platform.** Claude Code · Cursor · OpenClaw · opencrust · NVIDIA NemoClaw · Hermes · zeroclaw · Codex · Gemini · Windsurf · Zed all register MCP servers the same way → [add ATLAS to any of them in 30 seconds](docs/INTEGRATIONS.md#-the-30-second-way--mcp-works-in-every-modern-agent).
+**One snippet, every platform — and there's no per-platform code to write.** MCP is a
+*standard*: every MCP-native runtime loads the **same** `mcpServers` block. The server is
+conformance-tested (protocol `2024-11-05`; tools `atlas_orient · atlas_find · atlas_scars ·
+atlas_measure`), so if a platform speaks MCP, ATLAS already works in it:
+
+| Platform | Drop the `mcpServers` block into… |
+|---|---|
+| **Claude Code** | `claude mcp add atlas -- atlas mcp`  ·  or project `.mcp.json` |
+| **Cursor · Windsurf · Zed** | `~/.cursor/mcp.json` · `windsurf/mcp_config.json` · `settings.json → context_servers` |
+| **OpenClaw · opencrust** | the platform's MCP registry / config file |
+| **NVIDIA NemoClaw** | the OpenShell MCP config |
+| **zeroclaw · Qwen** (qwen-code) | `mcpServers` + the auto-generated `AGENTS.md` — a fully local, free stack |
+| **Codex · Gemini · any MCP client** | paste the `atlas mcp --config` block verbatim |
+
+→ [full matrix + exact paths](docs/INTEGRATIONS.md#-the-30-second-way--mcp-works-in-every-modern-agent).
 
 Four local tools — no infra, no embeddings, no API key:
 
@@ -254,8 +268,18 @@ Sharing with a team? `atlas mcp --http --token "$SECRET"` serves the same tools 
 
 ## Superpowers
 
+<p align="center">
+  <img src="assets/atlas-orient.gif" alt="atlas orient &quot;fix the release tag workflow&quot; — only the relevant slice of the map, the playbook anchor, and the SCARS that bite this task" width="820" />
+  <br><em><code>atlas orient "&lt;task&gt;"</code> — the relevant slice of the map + the SCARS that bite <em>this</em> task.</em>
+</p>
+
+<p align="center">
+  <img src="assets/atlas-map.gif" alt="atlas map — a Unicode graph of the repo in your terminal; Mermaid when piped to a Markdown file" width="820" />
+  <br><em><code>atlas map</code> — a Unicode graph in the terminal; pipe it to a <code>.md</code> for GitHub-rendered Mermaid.</em>
+</p>
+
 - **Task-aware orientation** — `atlas orient "fix the failing auth test"` returns *only* the relevant slice of the map **plus the SCARS that bite that task** — not the whole file. Over MCP too (`atlas_orient(task)`). The agent's first move, conditioned on the job. Nobody else does this.
-- **A picture of your repo** — `atlas map` emits a **Mermaid** graph (renders right here on GitHub) or `atlas map --html` for a standalone page to screenshot.
+- **A picture of your repo** — `atlas map` draws a **Unicode graph right in your terminal**; pipe it to a file (`atlas map > map.md`) and it's a **Mermaid** diagram that renders on GitHub, or `atlas map --html` for a standalone page to screenshot.
 - **The ATLAS PR bot** — drop `uses: Abbasi-Alain/atlas@v1` into a workflow and every PR gets a sticky comment with the measured **−92→99% orientation savings** + map-drift status. Zero hosting — runs in your CI. *(This repo runs it on its own PRs.)*
 - **A map that never goes stale** — `atlas hooks install --auto` adds a git pre-commit hook that auto-refreshes `ATLAS.md §0.5` on structural change and stages it *into the commit*. Docs-as-code that can't rot.
 - **ATLAS conducts the ecosystem** — the MCP deep tools (`atlas_graph`, `atlas_deepsearch`) light up when **graphify** or **CodeGraphContext** is installed and route the query to it. Orient free via ATLAS, drill down via whatever you've got.
@@ -410,6 +434,7 @@ Either way, `atlas auth login` automates the setup — interactive picker, or pa
 | [Zed](https://zed.dev)                                            | ✅ supported   | `[adapters/zed/](adapters/zed/)` — `.zed/atlas.md` + agents.md               |
 | [GitHub Copilot Chat](https://github.com/features/copilot)        | ✅ supported   | `[adapters/copilot/](adapters/copilot/)` — `.github/copilot-instructions.md` |
 | [Hermes](https://github.com/NousResearch/Hermes-Function-Calling) | ✅ supported   | `[adapters/hermes/](adapters/hermes/)` — system-prompt fragment              |
+| **MCP-native** — OpenClaw · NemoClaw · opencrust · zeroclaw · Qwen · Windsurf | ✅ via MCP | the `atlas mcp` server — one `mcpServers` snippet, [30-sec setup](docs/INTEGRATIONS.md#-the-30-second-way--mcp-works-in-every-modern-agent) |
 | Any other                                                         | ✅ generic     | `[adapters/generic/](adapters/generic/)` — manual hook                       |
 
 

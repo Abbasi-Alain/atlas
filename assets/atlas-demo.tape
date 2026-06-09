@@ -2,9 +2,13 @@
 #
 # Generate from the repo root:  vhs assets/atlas-demo.tape
 #
-# Deliberately SLOW (130ms typing + 4–6s pauses) so a human can read every
-# result. On-screen narration uses `echo` (not `#`) so it works in any shell.
-# These `#` lines are vhs tape comments — they are NOT typed into the shell.
+# Shows the *newest* surface: one-command onboard (scaffold + auto-draft map +
+# measure), the Mermaid map, the MCP snippet, the self-refreshing git hook, and
+# check. Built on a small but REAL Go service (assets/demo-fixture.sh) so the
+# numbers and the graph are believable, not a toy.
+#
+# Narration uses `echo` (not `#`) so it shows on screen in any shell. The `#`
+# lines here are vhs tape comments — they are NOT typed into the shell.
 
 Output assets/atlas-demo.gif
 
@@ -13,71 +17,79 @@ Set FontSize 20
 Set Width 1200
 Set Height 760
 Set Padding 26
-Set TypingSpeed 130ms
+Set TypingSpeed 90ms
 
-# ─── setup (hidden): put atlas on PATH + make a tiny demo repo ───────
+# ─── setup (hidden): atlas on PATH + a small, REAL demo service ──────
+# Clean, short cwd (/tmp/shopd) so the on-screen paths read nicely.
 Hide
 Type "export ATLAS_HOME=$PWD PATH=$PWD/bin:$PATH PS1='$ '"
 Enter
-Type "cd $(mktemp -d) && git init -q -b main"
+Type "rm -rf /tmp/shopd && mkdir -p /tmp/shopd && cd /tmp/shopd && git init -q -b main"
 Enter
-Type "mkdir -p cmd internal"
-Enter
-Type "echo 'module shop' > go.mod; echo 'go 1.21' >> go.mod"
-Enter
-Type "touch cmd/main.go internal/cart.go internal/order.go README.md"
+Type "bash $ATLAS_HOME/assets/demo-fixture.sh"
 Enter
 Type "clear"
 Enter
 Show
 
-# ─── 1. the logo + tagline ──────────────────────────────────────────
+# ─── 1. identity ────────────────────────────────────────────────────
 Type "atlas version"
-Sleep 1500ms
+Sleep 1200ms
 Enter
-Sleep 4s
+Sleep 3s
 
-# ─── 2. scaffold the quartet + auto-draft the map from the repo ─────
-Type "echo '— scaffold the 4-file quartet, and auto-draft the map —'"
+# ─── 2. ONE command: scaffold + auto-draft the map + measure ────────
+Type "echo '— one command: scaffold the quartet · auto-draft the map · measure —'"
 Enter
-Sleep 1500ms
-Type "atlas init --analyze"
-Sleep 1s
+Sleep 1200ms
+Type "atlas onboard"
+Sleep 800ms
 Enter
-Sleep 6s
+Sleep 7s
+Type "clear"
+Enter
 
-# ─── 3. validate ────────────────────────────────────────────────────
-Type "atlas check"
-Sleep 1s
+# ─── 3. a picture of the repo (Mermaid, pastes into any Markdown) ────
+Type "echo '— a picture of your repo (paste into any Markdown) —'"
 Enter
-Sleep 4s
-
-# ─── 4. the value: orientation tokens saved ────────────────────────
-Type "echo '— how many orientation tokens does it save? —'"
-Enter
-Sleep 1500ms
-Type "atlas measure"
-Sleep 1s
-Enter
-Sleep 6s
-
-# ─── 5. fan out to every runtime from one source ───────────────────
-Type "echo '— one source, every runtime —'"
-Enter
-Sleep 1500ms
-Type "atlas export --to all"
-Sleep 1s
+Sleep 1200ms
+Type "atlas map"
+Sleep 800ms
 Enter
 Sleep 5s
+Type "clear"
+Enter
 
-# ─── 6. real A/B benchmark (dry-run, nothing burned) ───────────────
-Type "echo '— real A/B benchmark (dry-run) —'"
+# ─── 4. serve the map to every agent over one MCP snippet ───────────
+Type "echo '— serve the map to ANY agent: one MCP snippet works everywhere —'"
 Enter
-Sleep 1500ms
-Type "atlas bench --dry-run"
-Sleep 1s
+Sleep 1200ms
+Type "atlas mcp --config"
+Sleep 800ms
 Enter
-Sleep 6s
+Sleep 5s
+Type "clear"
+Enter
+
+# ─── 5. a map that cannot rot ───────────────────────────────────────
+Type "echo '— a git hook keeps the map fresh on every commit —'"
+Enter
+Sleep 1200ms
+Type "atlas hooks install --auto"
+Sleep 800ms
+Enter
+Sleep 4s
+Type "clear"
+Enter
+
+# ─── 6. validate: map and playbook stay in sync ─────────────────────
+Type "echo '— validate: map and playbook stay in sync —'"
+Enter
+Sleep 1200ms
+Type "atlas check"
+Sleep 800ms
+Enter
+Sleep 4s
 
 # hold the final frame
 Sleep 3s

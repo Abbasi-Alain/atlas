@@ -120,12 +120,12 @@
 
     <!-- Promise -->
     <text x="454" y="362" font-weight="700" font-size="40" fill="#facc15">
-      10–30× fewer orientation tokens
+      −92% fewer orientation tokens
     </text>
 
     <!-- Sub-promise -->
-    <text x="454" y="402" font-weight="500" font-size="24" fill="#cbd5e1" opacity="0.9">
-      Zero infrastructure. Three Markdown files.
+    <text x="454" y="402" font-weight="500" font-size="22" fill="#cbd5e1" opacity="0.9">
+      Measured &amp; reproducible · zero infra · four Markdown files
     </text>
 
     <!-- Runtime row 1 of 2 -->

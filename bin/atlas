@@ -22,8 +22,9 @@
 #                                     (claude/codex/opencode/--exec) OR single-shot
 #                                     vs any OpenAI-compatible endpoint (--api-base,
 #                                     e.g. local vLLM). Writes JSON + Markdown.
-#   atlas map [--html] [--out F]      render the repo as a Mermaid graph (or a
-#                                     standalone HTML page) — shareable, GitHub-native
+#   atlas map [--ascii|--mermaid|--html] [--out F]
+#                                     draw the repo graph: Unicode in a terminal,
+#                                     Mermaid when piped (GitHub-native), or an HTML page
 #   atlas onboard [--pr]              drop ATLAS into this repo (scaffold + draft the
 #                                     map + measure); --pr opens a pull request via gh
 #   atlas hooks install [--auto]      git pre-commit hook so ATLAS.md never goes stale
@@ -2917,16 +2918,19 @@ cmd_hooks() {
   esac
 }
 
-# map — render the repo's structure (ATLAS.md §1) as a shareable diagram.
-#   atlas map                    a Mermaid graph (renders natively on GitHub)
+# map — render the repo's structure (ATLAS.md §1) as a diagram.
+#   atlas map                    a Unicode graph in a terminal; Mermaid when piped/redirected
+#   atlas map --ascii|--mermaid  force the terminal graph or the Markdown code block
 #   atlas map --html [--out f]   a standalone HTML page (mermaid.js) — screenshot it
 cmd_map() {
-  local html=0 out=""
+  local fmt="" out=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --html)  html=1; shift ;;
-      --out)   out="${2:-}"; shift 2 ;;
-      --out=*) out="${1#--out=}"; shift ;;
+      --html)    fmt="--html"; shift ;;
+      --ascii)   fmt="--ascii"; shift ;;
+      --mermaid) fmt="--mermaid"; shift ;;
+      --out)     out="${2:-}"; shift 2 ;;
+      --out=*)   out="${1#--out=}"; shift ;;
       *) shift ;;
     esac
   done
@@ -2934,11 +2938,15 @@ cmd_map() {
   local server="$ATLAS_HOME/bin/atlas-mcp"
   [[ -f "$server" ]] || _die "atlas-mcp not found at $server"
   export ATLAS_PROJECT="${ATLAS_PROJECT:-$PWD}" ATLAS_BIN="$ATLAS_HOME/bin/atlas" ATLAS_VERSION
-  local flag=""; [[ $html -eq 1 ]] && flag="--html"
+  # No explicit format: a terminal gets the visual ASCII map; a pipe/file gets
+  # Mermaid (so `atlas map > X.md` still renders on GitHub). SCARS — keep this.
+  if [[ -z "$fmt" ]]; then
+    if [[ -z "$out" && -t 1 ]]; then fmt="--ascii"; else fmt="--mermaid"; fi
+  fi
   if [[ -n "$out" ]]; then
-    python3 "$server" --map $flag > "$out" && _ok "wrote $out  $(_c_dim '(open it / screenshot for the README)')"
+    python3 "$server" --map $fmt > "$out" && _ok "wrote $out  $(_c_dim '(open it / screenshot for the README)')"
   else
-    python3 "$server" --map $flag
+    python3 "$server" --map $fmt
   fi
 }
 
