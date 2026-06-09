@@ -195,6 +195,16 @@ git clone https://github.com/Abbasi-Alain/atlas.git ~/.atlas
 
 After install you have the `atlas` CLI on PATH and adapters ready to wire into your agent runtime.
 
+### Update
+
+```bash
+npm update -g @alainabbasi/atlas                  # npm
+brew upgrade atlas                                # Homebrew
+sudo apt update && sudo apt upgrade atlas         # apt (PPA)
+```
+
+> **Cut your agent's orientation cost too?** ⭐ [Star the repo](https://github.com/Abbasi-Alain/atlas), run `atlas measure --share` to add yours to the [leaderboard](docs/LEADERBOARD.md), and see the [measured proof on famous repos](docs/FLAGSHIP.md) (−75% to −94%).
+
 ---
 
 ## 60-second start
