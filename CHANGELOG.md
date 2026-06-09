@@ -10,6 +10,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **🚩 Flagship proof** — [`docs/FLAGSHIP.md`](docs/FLAGSHIP.md): `atlas measure` run on famous repos (openclaw **−94%**, graphify −93%, ECC −92%, claude-context −87%, claude-mem −85%, hermes-agent −82%; fastapi −89%, express −81%, django/curl/gin −78%, flask −75%) — **−75% to −94%** orientation-token reduction, free + reproducible. Kept as **dated history** under `docs/benchmarks/flagship/`.
+- **`atlas measure --log`** — append a dated row (`date · version · repo · files · tokens · %`) to a central history ledger, so flagship/longitudinal measurements are kept and comparable later.
+
+### Fixed
+
+- **`atlas measure` silently aborted on any repo with >400 files** — `git ls-files | head -400` SIGPIPEs the producer, which under `set -o pipefail` + `set -e` aborts the command *before any output*. It had shipped broken for every real-world repo; the atlas repo (83 files) was too small to trigger it. Caught the instant the flagship ran on fastapi. Guarded the head-pipes + added a >400-file regression test (SCARS §PIPE-HEAD-SIGPIPE).
+
+## [0.1.10] — 2026-06-09
+
+### Added
+
 - **`atlas onboard [--pr]`** — drop ATLAS into any repo in one command: scaffold the quartet, auto-draft the map, measure the savings, and (with `--pr`) open a pull request via `gh`. The zero-friction "spread" path.
 - **Deeper `init --analyze`** — the auto-draft now generates a real **§0 "Where to look" table** *and* a **§1 module graph** with detected **talks-to** dependency edges (grep-based, language-agnostic). A fresh repo gets a near-complete map — and a real `atlas map` picture — out of the box, so the first 60 seconds don't start from a blank page.
 
@@ -178,7 +189,8 @@ First public release. ATLAS — Agentic Harness Standard.
 - `docs/CONTRIBUTING.md`.
 - `examples/sample-project/` — minimal trio.
 
-[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/Abbasi-Alain/atlas/compare/v0.1.7...v0.1.8

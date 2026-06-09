@@ -97,7 +97,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.1.10"
+ATLAS_VERSION="0.1.11"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -2022,11 +2022,12 @@ cmd_help() {
 # --badge prints a shields.io badge with the savings %, for the README.
 # ---------------------------------------------------------------------------
 cmd_measure() {
-  local want_badge=0 want_share=0
+  local want_badge=0 want_share=0 want_log=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --badge) want_badge=1; shift ;;
       --share) want_share=1; shift ;;
+      --log)   want_log=1; shift ;;
       *)       shift ;;
     esac
   done
@@ -2056,8 +2057,11 @@ cmd_measure() {
   local without_b=0
   without_b=$(( without_b + $(_bytes "$PWD/README.md") ))
   local tree_b
-  tree_b=$( { git -C "$PWD" ls-files 2>/dev/null || find "$PWD" -maxdepth 3 -type f; } \
-            | head -400 | wc -c | tr -d ' ')
+  # `| head` closes the pipe early on big repos → git ls-files gets SIGPIPE → under
+  # pipefail the whole substitution fails and aborts measure; `|| true` keeps the
+  # count (it's already on stdout before the failure). SCARS §PIPE-HEAD-SIGPIPE.
+  tree_b=$( { { git -C "$PWD" ls-files 2>/dev/null || find "$PWD" -maxdepth 3 -type f; } \
+            | head -400 | wc -c | tr -d ' '; } || true )
   without_b=$(( without_b + tree_b ))
   local f cnt=0 head_b=0 fb
   while IFS= read -r f; do
@@ -2131,6 +2135,21 @@ cmd_measure() {
       echo "    $(_c_dim "$url")"
     fi
     _say "the board lives at docs/LEADERBOARD.md"
+  fi
+
+  if [[ $want_log -eq 1 ]]; then
+    # append a dated row to a central history ledger so flagship/longitudinal
+    # measurements are kept and comparable later.
+    local hist repo3 d3 nfiles
+    hist="$ATLAS_HOME/docs/benchmarks/flagship/measure-history.jsonl"
+    mkdir -p "$(dirname "$hist")" 2>/dev/null || true
+    repo3="$(basename "$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || echo "$PWD")")"
+    d3="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    nfiles="$(git -C "$PWD" ls-files 2>/dev/null | wc -l | tr -d ' ')"
+    if printf '{"date":"%s","atlas_version":"%s","repo":"%s","files":%s,"skim_tok":%s,"spine_tok":%s,"whole_tok":%s,"pct_vs_skim":%s,"pct_vs_whole":%s}\n' \
+        "$d3" "$ATLAS_VERSION" "$repo3" "${nfiles:-0}" "$without_t" "$with_t" "$full_t" "$pct" "$pct_hi" >> "$hist" 2>/dev/null; then
+      _ok "logged to history → $(_c_dim "$hist")"
+    fi
   fi
 }
 
@@ -2464,7 +2483,7 @@ cmd_bench() {
     } > "$ctx_w"
     {
       echo "# README.md"; cat "$base/README.md" 2>/dev/null || true
-      echo; echo "# Files"; { git -C "$base" ls-files 2>/dev/null || ( cd "$base" && find . -type f ); } | head -400
+      echo; echo "# Files"; { { git -C "$base" ls-files 2>/dev/null || ( cd "$base" && find . -type f ); } | head -400; } || true   # SCARS §PIPE-HEAD-SIGPIPE
       echo; echo "# Source file heads"; cnt=0
       while IFS= read -r ff; do
         [[ $cnt -ge 15 ]] && break
