@@ -1,0 +1,53 @@
+# Dogfood: ATLAS runs its own "ATLAS bot" on every PR — a sticky comment with the
+# measured orientation savings + map-drift status. Uses the in-repo CLI (tests the
+# current code, not the released one). A live demo of `action.yml`.
+name: ATLAS bot
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  atlas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # drift needs history
+      - name: savings + drift → sticky PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          export PATH="$PWD/bin:$PATH"
+          cmp="HEAD"; [ -n "${{ github.base_ref }}" ] && cmp="origin/${{ github.base_ref }}"
+          if atlas check --changed-files="$cmp" >/dev/null 2>&1; then
+            drift="✅ \`ATLAS.md\` is current"
+          else
+            drift="⚠️ files changed without updating \`ATLAS.md\` — run \`atlas init --analyze\` or update §1"
+          fi
+          measure="$(atlas measure 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || true)"
+          body="$(printf '%s\n' \
+            "<!-- atlas-bot -->" \
+            "## 🗺️ ATLAS — *(this repo runs its own bot)*" \
+            "" \
+            "- **Map drift:** ${drift}" \
+            "- **Orientation cost** (what your agents skim to self-orient):" \
+            "" \
+            '```' \
+            "${measure}" \
+            '```' \
+            "" \
+            "<sub>Powered by <a href=\"https://github.com/Abbasi-Alain/atlas\">ATLAS</a> — the map your agents read first. Add it with <code>uses: Abbasi-Alain/atlas@v1</code>.</sub>")"
+          echo "$body" >> "$GITHUB_STEP_SUMMARY"
+          pr="${{ github.event.pull_request.number }}"
+          repo="${{ github.repository }}"
+          cid="$(gh api "repos/$repo/issues/$pr/comments" --jq '[.[] | select(.body | contains("<!-- atlas-bot -->"))][0].id // empty' 2>/dev/null || true)"
+          if [ -n "$cid" ]; then
+            gh api -X PATCH "repos/$repo/issues/comments/$cid" -f body="$body" >/dev/null && echo "updated PR comment"
+          else
+            gh api -X POST  "repos/$repo/issues/$pr/comments" -f body="$body" >/dev/null && echo "posted PR comment"
+          fi

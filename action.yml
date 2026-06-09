@@ -1,17 +1,24 @@
-# Reusable GitHub Action for ATLAS.
+# Reusable GitHub Action for ATLAS — the "ATLAS bot".
 #
-# Other repos add this to a workflow to validate their ATLAS harness in CI
-# and surface the orientation-token savings in the job summary:
+# Add it to a PR workflow to (1) validate the harness, (2) post a sticky PR
+# comment with the measured orientation-token savings + map-drift status:
 #
-#   - uses: Abbasi-Alain/atlas@v1
-#     with:
-#       working-directory: .
+#   permissions:
+#     contents: read
+#     pull-requests: write          # needed for the PR comment
+#   jobs:
+#     atlas:
+#       runs-on: ubuntu-latest
+#       steps:
+#         - uses: actions/checkout@v4
+#           with: { fetch-depth: 0 }   # drift needs history
+#         - uses: Abbasi-Alain/atlas@v1
 #
-# It installs the pinned ATLAS CLI, runs `atlas check` (fails the job if the
-# trio is missing/stale), and posts an `atlas measure` summary + badge snippet.
+# Inputs: `comment` (post the PR comment, default true), `drift-gate` (fail the
+# build if the map is stale, default false), `ref`, `working-directory`.
 
-name: "ATLAS check"
-description: "Validate the ATLAS harness (ATLAS.md + SKILL.md + CLAUDE.md/AGENTS.md) and report orientation-token savings."
+name: "ATLAS"
+description: "Validate the ATLAS harness and comment the orientation-token savings + map drift on the PR."
 author: "Alain Abbasi"
 branding:
   icon: "map"
@@ -26,6 +33,14 @@ inputs:
     description: "Directory to validate."
     required: false
     default: "."
+  comment:
+    description: "Post/update a sticky PR comment with savings + drift."
+    required: false
+    default: "true"
+  drift-gate:
+    description: "Fail the build if files changed without updating ATLAS.md."
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -41,16 +56,46 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: atlas check
 
-    - name: atlas measure (job summary)
+    - name: ATLAS report (PR comment + job summary)
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        {
-          echo "### 🗺 ATLAS"
-          echo ""
-          echo '```'
-          atlas measure || true
-          echo '```'
-          echo ""
-          echo "Badge: \`$(atlas measure --badge 2>/dev/null || true)\`"
-        } >> "$GITHUB_STEP_SUMMARY"
+        set -u
+        # Drift status vs the PR base (does not fail here unless drift-gate=true).
+        cmp="HEAD"; [ -n "${{ github.base_ref }}" ] && cmp="origin/${{ github.base_ref }}"
+        if atlas check --changed-files="$cmp" >/dev/null 2>&1; then
+          drift="✅ \`ATLAS.md\` is current"
+        else
+          drift="⚠️ files changed without updating \`ATLAS.md\` — run \`atlas init --analyze\` or update §1"
+        fi
+        measure="$(atlas measure 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || true)"
+        body="$(printf '%s\n' \
+          "<!-- atlas-bot -->" \
+          "## 🗺️ ATLAS" \
+          "" \
+          "- **Map drift:** ${drift}" \
+          "- **Orientation cost** (what your agents skim to self-orient):" \
+          "" \
+          '```' \
+          "${measure}" \
+          '```' \
+          "" \
+          "<sub>Powered by <a href=\"https://github.com/Abbasi-Alain/atlas\">ATLAS</a> — the map your agents read first.</sub>")"
+        echo "$body" >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "${{ inputs.comment }}" = "true" ] && [ "${{ github.event_name }}" = "pull_request" ]; then
+          pr="${{ github.event.pull_request.number }}"
+          repo="${{ github.repository }}"
+          cid="$(gh api "repos/$repo/issues/$pr/comments" --jq '[.[] | select(.body | contains("<!-- atlas-bot -->"))][0].id // empty' 2>/dev/null || true)"
+          if [ -n "$cid" ]; then
+            gh api -X PATCH "repos/$repo/issues/comments/$cid" -f body="$body" >/dev/null && echo "updated PR comment"
+          else
+            gh api -X POST "repos/$repo/issues/$pr/comments" -f body="$body" >/dev/null && echo "posted PR comment"
+          fi
+        fi
+
+        if [ "${{ inputs.drift-gate }}" = "true" ]; then
+          atlas check --changed-files="$cmp"
+        fi
