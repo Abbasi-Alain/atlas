@@ -5,5 +5,6 @@ directory reads this file *first* and follows links to the exact
 
 ## For AI coding agents — read these first
 - [ATLAS.md](ATLAS.md): repository map — where everything lives, commands, architecture, constraints.
-- .agents/skill/atlas/SKILL.md: procedural playbook + known failure modes (stable anchors).
+- [SCARS.md](SCARS.md): failure memory — read before fixing a bug; stable §anchors (symptom → root cause → do NOT → do).
+- .agents/skill/atlas/SKILL.md: procedural playbook — how to run, test, and do common tasks here.
 - [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md): behavioral contract for coding agents.
