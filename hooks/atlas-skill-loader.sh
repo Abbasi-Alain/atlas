@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # atlas-skill-loader — SessionStart-equivalent hook.
 #
-# Detects ATLAS.md and .agents/skill/<project>/SKILL.md in the cwd
+# Detects ATLAS.md, SCARS.md, and .agents/skill/<project>/SKILL.md in the cwd
 # and prints their navigational spine to stdout. Whichever agent
 # runtime invokes this hook will see that output and feed it into
 # the conversation as context — so the main agent automatically
@@ -14,10 +14,11 @@
 #
 # Output is bounded:
 #   - ATLAS: through end of §1 (~80 lines)
+#   - SCARS: Table-of-contents section only (failure anchors)
 #   - SKILL: ToC section only (anchors with one-line summaries)
 #
 # Sub-agents do NOT inherit this hook; their parent must include a
-# "read ATLAS.md and SKILL.md first" instruction in the prompt.
+# "read ATLAS.md, SCARS.md, and SKILL.md first" instruction in the prompt.
 
 set -u
 

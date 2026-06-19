@@ -11,9 +11,13 @@
 #                                              karpathy | google
 #                                     --stack: requires a style with stacks/ subdir
 #                                              (comma-separated; pick any subset)
-#   atlas check [--changed-files[=REF]]  lint the quartet + verify anchors unique;
-#                                     --changed-files also fails on structural
-#                                     drift (files moved but ATLAS.md not updated)
+#   atlas check [--changed-files[=REF]] [--json] [--strict]  lint the quartet +
+#                                     verify anchors unique; --changed-files also
+#                                     fails on structural drift (files moved but
+#                                     ATLAS.md not updated); --json emits a
+#                                     machine-readable report; --strict fails on warnings
+#   atlas fix                         auto-resolve conformance warnings: kebab the
+#                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
 #   atlas measure [--badge]           estimate orientation-token savings (with
 #                                     vs without ATLAS); --badge prints a shield
 #   atlas bench [--runtime claude|codex|opencode|openai] [--model M] [--effort L]
@@ -98,7 +102,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.2.0"
+ATLAS_VERSION="0.3.0"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -489,16 +493,36 @@ _check_drift() {
   _ok "no structural drift — ATLAS.md is current"
 }
 
+# --- atlas check finding sink: dual human / machine-readable JSON -------------
+# bash-3.2 safe, no jq. The _ck_* sinks use dynamic scope (errs/warns/json/
+# errs_json/warns_json are cmd_check locals) — hence the SC2154 directives.
+_json_esc() { local s="$1"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; printf '%s' "$s"; }
+_ck_obj() {  # code message [spec]
+  local o
+  o="{\"code\":\"$1\",\"message\":\"$(_json_esc "$2")\""
+  [[ -n "${3:-}" ]] && o="$o,\"spec\":\"$3\""
+  printf '%s}' "$o"
+}
+_json_join() { local out="" x; for x in "$@"; do [[ -n "$out" ]] && out="$out,"; out="$out$x"; done; printf '%s' "$out"; }
+# shellcheck disable=SC2154
+_ck_err()  { errs=$((errs+1));   if [[ $json -eq 1 ]]; then errs_json+=("$(_ck_obj "$1" "$2" "${3:-}")");  else _fail "$2"; fi; }
+# shellcheck disable=SC2154
+_ck_warn() { warns=$((warns+1)); if [[ $json -eq 1 ]]; then warns_json+=("$(_ck_obj "$1" "$2" "${3:-}")"); else _warnln "$2"; fi; }
+# shellcheck disable=SC2154
+_ck_ok()   { [[ ${json:-0} -eq 0 ]] && _ok "$1"; return 0; }
+
 cmd_check() {
-  local drift=0 ref=""
+  local drift=0 ref="" json=0 strict=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --changed-files)   drift=1; shift ;;
       --changed-files=*) drift=1; ref="${1#--changed-files=}"; shift ;;
+      --json)            json=1; shift ;;
+      --strict)          strict=1; shift ;;
       *) shift ;;
     esac
   done
-  _banner "🔍" "atlas check"
+  [[ $json -eq 0 ]] && _banner "🔍" "atlas check"
   local atlas="$PWD/ATLAS.md"
   local scars="$PWD/SCARS.md"
   local claude="$PWD/CLAUDE.md"
@@ -509,82 +533,87 @@ cmd_check() {
   [[ -n "$skill_glob" ]] && skill="$skill_glob"
   local init_hint="run 'atlas init' (non-destructive: scaffolds only the missing files)"
 
-  # Severity model: errors (spec MUST violations that break tooling) fail the
-  # check; warnings (SHOULD / conditional MUST) are advisory and still pass.
+  # Severity model: errors (spec MUST violations) fail; warnings (SHOULD /
+  # conditional MUST) are advisory unless --strict. --json emits a machine-
+  # readable report (no human lines) so any CI/agent can consume it.
   local errs=0 warns=0
+  local errs_json=() warns_json=()
+  local q_atlas=false q_scars=false q_skill=false q_claude=false q_agents="missing"
 
   # --- ATLAS.md (SPEC §1/§2): MUST exist at root with a §0 quick-orientation.
   if [[ ! -f "$atlas" ]]; then
-    _fail "missing ATLAS.md — $init_hint"; errs=$((errs+1))
+    _ck_err ATLAS_MISSING "missing ATLAS.md — $init_hint"
   else
-    _ok "ATLAS.md present"
-    grep -q "^## 0\." "$atlas" || { _fail "ATLAS.md missing §0 quick-orientation (SPEC §2)"; errs=$((errs+1)); }
+    q_atlas=true; _ck_ok "ATLAS.md present"
+    grep -q "^## 0\." "$atlas" || _ck_err ATLAS_NO_SECTION0 "ATLAS.md missing §0 quick-orientation" "§2"
   fi
 
   # --- SKILL.md (SPEC §1/§3): MUST exist with an H1 + a '## Table of contents'.
   # The ToC is the orientation surface the SessionStart hook and `atlas measure`
   # read, so it is required even though the recipe bodies are free-form.
   if [[ ! -f "$skill" ]]; then
-    _fail "missing SKILL.md — $init_hint"; errs=$((errs+1))
+    _ck_err SKILL_MISSING "missing SKILL.md — $init_hint"
   else
-    _ok "SKILL.md present at $skill"
-    if ! grep -q "^## Table of contents" "$skill"; then
-      _fail "SKILL.md missing '## Table of contents' — the orientation hook + 'atlas measure' surface it as the playbook index (SPEC §3); 'atlas init' scaffolds one"
-      errs=$((errs+1))
-    fi
+    q_skill=true; _ck_ok "SKILL.md present at $skill"
+    grep -q "^## Table of contents" "$skill" || _ck_err SKILL_NO_TOC "SKILL.md missing '## Table of contents' — the orientation hook + 'atlas measure' surface it as the playbook index (SPEC §3); 'atlas init' scaffolds one" "§3"
     # SPEC §1: the directory MUST be the kebab-cased remote/repo basename, so
     # every runtime resolves the same path. Warn (don't fail) on a mismatch —
     # a repo without a remote legitimately uses its root basename.
     local skill_dir; skill_dir="$(basename "$(dirname "$skill")")"
     if [[ "$skill_dir" != "$slug" ]]; then
-      _warnln "SKILL.md is under '.agents/skill/${skill_dir}/' but the spec expects kebab-case '.agents/skill/${slug}/' (SPEC §1) — rename it so every runtime discovers it"
-      warns=$((warns+1))
+      _ck_warn SKILL_DIR_NOT_KEBAB "SKILL.md is under '.agents/skill/${skill_dir}/' but the spec expects kebab-case '.agents/skill/${slug}/' — rename it (or run 'atlas fix') so every runtime discovers it" "§1"
     fi
   fi
 
   # --- SCARS.md (SPEC §1/§3): MUST exist with a ToC + unique anchors.
   if [[ ! -f "$scars" ]]; then
-    _fail "missing SCARS.md — $init_hint"; errs=$((errs+1))
+    _ck_err SCARS_MISSING "missing SCARS.md — $init_hint"
   else
-    _ok "SCARS.md present"
-    grep -q "^## Table of contents" "$scars" || { _fail "SCARS.md missing Table of contents (SPEC §3)"; errs=$((errs+1)); }
+    q_scars=true; _ck_ok "SCARS.md present"
+    grep -q "^## Table of contents" "$scars" || _ck_err SCARS_NO_TOC "SCARS.md missing Table of contents" "§3"
     local anchors dups
     anchors=$(grep -Eo '<a id="[a-z0-9-]+"></a>' "$scars" | sort)
-    dups=$(echo "$anchors" | uniq -d)
-    if [[ -n "$dups" ]]; then
-      _fail "duplicate anchors:"
-      while IFS= read -r line; do
-        printf '      %s\n' "$line"
-      done <<< "$dups"
-      errs=$((errs+1))
+    dups=$(echo "$anchors" | uniq -d | tr '\n' ' ')
+    if [[ -n "${dups// /}" ]]; then
+      _ck_err SCARS_DUP_ANCHORS "duplicate anchors: ${dups}" "§3.3"
     else
       local n; n=$(echo "$anchors" | grep -c . || true)
-      _ok "$n unique anchors"
+      _ck_ok "$n unique anchors"
     fi
   fi
 
-  # --- CLAUDE.md / AGENTS.md (SPEC §1/§5): the behavioral contract.
-  # CLAUDE.md is a conditional MUST (required when targeting Claude) and
-  # AGENTS.md SHOULD mirror it byte-for-byte — both are warnings so a repo that
-  # deliberately ships no contract still passes, but the gap is surfaced.
+  # --- CLAUDE.md / AGENTS.md (SPEC §1/§5): the behavioral contract (warnings).
+  # CLAUDE.md is a conditional MUST; AGENTS.md SHOULD mirror it byte-for-byte.
   if [[ ! -f "$claude" ]]; then
-    _warnln "no CLAUDE.md — the behavioral contract (SPEC §1/§5; required if you target Claude); 'atlas init' scaffolds it"
-    warns=$((warns+1))
+    _ck_warn CLAUDE_MISSING "no CLAUDE.md — the behavioral contract (SPEC §1/§5; required if you target Claude); 'atlas init' scaffolds it" "§5"
     if [[ -f "$agents" ]]; then
-      _warnln "AGENTS.md present but CLAUDE.md missing — CLAUDE.md is the canonical source they mirror (SPEC §5)"
-      warns=$((warns+1))
+      q_agents="orphan"
+      _ck_warn AGENTS_ORPHAN "AGENTS.md present but CLAUDE.md missing — CLAUDE.md is the canonical source they mirror (SPEC §5)" "§5"
     fi
   else
-    _ok "CLAUDE.md present"
+    q_claude=true; _ck_ok "CLAUDE.md present"
     if [[ ! -f "$agents" ]]; then
-      _warnln "no AGENTS.md — it SHOULD mirror CLAUDE.md so Codex/OpenCode auto-discover (SPEC §5); 'atlas export --to codex'"
-      warns=$((warns+1))
+      _ck_warn AGENTS_MISSING "no AGENTS.md — it SHOULD mirror CLAUDE.md so Codex/OpenCode auto-discover (SPEC §5); 'atlas export --to codex'" "§5"
     elif ! cmp -s "$claude" "$agents"; then
-      _warnln "AGENTS.md drifted from CLAUDE.md — they SHOULD be byte-identical (SPEC §5); 'atlas export --to codex'"
-      warns=$((warns+1))
+      q_agents="drift"
+      _ck_warn AGENTS_DRIFT "AGENTS.md drifted from CLAUDE.md — they SHOULD be byte-identical (SPEC §5); run 'atlas fix' or 'atlas export --to codex'" "§5"
     else
-      _ok "AGENTS.md mirrors CLAUDE.md"
+      q_agents="mirror"; _ck_ok "AGENTS.md mirrors CLAUDE.md"
     fi
+  fi
+
+  # --- emit -------------------------------------------------------------------
+  if [[ $json -eq 1 ]]; then
+    local ok=true strict_bool=false
+    if [[ $errs -gt 0 ]]; then ok=false; fi
+    if [[ $strict -eq 1 ]]; then strict_bool=true; if [[ $warns -gt 0 ]]; then ok=false; fi; fi
+    printf '{"ok":%s,"version":"%s","strict":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"}}\n' \
+      "$ok" "$ATLAS_VERSION" "$strict_bool" "$errs" "$warns" \
+      "$(_json_join ${errs_json[@]+"${errs_json[@]}"})" \
+      "$(_json_join ${warns_json[@]+"${warns_json[@]}"})" \
+      "$q_atlas" "$q_scars" "$q_skill" "$q_claude" "$q_agents"
+    [[ "$ok" == true ]] && exit 0
+    exit 1
   fi
 
   if [[ $errs -gt 0 ]]; then
@@ -594,10 +623,87 @@ cmd_check() {
     exit 1
   fi
   if [[ $drift -eq 1 ]]; then _check_drift "$ref"; fi
+  if [[ $strict -eq 1 && $warns -gt 0 ]]; then
+    echo "$(_c_red 'atlas:') $warns warning(s) — failing under --strict"
+    exit 1
+  fi
   if [[ $warns -gt 0 ]]; then
     echo "$(_c_green 'atlas:') ok $(_c_yellow "($warns warning(s) — see ⚠️ above)")"
   else
     echo "$(_c_green 'atlas:') ok"
+  fi
+}
+
+# fix — auto-resolve the conformance *warnings* `atlas check` surfaces:
+#   1. rename a non-kebab SKILL.md dir to the spec kebab name (+ update path refs)
+#   2. re-mirror AGENTS.md from CLAUDE.md when it's missing/drifted
+#   3. regenerate a stale llms.txt so its read-first set includes SCARS.md
+# Idempotent (re-running is a no-op). Missing quartet *files* are not authored
+# here — run 'atlas init' (it scaffolds only what's missing).
+cmd_fix() {
+  _banner "🔧" "atlas fix"
+  local fixes=0
+
+  # 1. kebab the SKILL.md directory (SPEC §1) --------------------------------
+  local slug; slug="$(_project_slug)"
+  local skill_glob; skill_glob=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+  if [[ -n "$skill_glob" ]]; then
+    local cur_dir cur_name new_dir
+    cur_dir="$(dirname "$skill_glob")"
+    cur_name="$(basename "$cur_dir")"
+    new_dir="$PWD/.agents/skill/$slug"
+    if [[ "$cur_name" != "$slug" ]]; then
+      local lc tracked=0 tmp
+      lc="$(printf '%s' "$cur_name" | tr '[:upper:]' '[:lower:]')"
+      if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git ls-files --error-unmatch "$skill_glob" >/dev/null 2>&1; then tracked=1; fi
+      if [[ "$lc" != "$slug" && -e "$new_dir" ]]; then
+        # a genuine (not case-only) rename into a dir that already exists — don't clobber
+        _warnln "can't rename '$cur_name' → '$slug': .agents/skill/$slug already exists — resolve by hand"
+      else
+        # Two-step via a temp name so a *case-only* rename also works on a
+        # case-insensitive filesystem (macOS), where 'mv Foo foo' is a no-op
+        # and '-e foo' matches 'Foo'. SCARS §MACOS-SED.
+        tmp="$PWD/.agents/skill/.atlas-rename.$$"
+        if [[ $tracked -eq 1 ]]; then
+          git mv "$cur_dir" "$tmp" && git mv "$tmp" "$new_dir"
+        else
+          mv "$cur_dir" "$tmp" && mv "$tmp" "$new_dir"
+        fi
+        _ok "renamed .agents/skill/$cur_name → .agents/skill/$slug"
+        fixes=$((fixes+1))
+        # update skill-path references in the quartet docs (portable; SCARS §MACOS-SED)
+        local f
+        for f in ATLAS.md CLAUDE.md AGENTS.md SCARS.md llms.txt EXAMPLES.md; do
+          if [[ -f "$PWD/$f" ]] && grep -q "\.agents/skill/$cur_name/" "$PWD/$f"; then
+            sed -i.bak "s#\.agents/skill/$cur_name/#.agents/skill/$slug/#g" "$PWD/$f" && rm -f "$PWD/$f.bak"
+            _say "updated skill-path references in $f"
+          fi
+        done
+      fi
+    fi
+  fi
+
+  # 2. re-mirror AGENTS.md ← CLAUDE.md (SPEC §5) -----------------------------
+  if [[ -f "$PWD/CLAUDE.md" ]]; then
+    if [[ ! -f "$PWD/AGENTS.md" ]] || ! cmp -s "$PWD/CLAUDE.md" "$PWD/AGENTS.md"; then
+      cp "$PWD/CLAUDE.md" "$PWD/AGENTS.md"
+      _ok "mirrored AGENTS.md ← CLAUDE.md (byte-identical)"
+      fixes=$((fixes+1))
+    fi
+  fi
+
+  # 3. regenerate a stale llms.txt (read-first set should list SCARS.md) ------
+  if [[ -f "$PWD/llms.txt" && -f "$PWD/SCARS.md" ]] && ! grep -q "SCARS.md" "$PWD/llms.txt"; then
+    cmd_export --to llms-txt >/dev/null 2>&1
+    _ok "regenerated llms.txt (added SCARS.md to the read-first set)"
+    fixes=$((fixes+1))
+  fi
+
+  echo ""
+  if [[ $fixes -eq 0 ]]; then
+    _say "nothing to fix — already conformant (missing files? run 'atlas init')."
+  else
+    _say "$fixes fix(es) applied — run 'atlas check' to confirm."
   fi
 }
 
@@ -3094,6 +3200,7 @@ main() {
   case "$sub" in
     init)     cmd_init "$@" ;;
     check)    cmd_check "$@" ;;
+    fix)      cmd_fix "$@" ;;
     measure)  cmd_measure "$@" ;;
     bench)    cmd_bench "$@" ;;
     map)      cmd_map "$@" ;;
