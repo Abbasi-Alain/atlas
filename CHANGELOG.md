@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-06-19
+
+### Added
+
+- **`atlas check --json`** — a machine-readable conformance report (`{ok, version, strict, counts, errors[], warnings[], quartet{…}}`), each finding carrying a stable `code` (e.g. `SKILL_DIR_NOT_KEBAB`, `AGENTS_DRIFT`). Lets any CI, agent, or tool consume `atlas check` programmatically — the SPEC's machine-readable thesis, now realized. (bash-3.2 safe, zero deps.)
+- **`atlas check --strict`** — promote warnings to errors (exit 1), so a team can gate CI on the full quartet (CLAUDE/AGENTS present + mirrored, kebab skill dir), not just the hard MUSTs.
+- **`atlas fix`** — auto-resolve the conformance *warnings* `atlas check` surfaces: rename a non-kebab `SKILL.md` directory to the spec name (and update path references), re-mirror a missing/drifted `AGENTS.md` from `CLAUDE.md`, and regenerate a stale `llms.txt`. Idempotent; missing files still defer to `atlas init`.
+
+### Fixed
+
+- **Case-only `SKILL.md` directory renames now work on case-insensitive filesystems (macOS).** `atlas fix` renames e.g. `Proxima-Finance/` → `proxima-finance/` via a temp two-step (a plain `mv Foo foo` is a no-op there, and `[ -e foo ]` matches `Foo`). SCARS §MACOS-SED.
+- **SessionStart hook header comment** now matches its body — it documents loading ATLAS + **SCARS** + SKILL (the body already surfaced SCARS; the doc line was stale).
+
 ## [0.2.0] — 2026-06-17
 
 ### Added

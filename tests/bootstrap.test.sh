@@ -120,6 +120,48 @@ TMP_B5="$(mktemp -d)"; ( cd "$TMP_B5" && git init -q -b main 2>/dev/null && "$CL
   && _pass "llms.txt read-first set includes SCARS.md (BUG-5)" || _fail "BUG-5 llms.txt missing SCARS"
 rm -rf "$TMP_B5"
 
+# --- v0.3.0: machine-readable check (--json/--strict) + atlas fix --------
+echo ""
+echo "-- check --json/--strict + atlas fix --"
+
+# check --json emits machine-readable conformance (valid-ish JSON: ok + quartet).
+TMP_J="$(mktemp -d)"; ( cd "$TMP_J" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  out=$("$CLI" check --json)
+  echo "$out" | grep -q '"ok":true' && echo "$out" | grep -q '"quartet":{"atlas":true' ) \
+  && _pass "check --json emits machine-readable conformance (BUG/v0.3.0)" || _fail "check --json"
+rm -rf "$TMP_J"
+
+# check --strict turns a warning into a non-zero exit; plain still passes.
+TMP_S="$(mktemp -d)"; ( cd "$TMP_S" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1 && rm -f CLAUDE.md AGENTS.md
+  "$CLI" check >/dev/null 2>&1; rc_plain=$?
+  "$CLI" check --strict >/dev/null 2>&1; rc_strict=$?
+  [[ $rc_plain -eq 0 && $rc_strict -ne 0 ]] ) \
+  && _pass "check --strict fails on warnings (plain passes)" || _fail "check --strict"
+rm -rf "$TMP_S"
+
+# atlas fix kebabs a non-kebab SKILL dir → the kebab warning is gone.
+TMP_F="$(mktemp -d)"; ( cd "$TMP_F" && git init -q -b main 2>/dev/null \
+  && git remote add origin https://github.com/x/Proxima-Finance.git && "$CLI" init >/dev/null 2>&1
+  mv .agents/skill/proxima-finance .agents/skill/Proxima-Finance
+  "$CLI" fix >/dev/null 2>&1
+  ! "$CLI" check --json | grep -q SKILL_DIR_NOT_KEBAB ) \
+  && _pass "atlas fix kebabs the SKILL dir (BUG-3 auto-fix)" || _fail "atlas fix kebab"
+rm -rf "$TMP_F"
+
+# atlas fix re-mirrors a drifted AGENTS.md back to byte-identical.
+TMP_FM="$(mktemp -d)"; ( cd "$TMP_FM" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  echo "drift" >> AGENTS.md
+  "$CLI" fix >/dev/null 2>&1
+  cmp -s CLAUDE.md AGENTS.md ) \
+  && _pass "atlas fix re-mirrors drifted AGENTS.md" || _fail "atlas fix mirror"
+rm -rf "$TMP_FM"
+
+# atlas fix is idempotent on a conformant repo (no-op).
+TMP_FI="$(mktemp -d)"; ( cd "$TMP_FI" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" fix 2>&1 | grep -q "nothing to fix" ) \
+  && _pass "atlas fix is a no-op when already conformant" || _fail "atlas fix idempotent"
+rm -rf "$TMP_FI"
+
 # --- new commands (smoke) ------------------------------------------------
 echo ""
 echo "-- new commands --"

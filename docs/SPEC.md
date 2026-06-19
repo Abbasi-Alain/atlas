@@ -217,6 +217,13 @@ MUST) are advisory and still pass (exit 0).
 and never overwrites an existing file without `--force` — so `check`'s
 remediation hint (*"run 'atlas init'"*) is safe to follow on a populated repo.
 
+`atlas check --json` emits the same result as a machine-readable object
+(`{ok, errors[], warnings[], quartet{…}}`, each finding carrying a stable
+`code`) so any CI or agent can consume conformance programmatically; `--strict`
+promotes warnings to errors (exit 1) for CI gating. `atlas fix` auto-resolves the
+warnings it can — renaming a non-kebab `SKILL.md` directory, re-mirroring a
+drifted `AGENTS.md`, and regenerating a stale `llms.txt`.
+
 Future versions will also check:
 - Every anchor in the ToC has a body.
 - Every anchor body has the six required `**Label.**` paragraphs.

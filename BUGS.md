@@ -9,16 +9,16 @@ Verified against `bin/atlas` v0.1.11 (`atlas check`) + `docs/SPEC.md`.
 
 ---
 
-## ✅ Resolution — all five fixed in v0.2.0 (pending maintainer approval to tag)
+## ✅ Resolution — all six fixed (BUG-1..5 in v0.2.0, BUG-6 in v0.3.0)
 
-All boxes ticked below. Landed as a coherent change (no commit/tag yet — staged for review):
-- **BUG-1** — kept the load-bearing ToC requirement (the SessionStart hook + `atlas measure` surface it) but made it spec-clear (SPEC §3) and the failure message actionable. *Note: the report read SPEC §3 as "no fixed structure," but it already mandates "H1 + a `## Table of contents`"; removing the ToC would break the orientation surface, so option (b) — clarify, don't drop.*
+- **BUG-1** — kept the load-bearing ToC requirement (the SessionStart hook + `atlas measure` surface it) but made it spec-clear (SPEC §3) and the failure message actionable. *The report read SPEC §3 as "no fixed structure," but it already mandates "H1 + a `## Table of contents`"; removing the ToC would break the orientation surface, so option (b) — clarify, don't drop.*
 - **BUG-2** — `atlas check` now validates `CLAUDE.md` (warn) + `AGENTS.md` presence & byte-equality (`cmp -s`, warn).
-- **BUG-3** — `_project_slug` (kebab) now drives **both** `atlas init` (scaffolds `.agents/skill/<kebab>/`) and `atlas check` (warns on a non-kebab dir) — derived from the spec, not hardcoded.
+- **BUG-3** — `_project_slug` (kebab) drives **both** `atlas init` (scaffolds `.agents/skill/<kebab>/`) and `atlas check` (warns on a non-kebab dir); `_project_name` resolves nested/monorepo subprojects via `git rev-parse --show-prefix`. Derived from the spec, not hardcoded.
 - **BUG-4** — `atlas init` was already non-destructive (`_render` skips existing); the `check` hint now says so.
-- **BUG-5** — `llms.txt` read-first set now includes `SCARS.md`; the SessionStart hook already surfaced it (re-run `atlas install` to refresh a stale installed copy).
+- **BUG-5** — `llms.txt` read-first set now includes `SCARS.md` (code + the repo's own regenerated artifact); the SessionStart hook already surfaces it.
+- **BUG-6** (v0.3.0) — the hook's header comment now documents ATLAS + **SCARS** + SKILL, matching its body.
 
-Design: `atlas check` gained an **errors-vs-warnings** severity model so spec MUSTs fail while SHOULD/conditional rules inform — `atlas check` is now a real conformance validator. Regression test per bug in `tests/bootstrap.test.sh` (90/90 green); `shellcheck bin/atlas` clean; SPEC §1/§3/§6 + `CHANGELOG.md [0.2.0]` updated coherently.
+Design: `atlas check` gained an **errors-vs-warnings** severity model — a real conformance validator. **v0.3.0** generalizes it toward a universal standard: `atlas check --json` (machine-readable conformance any CI/agent can consume), `--strict` (warnings→errors for CI gating), and `atlas fix` (auto-resolve: kebab the SKILL dir incl. case-only renames on macOS, re-mirror `AGENTS.md`, regenerate stale `llms.txt`). Regression test per bug/feature in `tests/bootstrap.test.sh` (**95/95 green**); `shellcheck` clean; SPEC §1/§3/§6 + `CHANGELOG.md [0.2.0]`/`[0.3.0]` coherent; `ATLAS_VERSION` + `package.json` bumped together (SCARS §CLI-VERSION-DRIFT).
 
 ---
 
@@ -78,6 +78,17 @@ Design: `atlas check` gained an **errors-vs-warnings** severity model so spec MU
   not, this is a docs/`llms.txt`/onboarding-template nudge rather than a code change.)
 - **Fix:** ensure `atlas onboard` / templates / `llms.txt` list `SCARS.md` in the read-first set, and
   any orientation hook prints ATLAS + SCARS + SKILL.
+
+## [x] BUG-6 🟡 `hooks/atlas-skill-loader.sh` header comment is stale (says ATLAS+SKILL; body also loads SCARS)
+- **Where:** `hooks/atlas-skill-loader.sh` top comment (lines ~4, ~16-20).
+- **Detail:** BUG-5's fix correctly added the SCARS block to the hook **body** (it prints
+  `SCARS.md (hard-won failure memory)`), but the **header comment** still reads *"Detects ATLAS.md
+  and .agents/skill/<project>/SKILL.md"*, lists only ATLAS + SKILL under "Output is bounded", and
+  tells sub-agents to *"read ATLAS.md and SKILL.md first"* — no mention of SCARS. Doc/behavior drift.
+- **Fix (1-liner-ish):** update the header comment to mention SCARS: "Detects ATLAS.md, SCARS.md, and
+  .agents/skill/<project>/SKILL.md"; add a `- SCARS: ToC section (failure §anchors)` bounded-output
+  line; and change the sub-agent note to *"read ATLAS.md, SCARS.md, and SKILL.md first"*. No code
+  change — comment only. (Found while installing the v0.2.0 hook on a real machine.)
 
 ---
 
