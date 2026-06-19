@@ -28,7 +28,7 @@
   <a href="https://github.com/Abbasi-Alain/atlas/graphs/contributors"><img src="https://img.shields.io/github/contributors/Abbasi-Alain/atlas?style=for-the-badge&logo=github&logoColor=white&color=3b82f6" alt="Contributors"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3b82f6?style=for-the-badge" alt="License: MIT"/></a>
   <a href="https://github.com/Abbasi-Alain/atlas/actions"><img src="https://github.com/Abbasi-Alain/atlas/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://doi.org/10.5281/zenodo.20766339"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.20766339.svg" alt="DOI"/></a>
+  <a href="https://doi.org/10.5281/zenodo.20766338"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.20766338.svg" alt="DOI"/></a>
 </p>
 
 <p align="center">
@@ -737,7 +737,7 @@ If you use ATLAS in academic work, please cite the preprint (GitHub's
 > `note`/`url` point readers to this repository.
 
 To cite the **software** specifically, use the archived release on Zenodo —
-[DOI 10.5281/zenodo.20766339](https://doi.org/10.5281/zenodo.20766339) (the concept
+[DOI 10.5281/zenodo.20766338](https://doi.org/10.5281/zenodo.20766338) (the concept
 DOI always resolves to the latest version):
 
 ```bibtex
@@ -746,8 +746,8 @@ DOI always resolves to the latest version):
   author    = {Abbasi, Alain},
   year      = {2026},
   publisher = {Zenodo},
-  doi       = {10.5281/zenodo.20766339},
-  url       = {https://doi.org/10.5281/zenodo.20766339}
+  doi       = {10.5281/zenodo.20766338},
+  url       = {https://doi.org/10.5281/zenodo.20766338}
 }
 ```
 

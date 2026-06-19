@@ -15,7 +15,7 @@ authors:
     affiliation: "ProximaMind ASI Labs, Paris, France"
 repository-code: "https://github.com/Abbasi-Alain/atlas"
 url: "https://github.com/Abbasi-Alain/atlas"
-doi: "10.5281/zenodo.20766339"   # Zenodo concept DOI (always resolves to the latest release)
+doi: "10.5281/zenodo.20766338"   # Zenodo concept DOI (always resolves to the latest release)
 license: MIT
 keywords:
   - AI coding agents
