@@ -27,6 +27,13 @@
 - `EXAMPLES.md` is OPTIONAL but strongly recommended — teaches the conventions by transformation pairs (vague→concrete, bad→good).
 - All required files **MUST** be UTF-8 Markdown and checked into version control.
 
+**Reading order (orientation).** An agent orients in this order: `ATLAS.md`
+(*where things live*) → `SCARS.md` (*what breaks — read before fixing a bug*) →
+`SKILL.md` (*how to do common tasks*) → `CLAUDE.md`/`AGENTS.md` (*how to act*).
+Any orientation surface ATLAS generates — the `llms.txt` "read these first" list
+and the SessionStart hook — **MUST** include `SCARS.md`, not just the map and
+playbook, so the failure anchors actually surface.
+
 ### Axes
 
 The quartet covers four orthogonal axes. Conformance means addressing each:
@@ -97,9 +104,13 @@ A row pointing at `.agents/skill/<project>/SKILL.md` for "Debug a known issue".
 
 ## 3. SCARS.md — required structure
 
-> `SKILL.md` is the procedural how-to file (task recipes); it has no fixed
-> internal schema beyond an H1 + a `## Table of contents`. The structured
-> `§ANCHOR` schema below belongs to **SCARS.md**.
+> **`SKILL.md` required structure (minimal):** an H1 title **and** a
+> `## Table of contents`. The recipe bodies below the ToC are otherwise
+> free-form — SKILL has no fixed `§ANCHOR` schema. The ToC is required (not
+> optional): the SessionStart orientation hook and `atlas measure` read it as
+> the playbook's navigational index, so `atlas check` enforces it. The
+> structured `§ANCHOR` failure-memory schema described below belongs to
+> **SCARS.md**, not SKILL.md.
 
 ### 3.1 Header
 - H1 title: `# SCARS — <project-name> hard-won failure memory`
@@ -188,13 +199,25 @@ The `AGENTS.md` mirror exists for runtime compatibility (Codex / OpenCode / etc.
 
 ## 6. Validation
 
-`atlas check` validates:
-- ATLAS.md exists at repo root and has §0.
-- SKILL.md exists at `.agents/skill/<project>/SKILL.md` and has a `## Table of contents`.
-- All SKILL anchor IDs are unique.
+`atlas check` reports two severities: **errors** (spec MUST violations that break
+cross-tool reliance) fail the check (exit 1); **warnings** (SHOULD / conditional
+MUST) are advisory and still pass (exit 0).
+
+**Errors — must fix:**
+- `ATLAS.md` exists at repo root and has a §0 quick-orientation.
+- `SKILL.md` exists at `.agents/skill/<project-name>/SKILL.md` and has a `## Table of contents`.
+- `SCARS.md` exists at repo root, has a `## Table of contents`, and all its `§ANCHOR` IDs are unique.
+
+**Warnings — should fix:**
+- `CLAUDE.md` is present (the behavioral contract; a MUST if the repo targets Claude).
+- `AGENTS.md` is present and **byte-identical** to `CLAUDE.md` (`cmp -s`).
+- The `SKILL.md` directory equals the kebab-cased project name (`.agents/skill/<kebab>/`), so every runtime resolves the same path.
+
+`atlas init` is **non-destructive**: it scaffolds only the missing quartet files
+and never overwrites an existing file without `--force` — so `check`'s
+remediation hint (*"run 'atlas init'"*) is safe to follow on a populated repo.
 
 Future versions will also check:
-- CLAUDE.md exists and AGENTS.md mirrors it.
 - Every anchor in the ToC has a body.
 - Every anchor body has the six required `**Label.**` paragraphs.
 - File-path references in `**Where.**` resolve.

@@ -18,6 +18,7 @@
 - [§NO-COAUTHOR — never add AI-assistant attribution to commits](#no-coauthor)
 - [§ATLAS-IS-INDEX — update ATLAS.md when structure changes](#atlas-is-index)
 - [§SMOKE-AFTER-CHANGE — run the smoke set after touching the CLI](#smoke-after-change)
+- [§SKILL-TOC-LOAD-BEARING — the SKILL.md ToC is required; orientation depends on it](#skill-toc-load-bearing)
 
 **Bash / CLI** *(this repo's real scars)*
 - [§SET-E-AND-AND — `A && B` as a standalone line can abort under `set -e`](#set-e-and-and)
@@ -61,6 +62,35 @@ future agent to re-grep. Verify with `atlas check`.
 
 `shellcheck bin/atlas && bash tests/bootstrap.test.sh` (ATLAS §5). Don't ship
 commits that don't green it.
+
+---
+
+<a id="skill-toc-load-bearing"></a>
+### §SKILL-TOC-LOAD-BEARING — the SKILL.md ToC is required; orientation depends on it
+
+**Symptom.** A "fix" proposes removing the `## Table of contents` requirement from
+`atlas check` for `SKILL.md`, citing SPEC §3 as saying SKILL "has no fixed structure"
+(BUGS §BUG-1 suggested exactly this).
+
+**Root cause.** SPEC §3 mandates a *minimal* structure — an H1 **plus** a
+`## Table of contents`. That ToC is the navigational index the SessionStart hook
+(`hooks/atlas-skill-loader.sh`) prints and that `atlas measure` counts as the
+playbook's orientation surface. The "no fixed structure" reading drops the
+"beyond an H1 + a ToC" clause.
+
+**Do NOT.** Remove the SKILL.md ToC assertion from `cmd_check`, or relax SPEC §3 to
+make the ToC optional. It would silently break the orientation surface for every
+repo while the repo still "passes" `atlas check`.
+
+**Do.** Keep the ToC an **error**-level requirement. If the failure confuses, make
+the *message* actionable (say why it's needed + that `atlas init` scaffolds one)
+and clarify the spec — which v0.2.0 did. Reserve warnings for SHOULD/conditional
+rules (CLAUDE/AGENTS presence, kebab dir).
+
+**Where.** `bin/atlas::cmd_check` (SKILL.md block); `docs/SPEC.md` §3/§6;
+`hooks/atlas-skill-loader.sh`; `tests/bootstrap.test.sh` (BUG-1 regression).
+
+**Shipped in.** v0.2.0.
 
 ---
 

@@ -64,7 +64,7 @@ fi
 if [[ -n "$SKILL_FILE" && -f "$SKILL_FILE" ]]; then
   HAS_OUTPUT=1
   echo "================================================================"
-  echo "SKILL.md (error/pattern playbook) detected at $SKILL_FILE"
+  echo "SKILL.md (procedural task playbook) detected at $SKILL_FILE"
   echo "================================================================"
   echo "Anchors below are stable — cite from commits/PRs and use Read"
   echo "tool on the file to expand any section's full body."

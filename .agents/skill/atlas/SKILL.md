@@ -66,7 +66,10 @@ Must be green before any commit (SCARS §SMOKE-AFTER-CHANGE).
 <a id="cut-release"></a>
 ### Cut a release
 
-1. Move `CHANGELOG.md` `[Unreleased]` → `[X.Y.Z]`; bump `package.json`.
+1. Move `CHANGELOG.md` `[Unreleased]` → `[X.Y.Z]`; bump **both** `package.json`
+   **and** `ATLAS_VERSION` in `bin/atlas` in the same commit (SCARS §CLI-VERSION-DRIFT
+   — the `.deb`/AUR packages ship `bin/` without `package.json`, so the constant
+   can't be derived and silently drifts if you bump only one).
 2. Commit, tag `vX.Y.Z`, `git push origin main --tags`.
 3. The tag push fans out to every channel (npm/.deb/brew/AUR/PPA). Watch
    `gh run list`. Secrets + one-time setup: `docs/RELEASING.md`.
