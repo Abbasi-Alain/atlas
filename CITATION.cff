@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If you use ATLAS in academic work, please cite the preprint below."
+title: "ATLAS: a precomputed context layer for stateless AI agents"
+abstract: >-
+  ATLAS is an open, zero-dependency standard and tool that gives a repository a
+  small, fixed, precomputed context layer — a structural map (ATLAS.md), a
+  procedural playbook (SKILL.md), a failure memory (SCARS.md), and a behavioral
+  contract (CLAUDE.md / AGENTS.md) — so that stateless coding agents stop
+  re-deriving a codebase's structure on every session.
+type: software
+authors:
+  - family-names: Abbasi
+    given-names: Alain
+    email: abbasi.alain@gmail.com
+    affiliation: "ProximaMind ASI Labs, Paris, France"
+repository-code: "https://github.com/Abbasi-Alain/atlas"
+url: "https://github.com/Abbasi-Alain/atlas"
+license: MIT
+keywords:
+  - AI coding agents
+  - LLM agents
+  - repository context
+  - agent orientation
+  - precomputed context
+# The accompanying paper. Fill in `identifiers` (arXiv id / DOI) once assigned,
+# then GitHub's "Cite this repository" button will surface this citation.
+preferred-citation:
+  type: article
+  title: >-
+    The Agent Orientation Tax: Amortizing It with ATLAS, a Precomputed Context
+    Layer for Stateless AI Agents
+  authors:
+    - family-names: Abbasi
+      given-names: Alain
+  year: 2026
+  # TODO: uncomment and fill once the preprint is live
+  # journal: "arXiv preprint"
+  # identifiers:
+  #   - type: other
+  #     value: "arXiv:XXXX.XXXXX"
+  #   - type: doi
+  #     value: "10.5281/zenodo.XXXXXXX"

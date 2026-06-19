@@ -48,6 +48,7 @@
 | [`.github/workflows/`](.github/workflows/) | CI + release fan-out (§6) + `atlas-pr.yml` (the PR bot — dogfoods [`action.yml`](action.yml)) | packaging/ |
 | [`tests/`](tests/) | `bootstrap.test.sh` smoke test (§5) | bin/atlas |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history (drives release notes) | §6 |
+| [`CITATION.cff`](CITATION.cff) | Citation metadata — GitHub "Cite this repository" + Zenodo DOI on release | §6 |
 
 > **Not applicable** (deleted per spec convention): §3 service layer,
 > §4 front-end, §D data model, §R runtime topology, §O observability,

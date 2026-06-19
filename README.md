@@ -716,6 +716,25 @@ If you want to start with just `CLAUDE.md` and ignore the rest, fine — the spe
 
 ---
 
+## Citing ATLAS
+
+If you use ATLAS in academic work, please cite the preprint (GitHub's
+"Cite this repository" button reads [`CITATION.cff`](CITATION.cff)):
+
+```bibtex
+@article{atlas2026,
+  title   = {The Agent Orientation Tax: Amortizing It with ATLAS,
+             a Precomputed Context Layer for Stateless AI Agents},
+  author  = {Abbasi, Alain},
+  year    = {2026},
+  note    = {Preprint. arXiv:XXXX.XXXXX},
+  url     = {https://github.com/Abbasi-Alain/atlas}
+}
+```
+
+> The arXiv ID / DOI will be filled in once the preprint is live; until then the
+> `note`/`url` point readers to this repository.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Use freely in commercial, OSS, or private agent stacks.

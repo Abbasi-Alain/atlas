@@ -62,6 +62,64 @@ else
   _fail "duplicates not detected"
 fi
 
+# --- check: quartet validation (BUGS.md regressions) ---------------------
+echo ""
+echo "-- check: quartet validation --"
+
+# fresh init must be FULLY conformant — zero warnings (standard-grade scaffold).
+TMP_B0="$(mktemp -d)"; ( cd "$TMP_B0" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  out=$("$CLI" check 2>&1); rc=$?
+  [[ $rc -eq 0 ]] && ! echo "$out" | grep -qi "warning" ) \
+  && _pass "fresh init passes check with zero warnings" || _fail "fresh init not fully conformant"
+rm -rf "$TMP_B0"
+
+# BUG-1: SKILL.md without a '## Table of contents' is an error with an actionable message.
+TMP_B1="$(mktemp -d)"; ( cd "$TMP_B1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  sk=$(find .agents -name SKILL.md); grep -v "Table of contents" "$sk" > "$sk.t" && mv "$sk.t" "$sk"
+  out=$("$CLI" check 2>&1); rc=$?
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "missing '## Table of contents'" ) \
+  && _pass "check errors on SKILL.md without a ToC (BUG-1)" || _fail "BUG-1 ToC not enforced"
+rm -rf "$TMP_B1"
+
+# BUG-2: a missing CLAUDE.md is a warning, not a hard failure (still exit 0).
+TMP_B2="$(mktemp -d)"; ( cd "$TMP_B2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  rm -f CLAUDE.md AGENTS.md
+  out=$("$CLI" check 2>&1); rc=$?
+  [[ $rc -eq 0 ]] && echo "$out" | grep -qi "no CLAUDE.md" ) \
+  && _pass "check warns (not fails) on missing CLAUDE.md (BUG-2)" || _fail "BUG-2 CLAUDE.md unchecked"
+rm -rf "$TMP_B2"
+
+# BUG-2: AGENTS.md drifted from CLAUDE.md is flagged.
+TMP_B2D="$(mktemp -d)"; ( cd "$TMP_B2D" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  echo "drift" >> AGENTS.md
+  out=$("$CLI" check 2>&1); rc=$?
+  [[ $rc -eq 0 ]] && echo "$out" | grep -qi "AGENTS.md drifted" ) \
+  && _pass "check warns on AGENTS.md drift (BUG-2)" || _fail "BUG-2 drift undetected"
+rm -rf "$TMP_B2D"
+
+# BUG-3: init derives the kebab dir from the remote; check warns on a non-kebab dir.
+TMP_B3="$(mktemp -d)"; ( cd "$TMP_B3" && git init -q -b main 2>/dev/null \
+  && git remote add origin https://github.com/x/Proxima-Finance.git && "$CLI" init >/dev/null 2>&1
+  [[ -d .agents/skill/proxima-finance ]] || exit 1
+  mv .agents/skill/proxima-finance .agents/skill/Proxima-Finance
+  out=$("$CLI" check 2>&1); rc=$?
+  [[ $rc -eq 0 ]] && echo "$out" | grep -qi "expects kebab-case" ) \
+  && _pass "init scaffolds kebab dir; check warns on non-kebab (BUG-3)" || _fail "BUG-3 kebab dir"
+rm -rf "$TMP_B3"
+
+# BUG-4: the remediation hint is non-destructive wording.
+TMP_B4="$(mktemp -d)"; ( cd "$TMP_B4" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  rm -f SCARS.md
+  "$CLI" check 2>&1 | grep -qi "non-destructive" ) \
+  && _pass "check remediation hint is non-destructive (BUG-4)" || _fail "BUG-4 hint wording"
+rm -rf "$TMP_B4"
+
+# BUG-5: llms.txt 'read these first' set includes SCARS.md.
+TMP_B5="$(mktemp -d)"; ( cd "$TMP_B5" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1 \
+  && "$CLI" export --to llms-txt >/dev/null 2>&1 && grep -q "SCARS.md" llms.txt ) \
+  && _pass "llms.txt read-first set includes SCARS.md (BUG-5)" || _fail "BUG-5 llms.txt missing SCARS"
+rm -rf "$TMP_B5"
+
 # --- new commands (smoke) ------------------------------------------------
 echo ""
 echo "-- new commands --"

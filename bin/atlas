@@ -98,7 +98,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.1.11"
+ATLAS_VERSION="0.2.0"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -168,6 +168,7 @@ _say()  { echo "$(_c_dim '   atlas:') $*"; }
 _warn() { echo "$(_c_yellow '⚠️  atlas:') $*" >&2; }
 _ok()   { echo "$(_c_green '   ✅') $*"; }
 _fail() { echo "$(_c_red '   ❌') $*"; }
+_warnln() { echo "$(_c_yellow '   ⚠️ ') $*"; }
 _banner() {
   # _banner <emoji> <title>
   if _c_enabled; then
@@ -179,12 +180,33 @@ _banner() {
 _have() { command -v "$1" >/dev/null 2>&1; }
 
 _project_name() {
-  local n
-  n="$( { git config --get remote.origin.url 2>/dev/null || true; } \
-       | sed -E 's#.*/##; s#\.git$##' )"
+  # A project's name is the kebab basis (SPEC §1). Use the git-remote basename
+  # only when cwd is the repo ROOT; for a nested project root (a monorepo
+  # subproject, or a bundled example inside another repo) fall back to the
+  # project's own directory basename — never the enclosing repo's remote.
+  # `git rev-parse --show-prefix` is empty only at the repo root, and avoids the
+  # macOS /var↔/private/var path-normalization trap of comparing toplevel to PWD.
+  local n=""
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ -z "$(git rev-parse --show-prefix 2>/dev/null || true)" ]]; then
+      n="$( { git config --get remote.origin.url 2>/dev/null || true; } \
+           | sed -E 's#.*/##; s#\.git$##' )"
+    fi
+  fi
   [[ -z "$n" ]] && n="$(basename "$PWD")"
   echo "$n"
 }
+
+# Kebab-case a string per SPEC §1 (lowercase; non-alphanumeric runs collapse to a
+# single hyphen; trim leading/trailing hyphens). Portable: tr + BSD/GNU sed -E.
+_kebab() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+}
+
+# The spec-mandated SKILL.md directory name: the kebab-cased git-remote (or
+# repo-root) basename. Used identically by `init` (scaffold) and `check`
+# (validate) so the expectation is derived, never hardcoded per repo.
+_project_slug() { _kebab "$(_project_name)"; }
 
 _render() {
   local in="$1" out="$2" force="${3:-0}"
@@ -364,6 +386,7 @@ cmd_init() {
     esac
   done
   local project; project="$(_project_name)"
+  local slug; slug="$(_project_slug)"   # spec-mandated kebab dir name (SPEC §1)
 
   # Resolve per-template source by style. A style may override only some
   # files; missing ones fall back to the default template root.
@@ -383,7 +406,7 @@ cmd_init() {
 
   _banner "🚀" "atlas init  $(_c_dim "(style=$style)")"
   _render "$(_src ATLAS.md.tmpl)"    "$PWD/ATLAS.md"                                   "$force"
-  _render "$(_src SKILL.md.tmpl)"    "$PWD/.agents/skill/${project}/SKILL.md"          "$force"
+  _render "$(_src SKILL.md.tmpl)"    "$PWD/.agents/skill/${slug}/SKILL.md"             "$force"
   _render "$(_src SCARS.md.tmpl)"    "$PWD/SCARS.md"                                   "$force"
   _render "$(_src CLAUDE.md.tmpl)"   "$PWD/CLAUDE.md"                                  "$force"
   _render "$(_src EXAMPLES.md.tmpl)" "$PWD/EXAMPLES.md"                                "$force"
@@ -478,29 +501,53 @@ cmd_check() {
   _banner "🔍" "atlas check"
   local atlas="$PWD/ATLAS.md"
   local scars="$PWD/SCARS.md"
-  local project; project="$(_project_name)"
-  local skill="$PWD/.agents/skill/${project}/SKILL.md"
+  local claude="$PWD/CLAUDE.md"
+  local agents="$PWD/AGENTS.md"
+  local slug; slug="$(_project_slug)"
+  local skill="$PWD/.agents/skill/${slug}/SKILL.md"
   local skill_glob; skill_glob=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
   [[ -n "$skill_glob" ]] && skill="$skill_glob"
+  local init_hint="run 'atlas init' (non-destructive: scaffolds only the missing files)"
 
-  local errs=0
+  # Severity model: errors (spec MUST violations that break tooling) fail the
+  # check; warnings (SHOULD / conditional MUST) are advisory and still pass.
+  local errs=0 warns=0
+
+  # --- ATLAS.md (SPEC §1/§2): MUST exist at root with a §0 quick-orientation.
   if [[ ! -f "$atlas" ]]; then
-    _fail "missing ATLAS.md (run 'atlas init')"; errs=$((errs+1))
+    _fail "missing ATLAS.md — $init_hint"; errs=$((errs+1))
   else
     _ok "ATLAS.md present"
-    grep -q "^## 0\." "$atlas" || { _fail "ATLAS.md missing §0 quick-orientation"; errs=$((errs+1)); }
+    grep -q "^## 0\." "$atlas" || { _fail "ATLAS.md missing §0 quick-orientation (SPEC §2)"; errs=$((errs+1)); }
   fi
+
+  # --- SKILL.md (SPEC §1/§3): MUST exist with an H1 + a '## Table of contents'.
+  # The ToC is the orientation surface the SessionStart hook and `atlas measure`
+  # read, so it is required even though the recipe bodies are free-form.
   if [[ ! -f "$skill" ]]; then
-    _fail "missing SKILL.md (run 'atlas init')"; errs=$((errs+1))
+    _fail "missing SKILL.md — $init_hint"; errs=$((errs+1))
   else
     _ok "SKILL.md present at $skill"
-    grep -q "^## Table of contents" "$skill" || { _fail "SKILL.md missing Table of contents"; errs=$((errs+1)); }
+    if ! grep -q "^## Table of contents" "$skill"; then
+      _fail "SKILL.md missing '## Table of contents' — the orientation hook + 'atlas measure' surface it as the playbook index (SPEC §3); 'atlas init' scaffolds one"
+      errs=$((errs+1))
+    fi
+    # SPEC §1: the directory MUST be the kebab-cased remote/repo basename, so
+    # every runtime resolves the same path. Warn (don't fail) on a mismatch —
+    # a repo without a remote legitimately uses its root basename.
+    local skill_dir; skill_dir="$(basename "$(dirname "$skill")")"
+    if [[ "$skill_dir" != "$slug" ]]; then
+      _warnln "SKILL.md is under '.agents/skill/${skill_dir}/' but the spec expects kebab-case '.agents/skill/${slug}/' (SPEC §1) — rename it so every runtime discovers it"
+      warns=$((warns+1))
+    fi
   fi
+
+  # --- SCARS.md (SPEC §1/§3): MUST exist with a ToC + unique anchors.
   if [[ ! -f "$scars" ]]; then
-    _fail "missing SCARS.md (run 'atlas init')"; errs=$((errs+1))
+    _fail "missing SCARS.md — $init_hint"; errs=$((errs+1))
   else
     _ok "SCARS.md present"
-    grep -q "^## Table of contents" "$scars" || { _fail "SCARS.md missing Table of contents"; errs=$((errs+1)); }
+    grep -q "^## Table of contents" "$scars" || { _fail "SCARS.md missing Table of contents (SPEC §3)"; errs=$((errs+1)); }
     local anchors dups
     anchors=$(grep -Eo '<a id="[a-z0-9-]+"></a>' "$scars" | sort)
     dups=$(echo "$anchors" | uniq -d)
@@ -515,9 +562,43 @@ cmd_check() {
       _ok "$n unique anchors"
     fi
   fi
-  if [[ $errs -gt 0 ]]; then exit 1; fi
+
+  # --- CLAUDE.md / AGENTS.md (SPEC §1/§5): the behavioral contract.
+  # CLAUDE.md is a conditional MUST (required when targeting Claude) and
+  # AGENTS.md SHOULD mirror it byte-for-byte — both are warnings so a repo that
+  # deliberately ships no contract still passes, but the gap is surfaced.
+  if [[ ! -f "$claude" ]]; then
+    _warnln "no CLAUDE.md — the behavioral contract (SPEC §1/§5; required if you target Claude); 'atlas init' scaffolds it"
+    warns=$((warns+1))
+    if [[ -f "$agents" ]]; then
+      _warnln "AGENTS.md present but CLAUDE.md missing — CLAUDE.md is the canonical source they mirror (SPEC §5)"
+      warns=$((warns+1))
+    fi
+  else
+    _ok "CLAUDE.md present"
+    if [[ ! -f "$agents" ]]; then
+      _warnln "no AGENTS.md — it SHOULD mirror CLAUDE.md so Codex/OpenCode auto-discover (SPEC §5); 'atlas export --to codex'"
+      warns=$((warns+1))
+    elif ! cmp -s "$claude" "$agents"; then
+      _warnln "AGENTS.md drifted from CLAUDE.md — they SHOULD be byte-identical (SPEC §5); 'atlas export --to codex'"
+      warns=$((warns+1))
+    else
+      _ok "AGENTS.md mirrors CLAUDE.md"
+    fi
+  fi
+
+  if [[ $errs -gt 0 ]]; then
+    local emsg="$errs error(s)"
+    if [[ $warns -gt 0 ]]; then emsg="$emsg, $warns warning(s)"; fi
+    echo "$(_c_red 'atlas:') $emsg — see ❌ above"
+    exit 1
+  fi
   if [[ $drift -eq 1 ]]; then _check_drift "$ref"; fi
-  echo "$(_c_green 'atlas:') ok"
+  if [[ $warns -gt 0 ]]; then
+    echo "$(_c_green 'atlas:') ok $(_c_yellow "($warns warning(s) — see ⚠️ above)")"
+  else
+    echo "$(_c_green 'atlas:') ok"
+  fi
 }
 
 cmd_anchors() {
@@ -2295,7 +2376,8 @@ cmd_export() {
           fi
           echo "## For AI coding agents — read these first"
           echo "- [ATLAS.md](ATLAS.md): repository map — where everything lives, commands, architecture, constraints."
-          [[ -n "$skill" ]] && echo "- ${skill#"$PWD"/}: procedural playbook + known failure modes (stable anchors)."
+          [[ -f "$PWD/SCARS.md" ]] && echo "- [SCARS.md](SCARS.md): failure memory — read before fixing a bug; stable §anchors (symptom → root cause → do NOT → do)."
+          [[ -n "$skill" ]] && echo "- ${skill#"$PWD"/}: procedural playbook — how to run, test, and do common tasks here."
           echo "- [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md): behavioral contract for coding agents."
         } > "$PWD/llms.txt"
         _ok "llms.txt" ;;

@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-06-17
+
 ### Added
 
 - **🚩 Flagship proof** — [`docs/FLAGSHIP.md`](docs/FLAGSHIP.md): `atlas measure` run on famous repos (openclaw **−94%**, graphify −93%, ECC −92%, claude-context −87%, claude-mem −85%, hermes-agent −82%; fastapi −89%, express −81%, django/curl/gin −78%, flask −75%) — **−75% to −94%** orientation-token reduction, free + reproducible. Kept as **dated history** under `docs/benchmarks/flagship/`.
@@ -17,8 +19,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Refreshed brand assets** — social card on the measured **−92%** + four-file framing; a more detailed hero GIF (onboard → map → mcp → hooks → check) plus dedicated **map** and **orient** GIFs, driven by a reproducible `assets/demo-fixture.sh`.
 - **Signed releases (supply-chain)** — the GitHub release now ships a reproducible source tarball + `checksums.txt` with **SLSA build provenance**, signed keyless via Sigstore (`actions/attest-build-provenance`); npm already publishes with provenance. Verify with `gh attestation verify atlas-X.Y.Z.tar.gz --repo Abbasi-Alain/atlas`. (README → "Verify a release".)
 
+### Changed
+
+- **`atlas check` now validates the full quartet with an errors-vs-warnings severity model.** Errors fail the check (exit 1): `ATLAS.md` §0, `SKILL.md` `## Table of contents`, `SCARS.md` `## Table of contents` + unique anchors. New **warnings** are advisory (still exit 0): a missing `CLAUDE.md` (the behavioral contract — a MUST if the repo targets Claude), a missing or **drifted** `AGENTS.md` (byte-compared to `CLAUDE.md` via `cmp -s`), and a `SKILL.md` directory that isn't the kebab-cased project name. So a Claude-targeted repo with no contract — or a `Proxima-Finance/` skill dir where the spec wants `proxima-finance/` — no longer passes silently (BUGS §BUG-2, §BUG-3; SPEC §6).
+- **`atlas init` now scaffolds the spec-correct kebab-case skill directory** `.agents/skill/<kebab-project>/SKILL.md` (derived from the kebab-cased git-remote/repo basename), so freshly-initialized repos are conformant out of the box (BUGS §BUG-3; SPEC §1).
+- **The SessionStart `llms.txt`/orientation surface now leads with the full quartet in reading order** — ATLAS → SCARS → SKILL → CLAUDE/AGENTS (SPEC §1).
+
 ### Fixed
 
+- **`SKILL.md`'s Table-of-contents requirement is now spec-aligned and the failure is actionable.** SPEC §3 now states plainly that `SKILL.md`'s minimal required structure is an H1 **+** a `## Table of contents` — required because the SessionStart hook and `atlas measure` surface it as the playbook index — and `atlas check`'s message says *why* it's needed and that `atlas init` scaffolds one, instead of a bare "missing Table of contents" (BUGS §BUG-1).
+- **`llms.txt`'s "read these first" set now includes `SCARS.md`.** The failure memory was omitted, so an agent reading `llms.txt` never saw the stable §anchors; the read-first order is now ATLAS → SCARS → SKILL → CLAUDE/AGENTS (BUGS §BUG-5).
+- **`atlas check`'s remediation hint is now non-destructive.** It clarifies that `atlas init` scaffolds only the missing files and never overwrites without `--force`, so following the hint on an already-populated repo is safe (BUGS §BUG-4).
 - **`atlas measure` silently aborted on any repo with >400 files** — `git ls-files | head -400` SIGPIPEs the producer, which under `set -o pipefail` + `set -e` aborts the command *before any output*. It had shipped broken for every real-world repo; the atlas repo (83 files) was too small to trigger it. Caught the instant the flagship ran on fastapi. Guarded the head-pipes + added a >400-file regression test (SCARS §PIPE-HEAD-SIGPIPE).
 
 ## [0.1.10] — 2026-06-09
