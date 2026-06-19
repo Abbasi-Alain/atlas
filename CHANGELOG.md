@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Fully automated DOI on release** — a `release-zenodo-doi` workflow (fires on tag push, re-runnable via `workflow_dispatch`) waits for Zenodo to mint the new version DOI and stamps it into the GitHub Release notes. Combined with the auto-resolving **concept DOI** badge, pushing a `vX.Y.Z` tag is now the only manual step — every channel (npm/.deb/brew/AUR/PPA), the signed release, the Zenodo archive, and the DOI stamp happen automatically.
+
 ## [0.3.0] — 2026-06-19
 
 ### Added
