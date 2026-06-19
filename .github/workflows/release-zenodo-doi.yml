@@ -1,0 +1,84 @@
+name: release-zenodo-doi
+
+# After a release, Zenodo asynchronously archives the published GitHub Release and
+# mints a *version* DOI (the concept DOI in CITATION.cff always resolves to the
+# latest). This job waits for that DOI and stamps it into the release notes — so
+# pushing a vX.Y.Z tag is the only manual step; everything else is automatic.
+#
+# Fires on tag push (SCARS §TAG-TRIGGER-NOT-RELEASE — a GITHUB_TOKEN-created
+# release does not cascade `release: published`), and is re-runnable by hand.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to stamp (e.g. v0.3.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  stamp-doi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag + Zenodo concept record id (from CITATION.cff)
+        id: meta
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          recid="$(grep -oE 'zenodo\.[0-9]+' CITATION.cff | head -1 | cut -d. -f2)"
+          echo "tag=$tag"     >> "$GITHUB_OUTPUT"
+          echo "recid=$recid" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag · concept recid=$recid"
+          [ -n "$recid" ] || echo "::warning::no Zenodo concept DOI in CITATION.cff — nothing to stamp"
+
+      - name: Wait for the GitHub Release to exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.meta.outputs.tag }}"
+          for i in $(seq 1 20); do
+            if gh release view "$tag" >/dev/null 2>&1; then echo "release $tag present"; exit 0; fi
+            echo "waiting for release $tag … ($i/20)"; sleep 15
+          done
+          echo "::warning::release $tag not found after ~5min — skipping DOI stamp"
+
+      - name: Poll Zenodo for the version DOI and stamp it into the release notes
+        if: steps.meta.outputs.recid != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          tag="${{ steps.meta.outputs.tag }}"; recid="${{ steps.meta.outputs.recid }}"
+          gh release view "$tag" >/dev/null 2>&1 || { echo "no release $tag; skip"; exit 0; }
+          # idempotent: skip if already stamped
+          if gh release view "$tag" --json body -q .body | grep -q "Archived on Zenodo"; then
+            echo "already stamped — nothing to do"; exit 0
+          fi
+          # Fetch the concept record directly (it resolves to the *latest* version).
+          # This is consistent, unlike the eventually-consistent `q=conceptrecid:`
+          # search index. Poll until Zenodo's latest version == our tag, then take
+          # that version DOI.
+          api="https://zenodo.org/api/records/${recid}"
+          doi=""
+          for i in $(seq 1 20); do
+            json="$(curl -fsSL "$api" || true)"
+            ver="$(printf '%s' "$json"  | jq -r '.metadata.version // empty' 2>/dev/null)"
+            cand="$(printf '%s' "$json" | jq -r '.doi // empty'             2>/dev/null)"
+            if [ -n "$cand" ] && { [ "$ver" = "$tag" ] || [ "v$ver" = "$tag" ] || [ "$ver" = "${tag#v}" ]; }; then
+              doi="$cand"; break
+            fi
+            echo "Zenodo's latest version is '${ver:-?}' (awaiting '$tag') … ($i/20)"; sleep 30
+          done
+          if [ -z "$doi" ] || [ "$doi" = "null" ]; then
+            echo "::warning::Zenodo DOI for $tag not available after polling — re-run this workflow later"; exit 0
+          fi
+          echo "version DOI = $doi"
+          note="$(printf '\n\n---\n📦 **Archived on Zenodo:** [%s](https://doi.org/%s)  ·  concept DOI [10.5281/zenodo.%s](https://doi.org/10.5281/zenodo.%s) (always resolves to the latest release).' "$doi" "$doi" "$recid" "$recid")"
+          cur="$(gh release view "$tag" --json body -q .body)"
+          gh release edit "$tag" --notes "${cur}${note}"
+          echo "stamped $doi into the $tag release notes ✅"
