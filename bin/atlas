@@ -13,11 +13,13 @@
 #                                              karpathy | google
 #                                     --stack: requires a style with stacks/ subdir
 #                                              (comma-separated; pick any subset)
-#   atlas check [--changed-files[=REF]] [--json] [--strict]  lint the quartet +
-#                                     verify anchors unique; --changed-files also
-#                                     fails on structural drift (files moved but
+#   atlas check [--changed-files[=REF]] [--json] [--strict] [--deep]  lint the
+#                                     quartet + verify anchors unique; --changed-files
+#                                     also fails on structural drift (files moved but
 #                                     ATLAS.md not updated); --json emits a
-#                                     machine-readable report; --strict fails on warnings
+#                                     machine-readable report; --strict fails on
+#                                     warnings; --deep adds SCARS anchor-schema
+#                                     validation (ToC↔body, labels, Where: paths)
 #   atlas fix                         auto-resolve conformance warnings: kebab the
 #                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
 #   atlas measure [--badge]           estimate orientation-token savings (with
@@ -104,7 +106,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.4.1"
+ATLAS_VERSION="0.5.0"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -520,14 +522,63 @@ _ck_warn() { warns=$((warns+1)); if [[ $json -eq 1 ]]; then warns_json+=("$(_ck_
 # shellcheck disable=SC2154
 _ck_ok()   { [[ ${json:-0} -eq 0 ]] && _ok "$1"; return 0; }
 
+# Deep SCARS anchor validation for `atlas check --deep` (SPEC §3.2/§3.3): ToC<->body
+# completeness, core-label presence (terse zero-label rules are exempt), and
+# Where-path resolution. Warnings only; calls _ck_warn (dynamic scope via cmd_check).
+_ck_anchors() {
+  local scars="$1" toc body id kind aid val clean
+  # Strip code blocks (fenced ``` / ~~~ and 4-space / tab-indented) so that
+  # schema EXAMPLES documenting how to write a scar are not mistaken for real
+  # anchors. ToC links and body labels live flush-left, so they survive.
+  clean="$(awk '
+    /^[[:space:]]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    /^( {4,}|\t)/ { next }
+    { print }
+  ' "$scars")"
+  toc="$(printf '%s\n' "$clean" | grep -oE '\]\(#[a-z0-9-]+\)' | sed -E 's/.*\(#([a-z0-9-]+)\)/\1/' | sort -u)"
+  body="$(printf '%s\n' "$clean" | grep -oE '<a id="[a-z0-9-]+">' | sed -E 's/.*"([a-z0-9-]+)".*/\1/' | sort -u)"
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    printf '%s\n' "$body" | grep -qxF "$id" || _ck_warn ANCHOR_TOC_NO_BODY "ToC links #$id but no matching '<a id=\"$id\">' body (SPEC §3.3)" "§3.3"
+  done <<< "$toc"
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    printf '%s\n' "$toc" | grep -qxF "$id" || _ck_warn ANCHOR_NOT_IN_TOC "anchor #$id has a body but no ToC entry (SPEC §3.2)" "§3.2"
+  done <<< "$body"
+  while IFS="$(printf '\t')" read -r kind aid val; do
+    [[ -z "$kind" ]] && continue
+    case "$kind" in
+      LABELS) _ck_warn ANCHOR_NO_REMEDY "§$aid describes a problem (Symptom/Root cause) but gives no '**Do.**'/'**Do NOT.**' remedy (SPEC §3.3)" "§3.3" ;;
+      WHERE)  { [[ -e "$PWD/$val" || -e "$val" ]]; } || _ck_warn ANCHOR_WHERE_UNRESOLVED "§$aid 'Where.' path '$val' does not resolve (SPEC §3.3)" "§3.3" ;;
+    esac
+  done < <(awk '
+    function flush(   problem, remedy) {
+      if (cur=="") { block=""; return }
+      problem=(block ~ /\*\*Symptom\.\*\*/ || block ~ /\*\*Root cause\.\*\*/)
+      remedy=(block ~ /\*\*Do\.\*\*/ || block ~ /\*\*Do NOT\.\*\*/)
+      if (problem && !remedy) print "LABELS\t" cur "\t"
+      if (match(block, /\*\*Where\.\*\*[^\n]*/)) {
+        wl=substr(block,RSTART,RLENGTH); n=split(wl,parts,"`")
+        for (i=2;i<=n;i+=2){ p=parts[i]; sub(/::.*/,"",p); sub(/#.*/,"",p); if (p ~ /\// && p !~ /[*?]/) print "WHERE\t" cur "\t" p }
+      }
+      block=""
+    }
+    /<a id="[a-z0-9-]+">/ { flush(); match($0,/id="[a-z0-9-]+"/); cur=substr($0,RSTART+4,RLENGTH-5) }
+    { block=block "\n" $0 }
+    END { flush() }
+  ' <<< "$clean")
+}
+
 cmd_check() {
-  local drift=0 ref="" json=0 strict=0
+  local drift=0 ref="" json=0 strict=0 deep=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --changed-files)   drift=1; shift ;;
       --changed-files=*) drift=1; ref="${1#--changed-files=}"; shift ;;
       --json)            json=1; shift ;;
       --strict)          strict=1; shift ;;
+      --deep)            deep=1; shift ;;
       *) shift ;;
     esac
   done
@@ -590,6 +641,7 @@ cmd_check() {
       local n; n=$(echo "$anchors" | grep -c . || true)
       _ck_ok "$n unique anchors"
     fi
+    [[ $deep -eq 1 ]] && _ck_anchors "$scars"
   fi
 
   # --- CLAUDE.md / AGENTS.md (SPEC §1/§5): the behavioral contract (warnings).
@@ -621,7 +673,7 @@ cmd_check() {
   if [[ -f "$PWD/ROADMAP.md" ]]; then
     q_roadmap=true; _ck_ok "ROADMAP.md present"
     grep -qE "^- \[[ xX]\]" "$PWD/ROADMAP.md" || _ck_warn ROADMAP_NO_QUEUE "ROADMAP.md has no '- [ ]' task queue (SPEC §8)" "§8"
-    grep -qiE "^#+[[:space:]].*done" "$PWD/ROADMAP.md" || _ck_warn ROADMAP_NO_DONE "ROADMAP.md has no Done log (a '## Done' section) — the loop's shipped-archive (SPEC §8)" "§8"
+    grep -qiE "^#+[[:space:]]+done([[:space:]]|\(|:|$)" "$PWD/ROADMAP.md" || _ck_warn ROADMAP_NO_DONE "ROADMAP.md has no Done log (a heading starting with 'Done') — the loop's shipped-archive (SPEC §8)" "§8"
   fi
   # SPEC §8 frames the loop as the pair LOOP.md + ROADMAP.md — warn if a half is missing.
   if [[ "$q_loop_md" != "$q_roadmap" ]]; then
@@ -634,11 +686,12 @@ cmd_check() {
 
   # --- emit -------------------------------------------------------------------
   if [[ $json -eq 1 ]]; then
-    local ok=true strict_bool=false
+    local ok=true strict_bool=false deep_bool=false
     if [[ $errs -gt 0 ]]; then ok=false; fi
     if [[ $strict -eq 1 ]]; then strict_bool=true; if [[ $warns -gt 0 ]]; then ok=false; fi; fi
-    printf '{"ok":%s,"version":"%s","strict":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s}}\n' \
-      "$ok" "$ATLAS_VERSION" "$strict_bool" "$errs" "$warns" \
+    if [[ $deep -eq 1 ]]; then deep_bool=true; fi
+    printf '{"ok":%s,"version":"%s","strict":%s,"deep":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s}}\n' \
+      "$ok" "$ATLAS_VERSION" "$strict_bool" "$deep_bool" "$errs" "$warns" \
       "$(_json_join ${errs_json[@]+"${errs_json[@]}"})" \
       "$(_json_join ${warns_json[@]+"${warns_json[@]}"})" \
       "$q_atlas" "$q_scars" "$q_skill" "$q_claude" "$q_agents" \

@@ -241,6 +241,7 @@ same commit as `package.json`. (A CI check comparing the two would prevent this.
 
 ## Benchmarking (`atlas bench`)
 
+<a id="bench-needs-git"></a>
 ### §BENCH-NEEDS-GIT — a runtime that bails in a non-git dir produces a silent 0/0
 
 **Symptom.** `atlas bench --runtime codex` reported `output_chars 0 / wall_s 0`
@@ -264,6 +265,7 @@ the empty-output check in the python parser).
 
 ---
 
+<a id="bench-token-sum-cache"></a>
 ### §BENCH-TOKEN-SUM-CACHE — summed per-turn `input_tokens` is not a cost/efficiency metric
 
 **Symptom.** An agentic A/B claimed ATLAS made things **−98.6%** (1.95× *more*
@@ -292,6 +294,7 @@ parser); `docs/benchmarks/methodology.md`; `docs/benchmarks/RESULTS.md`.
 
 ---
 
+<a id="opencode-pure-json"></a>
 ### §OPENCODE-PURE-JSON — opencode floods stdout with plugin logs; run `--pure`
 
 **Symptom.** `atlas bench --runtime opencode` produced unparseable output (or

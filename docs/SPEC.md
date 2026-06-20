@@ -224,10 +224,17 @@ promotes warnings to errors (exit 1) for CI gating. `atlas fix` auto-resolves th
 warnings it can — renaming a non-kebab `SKILL.md` directory, re-mirroring a
 drifted `AGENTS.md`, and regenerating a stale `llms.txt`.
 
-Future versions will also check:
-- Every anchor in the ToC has a body.
-- Every anchor body has the six required `**Label.**` paragraphs.
-- File-path references in `**Where.**` resolve.
+`atlas check --deep` adds opt-in anchor-body conformance for `SCARS.md` (all
+warnings, so it never breaks an existing repo unless paired with `--strict`):
+- Every anchor in the ToC has a matching `<a id>` body (`ANCHOR_TOC_NO_BODY`)
+  and every body anchor is linked from the ToC (`ANCHOR_NOT_IN_TOC`).
+- A scar that states a problem (`**Symptom.**` / `**Root cause.**`) also gives a
+  remedy (`**Do.**` / `**Do NOT.**`) (`ANCHOR_NO_REMEDY`).
+- File-path references in `**Where.**` resolve on disk; glob patterns are skipped
+  (`ANCHOR_WHERE_UNRESOLVED`).
+
+Schema examples inside code blocks (fenced or indented) are ignored, so a SCARS
+file may document how to write a scar without tripping its own deep check.
 
 ---
 
