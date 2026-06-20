@@ -272,5 +272,8 @@ conformant and unaffected.
 8. `atlas check --strict` as the per-commit conformance gate.
 
 `atlas check` validates `LOOP.md`/`ROADMAP.md` **only when present** (warnings, like
-the behavioral files) and reports them under `"loop"` in `--json`. The SessionStart
-hook surfaces a one-line pointer when a repo has a loop.
+the behavioral files) and reports them under `"loop"` in `--json`: it warns on a
+`LOOP.md` with no H1, a `ROADMAP.md` with no `- [ ]` queue or no **Done** log, and
+on a half-configured loop (one of the pair present without the other). The
+SessionStart hook surfaces a one-line pointer, and the `llms.txt` export lists
+`LOOP.md` in its read-first set, when a repo has a loop.

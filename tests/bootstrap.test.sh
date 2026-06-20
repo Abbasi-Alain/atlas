@@ -192,6 +192,38 @@ TMP_L4="$(mktemp -d)"; ( cd "$TMP_L4" && git init -q -b main 2>/dev/null && "$CL
   && _pass "malformed LOOP/ROADMAP files warn" || _fail "loop malformed warnings"
 rm -rf "$TMP_L4"
 
+# BUG-7: a loop repo's llms.txt read-first set lists LOOP.md; fix repairs a loop-stale one.
+TMP_L5="$(mktemp -d)"; ( cd "$TMP_L5" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  "$CLI" export --to llms-txt >/dev/null 2>&1 && grep -q "LOOP.md" llms.txt ) \
+  && _pass "llms.txt export lists LOOP.md for a loop repo (BUG-7)" || _fail "BUG-7 llms loop export"
+rm -rf "$TMP_L5"
+
+TMP_L6="$(mktemp -d)"; ( cd "$TMP_L6" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  "$CLI" export --to llms-txt >/dev/null 2>&1; grep -v "LOOP.md" llms.txt > t && mv t llms.txt
+  "$CLI" fix >/dev/null 2>&1; grep -q "LOOP.md" llms.txt ) \
+  && _pass "atlas fix regenerates a loop-stale llms.txt (BUG-7)" || _fail "BUG-7 fix loop-stale"
+rm -rf "$TMP_L6"
+
+# BUG-8: a ROADMAP with no Done log warns.
+TMP_L7="$(mktemp -d)"; ( cd "$TMP_L7" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  grep -vi "done" ROADMAP.md > t && mv t ROADMAP.md
+  "$CLI" check --json | grep -q ROADMAP_NO_DONE ) \
+  && _pass "check warns on a ROADMAP with no Done log (BUG-8)" || _fail "BUG-8 done-log"
+rm -rf "$TMP_L7"
+
+# BUG-9: a half-configured loop warns, both directions.
+TMP_L8="$(mktemp -d)"; ( cd "$TMP_L8" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# LOOP\n' > LOOP.md
+  "$CLI" check --json | grep -q LOOP_NO_ROADMAP ) \
+  && _pass "check warns on LOOP.md without ROADMAP.md (BUG-9)" || _fail "BUG-9 loop-no-roadmap"
+rm -rf "$TMP_L8"
+
+TMP_L9="$(mktemp -d)"; ( cd "$TMP_L9" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# ROADMAP\n- [ ] x\n## Done\n' > ROADMAP.md
+  "$CLI" check --json | grep -q ROADMAP_NO_LOOP ) \
+  && _pass "check warns on ROADMAP.md without LOOP.md (BUG-9)" || _fail "BUG-9 roadmap-no-loop"
+rm -rf "$TMP_L9"
+
 # --- new commands (smoke) ------------------------------------------------
 echo ""
 echo "-- new commands --"
