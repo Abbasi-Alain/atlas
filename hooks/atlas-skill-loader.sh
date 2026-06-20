@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # atlas-skill-loader — SessionStart-equivalent hook.
 #
-# Detects ATLAS.md, SCARS.md, and .agents/skill/<project>/SKILL.md in the cwd
-# and prints their navigational spine to stdout. Whichever agent
+# Detects ATLAS.md, SCARS.md, .agents/skill/<project>/SKILL.md (and, if present,
+# the optional LOOP.md) in the cwd and prints their navigational spine to stdout.
+# Whichever agent
 # runtime invokes this hook will see that output and feed it into
 # the conversation as context — so the main agent automatically
 # knows where things live and what NOT to do.
@@ -16,6 +17,7 @@
 #   - ATLAS: through end of §1 (~80 lines)
 #   - SCARS: Table-of-contents section only (failure anchors)
 #   - SKILL: ToC section only (anchors with one-line summaries)
+#   - LOOP:  a one-line pointer (only if the repo runs an autonomous loop)
 #
 # Sub-agents do NOT inherit this hook; their parent must include a
 # "read ATLAS.md, SCARS.md, and SKILL.md first" instruction in the prompt.
@@ -75,6 +77,18 @@ if [[ -n "$SKILL_FILE" && -f "$SKILL_FILE" ]]; then
     in_toc && /^## / && !/^## Table of contents/ { exit }
     in_toc { print }
   ' "$SKILL_FILE"
+  echo ""
+fi
+
+LOOP="$CWD/LOOP.md"
+if [[ -f "$LOOP" ]]; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "LOOP.md (autonomous improvement loop) detected at $LOOP"
+  echo "================================================================"
+  echo "This repo runs an ATLAS autonomous loop. One iteration: pick the top"
+  echo "ROADMAP.md item by expected value → implement → 'atlas check --strict'"
+  echo "→ commit (cite SCARS §ANCHORS). Read LOOP.md for the rules."
   echo ""
 fi
 

@@ -162,6 +162,36 @@ TMP_FI="$(mktemp -d)"; ( cd "$TMP_FI" && git init -q -b main 2>/dev/null && "$CL
   && _pass "atlas fix is a no-op when already conformant" || _fail "atlas fix idempotent"
 rm -rf "$TMP_FI"
 
+# --- v0.4.0: optional autonomous-loop surface (init --loop + check awareness) ---
+echo ""
+echo "-- loop surface (init --loop / check) --"
+
+# init --loop scaffolds LOOP.md + ROADMAP.md and the repo still passes --strict.
+TMP_L1="$(mktemp -d)"; ( cd "$TMP_L1" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  [[ -f LOOP.md && -f ROADMAP.md ]] && "$CLI" check --strict >/dev/null 2>&1 ) \
+  && _pass "init --loop scaffolds LOOP+ROADMAP and passes --strict" || _fail "init --loop"
+rm -rf "$TMP_L1"
+
+# check --json reports the loop surface present.
+TMP_L2="$(mktemp -d)"; ( cd "$TMP_L2" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  "$CLI" check --json | grep -q '"loop":{"loop_md":true,"roadmap_md":true}' ) \
+  && _pass "check --json reports the loop surface" || _fail "check --json loop"
+rm -rf "$TMP_L2"
+
+# a repo WITHOUT a loop is unaffected: loop=false, no loop warnings.
+TMP_L3="$(mktemp -d)"; ( cd "$TMP_L3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" check --json | grep -q '"loop":{"loop_md":false,"roadmap_md":false}' \
+    && ! "$CLI" check --json | grep -q "LOOP_NO_H1\|ROADMAP_NO_QUEUE" ) \
+  && _pass "no-loop repo unaffected by loop checks" || _fail "loop opt-in leak"
+rm -rf "$TMP_L3"
+
+# malformed loop files warn (missing H1 / missing queue).
+TMP_L4="$(mktemp -d)"; ( cd "$TMP_L4" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf 'no h1 here\n' > LOOP.md; printf 'no queue here\n' > ROADMAP.md
+  o="$("$CLI" check --json)"; echo "$o" | grep -q LOOP_NO_H1 && echo "$o" | grep -q ROADMAP_NO_QUEUE ) \
+  && _pass "malformed LOOP/ROADMAP files warn" || _fail "loop malformed warnings"
+rm -rf "$TMP_L4"
+
 # --- new commands (smoke) ------------------------------------------------
 echo ""
 echo "-- new commands --"

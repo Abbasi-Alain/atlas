@@ -2,7 +2,9 @@
 # atlas — CLI for the ATLAS project-map standard.
 #
 # Subcommands:
-#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze]
+#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop]
+#                                     (--loop also scaffolds LOOP.md + ROADMAP.md,
+#                                     the optional autonomous-loop 5th surface)
 #                                     bootstrap ATLAS.md + SKILL.md + SCARS.md
 #                                     + CLAUDE.md + AGENTS.md + EXAMPLES.md (+ seeds).
 #                                     --analyze scans the repo + pre-fills the map.
@@ -102,7 +104,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.3.0"
+ATLAS_VERSION="0.4.0"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -377,11 +379,12 @@ ${inv}"
 }
 
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0
+  local force=0 style="default" stacks="" analyze=0 loop=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f)  force=1; shift ;;
       --analyze)   analyze=1; shift ;;
+      --loop)      loop=1; shift ;;
       --style)     style="${2:-default}"; shift 2 ;;
       --style=*)   style="${1#--style=}"; shift ;;
       --stack)     stacks="${2:-}"; shift 2 ;;
@@ -422,6 +425,12 @@ cmd_init() {
       cp "$PWD/CLAUDE.md" "$PWD/AGENTS.md"
       _say "wrote $PWD/AGENTS.md (mirror of CLAUDE.md)"
     fi
+  fi
+  # Optional 5th surface — the autonomous improvement loop (SPEC §8). Opt-in via
+  # --loop; scaffold-missing-only like the quartet (BUG-4).
+  if [[ $loop -eq 1 ]]; then
+    _render "$(_src LOOP.md.tmpl)"    "$PWD/LOOP.md"    "$force"
+    _render "$(_src ROADMAP.md.tmpl)" "$PWD/ROADMAP.md" "$force"
   fi
   # Optional per-style seed files (extra documents shipped beyond the trio).
   # Some styles ship ARCHITECTURE.md / GAPS.md / CRITICS.md / STATUS.md /
@@ -539,6 +548,7 @@ cmd_check() {
   local errs=0 warns=0
   local errs_json=() warns_json=()
   local q_atlas=false q_scars=false q_skill=false q_claude=false q_agents="missing"
+  local q_loop_md=false q_roadmap=false
 
   # --- ATLAS.md (SPEC §1/§2): MUST exist at root with a §0 quick-orientation.
   if [[ ! -f "$atlas" ]]; then
@@ -602,16 +612,28 @@ cmd_check() {
     fi
   fi
 
+  # --- Autonomous loop (SPEC §8): OPTIONAL 5th surface. Validated only when
+  # present — a repo without LOOP.md/ROADMAP.md is completely unaffected.
+  if [[ -f "$PWD/LOOP.md" ]]; then
+    q_loop_md=true; _ck_ok "LOOP.md present (autonomous loop)"
+    grep -q "^# " "$PWD/LOOP.md" || _ck_warn LOOP_NO_H1 "LOOP.md has no H1 title (SPEC §8)" "§8"
+  fi
+  if [[ -f "$PWD/ROADMAP.md" ]]; then
+    q_roadmap=true; _ck_ok "ROADMAP.md present"
+    grep -qE "^- \[[ xX]\]" "$PWD/ROADMAP.md" || _ck_warn ROADMAP_NO_QUEUE "ROADMAP.md has no '- [ ]' task queue (SPEC §8)" "§8"
+  fi
+
   # --- emit -------------------------------------------------------------------
   if [[ $json -eq 1 ]]; then
     local ok=true strict_bool=false
     if [[ $errs -gt 0 ]]; then ok=false; fi
     if [[ $strict -eq 1 ]]; then strict_bool=true; if [[ $warns -gt 0 ]]; then ok=false; fi; fi
-    printf '{"ok":%s,"version":"%s","strict":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"}}\n' \
+    printf '{"ok":%s,"version":"%s","strict":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s}}\n' \
       "$ok" "$ATLAS_VERSION" "$strict_bool" "$errs" "$warns" \
       "$(_json_join ${errs_json[@]+"${errs_json[@]}"})" \
       "$(_json_join ${warns_json[@]+"${warns_json[@]}"})" \
-      "$q_atlas" "$q_scars" "$q_skill" "$q_claude" "$q_agents"
+      "$q_atlas" "$q_scars" "$q_skill" "$q_claude" "$q_agents" \
+      "$q_loop_md" "$q_roadmap"
     [[ "$ok" == true ]] && exit 0
     exit 1
   fi

@@ -92,6 +92,50 @@ Design: `atlas check` gained an **errors-vs-warnings** severity model — a real
 
 ---
 
+## Feature proposals (post-v0.3.0) — from the proxima-finance LOOP dogfooding
+
+> The autonomous improvement loop (`LOOP.md` + `ROADMAP.md`) has now run several real iterations in
+> proxima-finance and is producing genuine, validated, anti-churn work. Per the long-term plan
+> ("successful LOOP.md ideas graduate into a future ATLAS release"), this proposes making the loop a
+> **first-class, optional ATLAS concept** so EVERY ATLAS repo can adopt it. Severity: 🟢 enhancement.
+> Tick when landed; **design for all repos, not a proxima one-off** (per the Notes below).
+
+### [x] FEAT-1 🟢 ATLAS-native autonomous improvement loop (bless `LOOP.md` + `ROADMAP.md`) — shipped in v0.4.0
+> **Landed (v0.4.0):** `atlas init --loop` scaffolds `templates/LOOP.md.tmpl` + `templates/ROADMAP.md.tmpl` (mechanisms 1–8); `atlas check` validates them only when present (warnings) and reports `"loop"` in `--json`; the SessionStart hook surfaces a one-line pointer; SPEC §8 defines the optional 5th surface. A repo without a loop is unaffected. Regression tests added (99/99 green).
+- **Why:** ATLAS already standardizes *orientation* (ATLAS), *failure memory* (SCARS), *contract*
+  (CLAUDE/AGENTS) and *how-to* (SKILL) — the static knowledge. The missing piece is a standard for the
+  *dynamic* process: how an agent **continuously improves** a repo without a human in the loop. The
+  proxima loop shows a working shape; ATLAS should generalize it so it's not re-invented per repo.
+- **What (the proven mechanisms to standardize):** a `LOOP.md` (the rulebook + one-command
+  entrypoint) + a `ROADMAP.md` (the EV-ranked task queue, planner-rich specs) carrying, per item:
+  why · how + exact entry-points · impact · test · complexity · `difficulty`. The loop's
+  battle-tested rules worth baking into the template: **(1) anti-churn pre-flight** (grep before
+  building; verify+tick what already ships — never rebuild), **(2) EV-ranked selection** (edge ×
+  P(real) × leverage ÷ cost, not queue position), **(3) a novelty mandate** (≥1 new falsifiable
+  hypothesis/iteration into an idea ledger, with a novelty bar), **(4) self red-team before commit**
+  (overfit / leakage / honesty), **(5) measure-then-gate honesty** (ship descriptive-only; wire to
+  behavior only after OOS validation), **(6) SCARS-grow on every new failure mode**, **(7) difficulty
+  routing** (escalate `hard` to a stronger model / sub-agent), and **(8) `atlas check --strict` as the
+  per-commit conformance gate**.
+- **Proposal (pick the scalable shape):**
+  - `atlas check` **awareness** (opt-in): when `LOOP.md`/`ROADMAP.md` exist, validate their minimal
+    structure (LOOP.md has an entrypoint + rules H1; ROADMAP has a tiered `- [ ]` queue + a Done log)
+    and surface them in `--json` (`"loop": {...}`) — non-fatal warnings, like CLAUDE/AGENTS.
+  - `atlas init --loop` **scaffold**: drop a templated `LOOP.md` + `ROADMAP.md` carrying mechanisms
+    (1)–(8) above, so any repo gets the proven loop for free (scaffold-missing-only, per BUG-4).
+  - The SessionStart/orientation hook optionally surfaces `LOOP.md` ("this repo has an autonomous
+    loop; one iteration = …") alongside the quartet.
+  - SPEC: a new §"Autonomous loop (optional 5th surface)" defining LOOP/ROADMAP roles + the mechanism
+    checklist, explicitly OPTIONAL (the static quartet stays the core; the loop is an opt-in layer).
+- **Acceptance:** a fresh `atlas init --loop` repo passes `atlas check --strict`; `--json` reports the
+  loop surface; a repo WITHOUT a loop is unaffected (zero new warnings); regression tests under
+  `tests/` (assert scaffold + check behavior, both with and without the loop files).
+- **Reference implementation:** `proxima-finance/LOOP.md` + `ROADMAP.md` + `LOOP_REPORT.md` (a real,
+  iterating example to lift the template from). Keep ATLAS's role to *bless + validate + scaffold* the
+  pattern — the per-repo specifics stay in the repo's own LOOP/ROADMAP.
+
+---
+
 ### Notes for the fixing agent
 - **Think deeply + design for ALL future repos, not just a one-off patch.** Each fix should be the
   general, scalable behavior (e.g. BUG-2/3 derive expectations from the spec, not hardcode a repo).
