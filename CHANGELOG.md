@@ -8,6 +8,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-06-20
+
+### Fixed
+
+- **`llms.txt` + `atlas fix` now cover the loop surface** (BUG-7): the `llms-txt` export lists `LOOP.md` in its "read these first" set when a repo runs a loop, and `atlas fix` regenerates an `llms.txt` that's missing it — parallel to how SCARS.md is handled (BUG-5).
+- **`atlas check` validates the ROADMAP **Done** log** (BUG-8): a `ROADMAP.md` with a task queue but no `## Done` section now warns (`ROADMAP_NO_DONE`), matching SPEC §8's stated minimal structure (was spec/validator drift).
+- **`atlas check` flags a half-configured loop** (BUG-9): `LOOP.md` without `ROADMAP.md` (or vice versa) now warns (`LOOP_NO_ROADMAP` / `ROADMAP_NO_LOOP`) — SPEC §8 frames the loop as the pair.
+
 ## [0.4.0] — 2026-06-20
 
 ### Added

@@ -104,7 +104,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.4.0"
+ATLAS_VERSION="0.4.1"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
@@ -621,6 +621,15 @@ cmd_check() {
   if [[ -f "$PWD/ROADMAP.md" ]]; then
     q_roadmap=true; _ck_ok "ROADMAP.md present"
     grep -qE "^- \[[ xX]\]" "$PWD/ROADMAP.md" || _ck_warn ROADMAP_NO_QUEUE "ROADMAP.md has no '- [ ]' task queue (SPEC §8)" "§8"
+    grep -qiE "^#+[[:space:]].*done" "$PWD/ROADMAP.md" || _ck_warn ROADMAP_NO_DONE "ROADMAP.md has no Done log (a '## Done' section) — the loop's shipped-archive (SPEC §8)" "§8"
+  fi
+  # SPEC §8 frames the loop as the pair LOOP.md + ROADMAP.md — warn if a half is missing.
+  if [[ "$q_loop_md" != "$q_roadmap" ]]; then
+    if [[ "$q_loop_md" = true ]]; then
+      _ck_warn LOOP_NO_ROADMAP "LOOP.md present but no ROADMAP.md — the loop has no task queue (SPEC §8)" "§8"
+    else
+      _ck_warn ROADMAP_NO_LOOP "ROADMAP.md present but no LOOP.md — the queue has no rulebook (SPEC §8)" "§8"
+    fi
   fi
 
   # --- emit -------------------------------------------------------------------
@@ -714,11 +723,17 @@ cmd_fix() {
     fi
   fi
 
-  # 3. regenerate a stale llms.txt (read-first set should list SCARS.md) ------
-  if [[ -f "$PWD/llms.txt" && -f "$PWD/SCARS.md" ]] && ! grep -q "SCARS.md" "$PWD/llms.txt"; then
-    cmd_export --to llms-txt >/dev/null 2>&1
-    _ok "regenerated llms.txt (added SCARS.md to the read-first set)"
-    fixes=$((fixes+1))
+  # 3. regenerate a stale llms.txt — read-first set should list SCARS.md and,
+  #    when the repo runs a loop, LOOP.md (parallels BUG-5/BUG-7).
+  if [[ -f "$PWD/llms.txt" ]]; then
+    local llms_stale=0
+    if [[ -f "$PWD/SCARS.md" ]] && ! grep -q "SCARS.md" "$PWD/llms.txt"; then llms_stale=1; fi
+    if [[ -f "$PWD/LOOP.md"  ]] && ! grep -q "LOOP.md"  "$PWD/llms.txt"; then llms_stale=1; fi
+    if [[ $llms_stale -eq 1 ]]; then
+      cmd_export --to llms-txt >/dev/null 2>&1
+      _ok "regenerated llms.txt (read-first set now lists SCARS.md / LOOP.md)"
+      fixes=$((fixes+1))
+    fi
   fi
 
   echo ""
@@ -2507,6 +2522,7 @@ cmd_export() {
           [[ -f "$PWD/SCARS.md" ]] && echo "- [SCARS.md](SCARS.md): failure memory — read before fixing a bug; stable §anchors (symptom → root cause → do NOT → do)."
           [[ -n "$skill" ]] && echo "- ${skill#"$PWD"/}: procedural playbook — how to run, test, and do common tasks here."
           echo "- [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md): behavioral contract for coding agents."
+          [[ -f "$PWD/LOOP.md" ]] && echo "- [LOOP.md](LOOP.md): autonomous improvement loop — one iteration = pick the top [ROADMAP.md](ROADMAP.md) item by EV → implement → 'atlas check' → commit."
         } > "$PWD/llms.txt"
         _ok "llms.txt" ;;
       claude)
