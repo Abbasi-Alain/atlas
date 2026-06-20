@@ -211,6 +211,17 @@ TMP_L7="$(mktemp -d)"; ( cd "$TMP_L7" && git init -q -b main 2>/dev/null && "$CL
   && _pass "check warns on a ROADMAP with no Done log (BUG-8)" || _fail "BUG-8 done-log"
 rm -rf "$TMP_L7"
 
+# BUG-10: a heading that merely CONTAINS "done" (e.g. "## Backlog (nothing done
+# yet)") is not a Done log — the warning must still fire; a real "## Done (log)"
+# heading must suppress it.
+TMP_L7b="$(mktemp -d)"; ( cd "$TMP_L7b" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '# ROADMAP\n- [ ] x\n## Backlog (nothing done yet)\n' > ROADMAP.md
+  "$CLI" check --json | grep -q ROADMAP_NO_DONE \
+    && { printf '# ROADMAP\n- [ ] x\n## Done (log — shipped)\n' > ROADMAP.md
+         ! "$CLI" check --json | grep -q ROADMAP_NO_DONE; } ) \
+  && _pass "check Done-log anchors 'done' to heading start (BUG-10)" || _fail "BUG-10 done-anchor"
+rm -rf "$TMP_L7b"
+
 # BUG-9: a half-configured loop warns, both directions.
 TMP_L8="$(mktemp -d)"; ( cd "$TMP_L8" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
   printf '# LOOP\n' > LOOP.md
@@ -223,6 +234,59 @@ TMP_L9="$(mktemp -d)"; ( cd "$TMP_L9" && git init -q -b main 2>/dev/null && "$CL
   "$CLI" check --json | grep -q ROADMAP_NO_LOOP ) \
   && _pass "check warns on ROADMAP.md without LOOP.md (BUG-9)" || _fail "BUG-9 roadmap-no-loop"
 rm -rf "$TMP_L9"
+
+# --- v0.5.0: deep anchor validation (atlas check --deep) ------------------
+echo ""
+echo "-- check --deep (anchor-body conformance) --"
+
+# --deep is opt-in: a fresh scaffold passes even --deep --strict, and a plain
+# check never emits anchor warnings (so it cannot regress existing repos).
+TMP_D0="$(mktemp -d)"; ( cd "$TMP_D0" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" check --deep --strict >/dev/null 2>&1 \
+    && ! "$CLI" check --json | grep -q 'ANCHOR_' ) \
+  && _pass "check --deep is opt-in; fresh scaffold passes --deep --strict" || _fail "--deep opt-in"
+rm -rf "$TMP_D0"
+
+# --deep flags a ToC link with no matching <a id> body.
+TMP_D1="$(mktemp -d)"; ( cd "$TMP_D1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf -- '- [§GHOST — link only](#ghost)\n' >> SCARS.md
+  "$CLI" check --deep --json | grep -q ANCHOR_TOC_NO_BODY ) \
+  && _pass "check --deep flags a ToC link with no body" || _fail "--deep TOC_NO_BODY"
+rm -rf "$TMP_D1"
+
+# --deep flags an <a id> body with no ToC entry.
+TMP_D2="$(mktemp -d)"; ( cd "$TMP_D2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '\n<a id="orphan"></a>\n### §ORPHAN — body, no ToC\n**Do.** nothing.\n' >> SCARS.md
+  "$CLI" check --deep --json | grep -q ANCHOR_NOT_IN_TOC ) \
+  && _pass "check --deep flags a body anchor missing from the ToC" || _fail "--deep NOT_IN_TOC"
+rm -rf "$TMP_D2"
+
+# --deep flags a scar that states a problem but gives no remedy.
+TMP_D3="$(mktemp -d)"; ( cd "$TMP_D3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '\n- [§NOFIX — problem only](#nofix)\n' >> SCARS.md
+  printf '\n<a id="nofix"></a>\n### §NOFIX — problem, no remedy\n**Symptom.** it breaks.\n' >> SCARS.md
+  "$CLI" check --deep --json | grep -q ANCHOR_NO_REMEDY ) \
+  && _pass "check --deep flags a problem with no '**Do.**' remedy" || _fail "--deep NO_REMEDY"
+rm -rf "$TMP_D3"
+
+# --deep flags a 'Where.' path that does not resolve, but skips glob patterns.
+TMP_D4="$(mktemp -d)"; ( cd "$TMP_D4" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '\n- [§GONE — stale where](#gone)\n- [§GLOBBED — glob where](#globbed)\n' >> SCARS.md
+  printf '\n<a id="gone"></a>\n### §GONE — bad path\n**Do.** edit. **Where.** `does/not/exist.go`.\n' >> SCARS.md
+  printf '\n<a id="globbed"></a>\n### §GLOBBED — glob path\n**Do.** edit. **Where.** `src/**/*.go`.\n' >> SCARS.md
+  o="$("$CLI" check --deep --json)"
+  echo "$o" | grep -q "ANCHOR_WHERE_UNRESOLVED.*does/not/exist.go" \
+    && ! echo "$o" | grep -q 'src/\*\*' ) \
+  && _pass "check --deep resolves Where paths, skips globs" || _fail "--deep WHERE_UNRESOLVED"
+rm -rf "$TMP_D4"
+
+# --deep ignores schema EXAMPLES inside code blocks (a fenced sample <a id>
+# is documentation, not a real anchor — it must not be flagged).
+TMP_D5="$(mktemp -d)"; ( cd "$TMP_D5" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '\n```\n<a id="example-id"></a>\n### §EXAMPLE — how to write a scar\n**Symptom.** ...\n```\n' >> SCARS.md
+  "$CLI" check --deep --strict >/dev/null 2>&1 ) \
+  && _pass "check --deep ignores example anchors inside code blocks" || _fail "--deep code-block immunity"
+rm -rf "$TMP_D5"
 
 # --- new commands (smoke) ------------------------------------------------
 echo ""

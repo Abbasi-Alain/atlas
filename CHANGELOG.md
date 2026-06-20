@@ -8,6 +8,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-20
+
+### Added
+
+- **`atlas check --deep`** — opt-in anchor-body conformance for `SCARS.md` (SPEC §6, the last deferred validation item). It checks ToC↔body completeness (`ANCHOR_TOC_NO_BODY`, `ANCHOR_NOT_IN_TOC`), that a scar stating a problem (`**Symptom.**` / `**Root cause.**`) also gives a remedy (`**Do.**` / `**Do NOT.**`) (`ANCHOR_NO_REMEDY`), and that `**Where.**` file paths resolve on disk, skipping globs (`ANCHOR_WHERE_UNRESOLVED`). All findings are warnings, so `--deep` never breaks an existing repo unless paired with `--strict`. Schema examples inside code blocks (fenced or indented) are ignored, so a SCARS file can document how to write a scar without tripping its own deep check. `--deep` is reported in `--json` (`"deep": true`).
+
+### Fixed
+
+- **`ROADMAP_NO_DONE` now anchors "done" to the heading start** (BUG-10, refines BUG-8): the previous pattern matched "done" anywhere in a heading, so `## Backlog (nothing done yet)` wrongly suppressed the warning. It now fires unless a heading *starts* with "Done" (still matching `## Done`, `## Done (log …)`, `## Done log`, `## Done:`).
+
 ## [0.4.1] — 2026-06-20
 
 ### Fixed
