@@ -242,3 +242,35 @@ To declare conformance, add a comment to the top of ATLAS.md:
 ```
 
 This is optional in v0.1 but will be required from v1.0 onward.
+
+---
+
+## 8. Autonomous loop — `LOOP.md` + `ROADMAP.md` (OPTIONAL 5th surface)
+
+The quartet (§1) is the **static** knowledge — *where* things live, *what* breaks,
+*how* to do tasks, *how* to act. An OPTIONAL fifth surface captures the **dynamic**
+process: how an agent **continuously improves** the repo without a human in the
+loop. It is opt-in (`atlas init --loop`); a repo without these files is fully
+conformant and unaffected.
+
+- `LOOP.md` **MUST** be at the repo root if present. It is the loop rulebook +
+  one-command entrypoint. Minimal required structure: an H1 title. It should carry
+  the loop's mechanisms (see below).
+- `ROADMAP.md` **MUST** be at the repo root if present. It is the EV-ranked task
+  queue. Minimal required structure: a `- [ ]` / `- [x]` checkbox queue and a
+  **Done** log; each item should record *why · how + entry-points · impact · test
+  · complexity · difficulty*.
+
+**Loop mechanisms** (the battle-tested rules the template bakes in):
+1. anti-churn pre-flight (grep + verify before building — never rebuild);
+2. EV-ranked selection (`edge × P(real) × leverage ÷ cost`, not queue order);
+3. novelty mandate (≥1 new falsifiable hypothesis per iteration);
+4. self red-team before commit (overfit / leakage / honesty);
+5. measure-then-gate (descriptive first; wire to behavior only after OOS validation);
+6. grow `SCARS.md` on every new failure mode;
+7. difficulty routing (escalate `hard` items to a stronger model / sub-agent);
+8. `atlas check --strict` as the per-commit conformance gate.
+
+`atlas check` validates `LOOP.md`/`ROADMAP.md` **only when present** (warnings, like
+the behavioral files) and reports them under `"loop"` in `--json`. The SessionStart
+hook surfaces a one-line pointer when a repo has a loop.

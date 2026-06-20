@@ -1,0 +1,43 @@
+# LOOP — {{PROJECT_NAME}} autonomous improvement loop
+
+> The **dynamic** ATLAS surface: how an agent continuously improves this repo
+> without a human in the loop. Pairs with the static quartet — [`ATLAS.md`](ATLAS.md)
+> (*where*), [`SCARS.md`](SCARS.md) (*what breaks*), the SKILL playbook (*how*),
+> and [`CLAUDE.md`](CLAUDE.md) (*how to act*). The task queue is [`ROADMAP.md`](ROADMAP.md).
+>
+> OPTIONAL: the static quartet is the core; this loop is an opt-in layer. Remove
+> `LOOP.md` + `ROADMAP.md` if you don't run an autonomous loop.
+
+## One iteration
+
+```
+# 0. orient — rely on the SessionStart hook, or run: atlas orient
+# 1. pick the top ROADMAP.md item by expected value (see rule 2), not queue order
+# 2. implement the smallest change that satisfies its test
+# 3. atlas check --strict      # conformance gate — must pass before commit
+# 4. commit (cite SCARS §ANCHORS); tick the item + move it to the Done log
+```
+
+Drive it with your runtime's recurring loop (e.g. `/loop LOOP.md`).
+
+## Rules (battle-tested — keep them)
+
+1. **Anti-churn pre-flight.** Grep before building; verify + tick what already
+   ships. Never rebuild working code.
+2. **EV-ranked selection.** Pick by `edge × P(real) × leverage ÷ cost`, not
+   position in the queue.
+3. **Novelty mandate.** Each iteration adds ≥1 new falsifiable hypothesis to the
+   idea ledger and clears the novelty bar (no near-duplicates).
+4. **Self red-team before commit.** Check for overfit, data leakage, and honesty.
+5. **Measure-then-gate.** Ship descriptive-only first; wire to behavior only
+   after out-of-sample validation.
+6. **Grow SCARS.** Every new failure mode becomes a `§ANCHOR` in `SCARS.md`.
+7. **Difficulty routing.** Escalate `difficulty: hard` items to a stronger
+   model / sub-agent.
+8. **Conformance gate.** `atlas check --strict` must pass on every commit.
+
+## Sub-agent brief
+
+Every sub-agent you dispatch must be told: read `ATLAS.md`, `SCARS.md`, and the
+SKILL playbook first; follow `CLAUDE.md`; run `atlas check --strict` before
+returning. (Sub-agents don't inherit the SessionStart hook — say it in the prompt.)

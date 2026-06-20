@@ -8,8 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-20
+
 ### Added
 
+- **Autonomous improvement loop — an optional 5th ATLAS surface (`LOOP.md` + `ROADMAP.md`).** The quartet is the *static* knowledge; the loop standardizes the *dynamic* process — how an agent continuously improves a repo with no human in the loop. `atlas init --loop` scaffolds a battle-tested rulebook (anti-churn pre-flight · EV-ranked selection · novelty mandate · self red-team · measure-then-gate · grow SCARS · difficulty routing · `atlas check --strict` per-commit gate) plus an EV-ranked `ROADMAP.md` queue with a Done log. `atlas check` validates LOOP/ROADMAP **only when present** (warnings, like the behavioral files) and reports them under `"loop"` in `--json`; the SessionStart hook surfaces a one-line pointer. A repo without a loop is fully unaffected (zero new warnings). Graduated from the proxima-finance dogfooding loop (BUGS.md FEAT-1). SPEC §8.
 - **Fully automated DOI on release** — a `release-zenodo-doi` workflow (fires on tag push, re-runnable via `workflow_dispatch`) waits for Zenodo to mint the new version DOI and stamps it into the GitHub Release notes. Combined with the auto-resolving **concept DOI** badge, pushing a `vX.Y.Z` tag is now the only manual step — every channel (npm/.deb/brew/AUR/PPA), the signed release, the Zenodo archive, and the DOI stamp happen automatically.
 
 ## [0.3.0] — 2026-06-19
