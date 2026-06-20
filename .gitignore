@@ -8,6 +8,12 @@ node_modules/
 # Internal launch / marketing drafts — local only, never pushed.
 .launch/
 
+# Local working scratchpads — bug intake + review notes. Kept private: resolved
+# items graduate to CHANGELOG.md (the fix), SCARS.md (the lesson), and SPEC.md
+# (the rule); these drafts also reference internal repos/paths. Local only.
+BUGS.md
+CRITICS.md
+
 # Private-style overlays — if you maintain a private style preset as
 # a sibling repo and symlink it into templates/styles/ via an overlay
 # install.sh, these patterns keep the symlink out of git.
