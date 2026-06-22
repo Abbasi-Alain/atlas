@@ -331,11 +331,60 @@ Mix-and-match works: a style only overrides files it ships. Missing files fall b
 
 ---
 
+## Conformance — keep the quartet honest
+
+`atlas check` is a real validator, not a linter afterthought. It reports two severities: **errors** (spec MUST violations that break cross-tool reliance — fail, exit 1) and **warnings** (SHOULD / conditional MUST — advisory, exit 0). So a partial setup never blocks you, but CI can still demand the full standard.
+
+```bash
+atlas check                 # human-readable: errors vs warnings
+atlas check --json          # machine-readable {ok, errors[], warnings[], …} — pipe to any CI/agent
+atlas check --strict        # promote warnings → errors (the per-commit CI gate)
+atlas check --deep          # + SCARS anchor-schema: ToC↔body, problem-needs-remedy, Where: paths resolve
+atlas fix                   # auto-resolve what's fixable (kebab the SKILL dir, re-mirror AGENTS.md, regen llms.txt)
+```
+
+`--deep` (opt-in) is the strongest mode: every ToC link has a body and vice-versa, any scar that states a `**Symptom.**` also gives a `**Do.**` remedy, and every `**Where.**` file path resolves on disk (globs and code-block examples are skipped). All `--deep` findings are warnings, so it never breaks an existing repo unless you add `--strict`. Drop `atlas check --strict` (add `--deep` when you want anchor rigor) into a pre-commit hook or CI step and the quartet can't silently rot.
+
+---
+
+## The autonomous loop *(opt-in 5th surface)*
+
+The quartet is the **static** knowledge — where things live, what breaks, how to act. The optional **5th surface** standardizes the *dynamic* process: how an agent **keeps improving a repo on its own**, iteration after iteration, without re-inventing the rules each time.
+
+```bash
+atlas init --loop           # scaffold LOOP.md + ROADMAP.md (alongside the quartet)
+atlas check --strict        # a loop repo still passes — the surface is validated, not just dropped
+```
+
+Two files get added:
+
+| File | Role |
+|---|---|
+| `LOOP.md` | **The rulebook + one-command entrypoint.** What *one iteration* means, the anti-churn / honesty / red-team rules, and how to run it. |
+| `ROADMAP.md` | **The EV-ranked task queue + a Done log.** Each item carries why · how + exact entry-points · impact · test · complexity. |
+
+**One iteration, in practice:**
+
+```
+1. Read ATLAS §0 + SCARS ToC          → orient (no grep)
+2. Pick the top ROADMAP item by EV     → edge × P(real) × leverage ÷ cost
+3. Implement the smallest real change  → surgical diff
+4. atlas check --strict                → conformance gate before commit
+5. Move the item to the Done log;       grow SCARS on any new failure mode
+```
+
+The scaffold bakes in the rules that make a loop *productive instead of churny*: anti-churn pre-flight (grep before building; never rebuild what ships), EV-ranked selection, a novelty mandate, self red-team before commit, measure-then-gate honesty (ship descriptive-only; wire to behavior only after out-of-sample validation), and `atlas check --strict` as the per-commit gate. `atlas check` validates the loop files **only when they exist** (warnings: `ROADMAP_NO_QUEUE`, `ROADMAP_NO_DONE`, `LOOP_NO_ROADMAP`, …) and reports them under `"loop"` in `--json`. A repo without a loop is completely unaffected. Full definition: [SPEC §8](docs/SPEC.md).
+
+---
+
 ## Subcommands
 
 ```bash
-atlas init [--style <preset>] [--force] [--analyze]   # scaffold the quartet (--analyze auto-drafts the map)
-atlas check [--changed-files]             # validate the quartet; --changed-files gates stale-map drift
+atlas init [--style <preset>] [--force] [--analyze] [--loop]
+                                          # scaffold the quartet (--analyze auto-drafts the map; --loop adds LOOP.md+ROADMAP.md)
+atlas check [--json] [--strict] [--deep]  # validate the quartet (errors vs warnings); --deep adds SCARS anchor-schema checks
+atlas check --changed-files               # gate stale-map drift in CI
+atlas fix                                 # auto-resolve warnings (kebab the SKILL dir, re-mirror AGENTS.md, regen llms.txt)
 atlas measure [--badge]                   # estimate orientation-token savings (with vs without)
 atlas bench [--runtime claude|codex]      # A/B a task with vs without ATLAS via a real headless agent
 atlas doctor                              # diagnose install + harness + runtime-export drift
