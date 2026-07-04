@@ -14,6 +14,19 @@ node_modules/
 BUGS.md
 CRITICS.md
 
+# The autonomous-loop surface for THIS repo — local only, never pushed.
+# The roadmap is forward-looking strategy: features go public one release at a
+# time, only after full verification (the SPEC/CHANGELOG in the release IS the
+# public trace); the loop files also reference private local paths. Repos that
+# WANT a public loop simply don't ignore these — per-repo choice, not the standard.
+LOOP.md
+ROADMAP.md
+LOOP_REPORT.md
+LOOP_HISTORY.md
+
+# Local agent-session settings.
+.claude/
+
 # Private-style overlays — if you maintain a private style preset as
 # a sibling repo and symlink it into templates/styles/ via an overlay
 # install.sh, these patterns keep the symlink out of git.
