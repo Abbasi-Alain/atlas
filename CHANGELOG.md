@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **`BUGS.md` — the open-issues register, an OPTIONAL surface (SPEC §9).** The SCARS antechamber: issues that are open and known but not yet understood (symptom · evidence · suspicion · owner ticket), with a graduation convention (fixed issues strike through and move to a `SCARS.md` `§ANCHOR`). `atlas init --bugs` scaffolds `templates/BUGS.md.tmpl` already linked from `ATLAS.md`. `atlas check` validates `BUGS.md` **only when present**: a tracked (non-git-ignored) `BUGS.md` not referenced from `ATLAS.md` warns (`BUGS_MD_UNLINKED`); a git-ignored `BUGS.md` (a repo's private choice) is skipped. The SessionStart hook surfaces a one-line "check BUGS.md before debugging" pointer when a repo has one. A repo without `BUGS.md` is fully unaffected.
+
 ## [0.5.0] — 2026-06-20
 
 ### Added

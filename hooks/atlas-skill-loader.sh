@@ -2,8 +2,8 @@
 # atlas-skill-loader — SessionStart-equivalent hook.
 #
 # Detects ATLAS.md, SCARS.md, .agents/skill/<project>/SKILL.md (and, if present,
-# the optional LOOP.md) in the cwd and prints their navigational spine to stdout.
-# Whichever agent
+# the optional LOOP.md / BUGS.md) in the cwd and prints their navigational spine
+# to stdout. Whichever agent
 # runtime invokes this hook will see that output and feed it into
 # the conversation as context — so the main agent automatically
 # knows where things live and what NOT to do.
@@ -18,6 +18,7 @@
 #   - SCARS: Table-of-contents section only (failure anchors)
 #   - SKILL: ToC section only (anchors with one-line summaries)
 #   - LOOP:  a one-line pointer (only if the repo runs an autonomous loop)
+#   - BUGS:  a one-line pointer (only if the repo has an open-issues register)
 #
 # Sub-agents do NOT inherit this hook; their parent must include a
 # "read ATLAS.md, SCARS.md, and SKILL.md first" instruction in the prompt.
@@ -89,6 +90,17 @@ if [[ -f "$LOOP" ]]; then
   echo "This repo runs an ATLAS autonomous loop. One iteration: pick the top"
   echo "ROADMAP.md item by expected value → implement → 'atlas check --strict'"
   echo "→ commit (cite SCARS §ANCHORS). Read LOOP.md for the rules."
+  echo ""
+fi
+
+BUGS="$CWD/BUGS.md"
+if [[ -f "$BUGS" ]]; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "BUGS.md (open-issues register) detected at $BUGS"
+  echo "================================================================"
+  echo "check BUGS.md before debugging — a known-not-yet-understood issue may"
+  echo "already be logged there, so you don't re-discover it at full cost."
   echo ""
 fi
 

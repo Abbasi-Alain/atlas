@@ -2,9 +2,11 @@
 # atlas — CLI for the ATLAS project-map standard.
 #
 # Subcommands:
-#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop]
+#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs]
 #                                     (--loop also scaffolds LOOP.md + ROADMAP.md,
 #                                     the optional autonomous-loop 5th surface)
+#                                     (--bugs scaffolds BUGS.md, the optional
+#                                     open-issues register, linked from ATLAS.md)
 #                                     bootstrap ATLAS.md + SKILL.md + SCARS.md
 #                                     + CLAUDE.md + AGENTS.md + EXAMPLES.md (+ seeds).
 #                                     --analyze scans the repo + pre-fills the map.
@@ -381,12 +383,13 @@ ${inv}"
 }
 
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0 loop=0
+  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f)  force=1; shift ;;
       --analyze)   analyze=1; shift ;;
       --loop)      loop=1; shift ;;
+      --bugs)      bugs=1; shift ;;
       --style)     style="${2:-default}"; shift 2 ;;
       --style=*)   style="${1#--style=}"; shift ;;
       --stack)     stacks="${2:-}"; shift 2 ;;
@@ -433,6 +436,17 @@ cmd_init() {
   if [[ $loop -eq 1 ]]; then
     _render "$(_src LOOP.md.tmpl)"    "$PWD/LOOP.md"    "$force"
     _render "$(_src ROADMAP.md.tmpl)" "$PWD/ROADMAP.md" "$force"
+  fi
+  # Optional open-issues register (SPEC §9). Opt-in via --bugs; scaffold-missing-
+  # only like the quartet. Auto-link it from ATLAS.md so a fresh scaffold stays
+  # warning-free (BUGS_MD_UNLINKED only fires on a hand-added, unlinked file).
+  if [[ $bugs -eq 1 ]]; then
+    _render "$(_src BUGS.md.tmpl)" "$PWD/BUGS.md" "$force"
+    if [[ -f "$PWD/ATLAS.md" ]] && ! grep -q "BUGS.md" "$PWD/ATLAS.md"; then
+      # shellcheck disable=SC2016  # literal backticks (Markdown), no expansion intended
+      printf '\n> Open issues: [`BUGS.md`](BUGS.md) — known-not-yet-understood issues (SPEC §9).\n' >> "$PWD/ATLAS.md"
+      _say "linked BUGS.md from ATLAS.md"
+    fi
   fi
   # Optional per-style seed files (extra documents shipped beyond the trio).
   # Some styles ship ARCHITECTURE.md / GAPS.md / CRITICS.md / STATUS.md /
@@ -681,6 +695,22 @@ cmd_check() {
       _ck_warn LOOP_NO_ROADMAP "LOOP.md present but no ROADMAP.md — the loop has no task queue (SPEC §8)" "§8"
     else
       _ck_warn ROADMAP_NO_LOOP "ROADMAP.md present but no LOOP.md — the queue has no rulebook (SPEC §8)" "§8"
+    fi
+  fi
+
+  # --- BUGS.md (SPEC §9): OPTIONAL open-issues register. Validated only when
+  # present. A git-ignored BUGS.md (a repo's own private convention, SCARS
+  # §PRIVATE-STYLE-OVERLAY) is a valid choice and is skipped — the link
+  # requirement is for a BUGS.md meant to be part of the public map.
+  if [[ -f "$PWD/BUGS.md" ]]; then
+    _ck_ok "BUGS.md present (open-issues register)"
+    local bugs_ignored=0
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git check-ignore -q "$PWD/BUGS.md" 2>/dev/null; then
+      bugs_ignored=1
+    fi
+    if [[ $bugs_ignored -eq 0 ]]; then
+      grep -q "BUGS.md" "$atlas" 2>/dev/null \
+        || _ck_warn BUGS_MD_UNLINKED "BUGS.md present but not linked from ATLAS.md — link it so agents find the open-issues register (SPEC §9); 'atlas init --bugs' scaffolds a linked one" "§9"
     fi
   fi
 

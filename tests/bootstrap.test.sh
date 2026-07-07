@@ -235,6 +235,36 @@ TMP_L9="$(mktemp -d)"; ( cd "$TMP_L9" && git init -q -b main 2>/dev/null && "$CL
   && _pass "check warns on ROADMAP.md without LOOP.md (BUG-9)" || _fail "BUG-9 roadmap-no-loop"
 rm -rf "$TMP_L9"
 
+# --- RM-3: BUGS.md open-issues register (init --bugs + check awareness) ---
+echo ""
+echo "-- BUGS.md open-issues register (init --bugs / check) --"
+
+# init --bugs scaffolds a linked BUGS.md; repo still passes --strict clean.
+TMP_BG1="$(mktemp -d)"; ( cd "$TMP_BG1" && git init -q -b main 2>/dev/null && "$CLI" init --bugs >/dev/null 2>&1
+  [[ -f BUGS.md ]] && grep -q "BUGS.md" ATLAS.md && "$CLI" check --strict >/dev/null 2>&1 ) \
+  && _pass "init --bugs scaffolds a linked BUGS.md and passes --strict" || _fail "init --bugs"
+rm -rf "$TMP_BG1"
+
+# a repo without --bugs is unaffected (no BUGS.md, no warning).
+TMP_BG2="$(mktemp -d)"; ( cd "$TMP_BG2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  [[ ! -f BUGS.md ]] && ! "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "no-bugs repo unaffected (no BUGS.md, no warning)" || _fail "bugs opt-in leak"
+rm -rf "$TMP_BG2"
+
+# a hand-added, unlinked BUGS.md warns.
+TMP_BG3="$(mktemp -d)"; ( cd "$TMP_BG3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > BUGS.md
+  "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "check warns on an unlinked BUGS.md" || _fail "BUGS_MD_UNLINKED not detected"
+rm -rf "$TMP_BG3"
+
+# a git-ignored BUGS.md does NOT warn even though unlinked (private register).
+TMP_BG4="$(mktemp -d)"; ( cd "$TMP_BG4" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > BUGS.md && printf 'BUGS.md\n' >> .gitignore
+  ! "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "git-ignored BUGS.md doesn't warn (SCARS §PRIVATE-STYLE-OVERLAY)" || _fail "gitignored BUGS.md still warns"
+rm -rf "$TMP_BG4"
+
 # --- v0.5.0: deep anchor validation (atlas check --deep) ------------------
 echo ""
 echo "-- check --deep (anchor-body conformance) --"

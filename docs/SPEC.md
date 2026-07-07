@@ -284,3 +284,31 @@ the behavioral files) and reports them under `"loop"` in `--json`: it warns on a
 on a half-configured loop (one of the pair present without the other). The
 SessionStart hook surfaces a one-line pointer, and the `llms.txt` export lists
 `LOOP.md` in its read-first set, when a repo has a loop.
+
+---
+
+## 9. BUGS.md — the open-issues register (OPTIONAL surface)
+
+`SCARS.md` holds failures that are **fixed and understood** (symptom → root
+cause → remedy). There is no standard home for issues that are **open, known,
+but not yet understood** — so each session re-discovers the same weirdness at
+full cost. `BUGS.md` is that home: the SCARS antechamber.
+
+- `BUGS.md` is OPTIONAL. A repo without it is fully conformant and unaffected.
+- If present and tracked in version control, `BUGS.md` **SHOULD** be linked
+  from `ATLAS.md` so agents find it during orientation.
+- A `BUGS.md` that is **git-ignored** is a valid, private choice (a repo may
+  keep its open-issues register local-only, e.g. SCARS §PRIVATE-STYLE-OVERLAY)
+  — the link requirement does not apply to a git-ignored file.
+- Entry shape: *date · symptom · evidence (file:line / log) · suspicion · owner
+  ticket*.
+- **Graduation convention.** When an open issue is understood and fixed, it
+  graduates: strike it through in `BUGS.md` (with the fixing commit) and add
+  the lesson as a new `SCARS.md` `§ANCHOR`. An issue never lives in both files
+  at once — open here, or fixed-and-learned there.
+
+`atlas check` validates `BUGS.md` **only when present**: a tracked (non-git-ignored)
+`BUGS.md` not referenced from `ATLAS.md` warns (`BUGS_MD_UNLINKED`). `atlas init
+--bugs` scaffolds a `BUGS.md` already linked from `ATLAS.md`. The SessionStart
+hook surfaces a one-line pointer ("check BUGS.md before debugging") when a repo
+has one.
