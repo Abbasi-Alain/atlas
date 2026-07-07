@@ -291,6 +291,29 @@ TMP_BG7="$(mktemp -d)"; ( cd "$TMP_BG7" && git init -q -b main 2>/dev/null && "$
   && _pass "backticked label + ./ prefix link passes (no warning)" || _fail "backtick/./ prefix link wrongly still warns"
 rm -rf "$TMP_BG7"
 
+# RM-42 (critic-stage finding #8): broader real-link forms all pass —
+# a #fragment, a quoted title, and an angle-bracket target.
+TMP_BG8B="$(mktemp -d)"; ( cd "$TMP_BG8B" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > BUGS.md
+  printf '\nOpen issues: [open](BUGS.md#open)\n' >> ATLAS.md
+  ! "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "a #fragment link (BUGS.md#open) passes (no warning)" || _fail "fragment link wrongly still warns"
+rm -rf "$TMP_BG8B"
+
+TMP_BG8C="$(mktemp -d)"; ( cd "$TMP_BG8C" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > BUGS.md
+  printf '\nOpen issues: [BUGS.md](BUGS.md "open issues")\n' >> ATLAS.md
+  ! "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "a titled link (BUGS.md \"open issues\") passes (no warning)" || _fail "titled link wrongly still warns"
+rm -rf "$TMP_BG8C"
+
+TMP_BG8D="$(mktemp -d)"; ( cd "$TMP_BG8D" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > BUGS.md
+  printf '\nOpen issues: [BUGS.md](<BUGS.md>)\n' >> ATLAS.md
+  ! "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "an angle-bracket link (<BUGS.md>) passes (no warning)" || _fail "angle-bracket link wrongly still warns"
+rm -rf "$TMP_BG8D"
+
 # missing/failing git binary at check-time doesn't abort check (the
 # rev-parse/check-ignore guard is an `if A && B` condition, safe under set -e).
 FAKE_BIN_BG8="$(mktemp -d)"
@@ -362,6 +385,16 @@ TMP_CR5="$(mktemp -d)"; ( cd "$TMP_CR5" && git init -q -b main 2>/dev/null && "$
   ! "$CLI" check --json | grep -q CRITICS_STALE ) \
   && _pass "below-threshold Done log doesn't warn CRITICS_STALE" || _fail "threshold not respected"
 rm -rf "$TMP_CR5"
+
+# RM-42 (critic-stage finding #2): a real init --critics scaffold (shipping
+# templates/CRITICS.md.tmpl's own example row unmodified) with a Done log
+# grown to 3+ items STILL warns — the template's placeholder row must not
+# silently count as a real logged critique.
+TMP_CR5B="$(mktemp -d)"; ( cd "$TMP_CR5B" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  printf '# ROADMAP\n- [ ] x\n## Done\n- [x] a\n- [x] b\n- [x] c\n' > ROADMAP.md
+  "$CLI" check --json | grep -q CRITICS_STALE ) \
+  && _pass "a fresh init --critics scaffold still warns CRITICS_STALE (template row doesn't count)" || _fail "template example row silenced CRITICS_STALE"
+rm -rf "$TMP_CR5B"
 
 # a git-ignored CRITICS.md is exempt from the staleness check (private register).
 TMP_CR6="$(mktemp -d)"; ( cd "$TMP_CR6" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
@@ -538,6 +571,32 @@ TMP_EP3="$(mktemp -d)"; ( cd "$TMP_EP3" && git init -q -b main 2>/dev/null && "$
   && _pass "EXECUTOR_PACK_MISSING is --deep-only (plain check doesn't warn)" || _fail "EXECUTOR_PACK_MISSING leaked into plain check"
 rm -rf "$TMP_EP3"
 
+# RM-42 (critic-stage finding #1): a bare heading MENTION with no real
+# trap-sheet content still warns — presence of the bytes "EXECUTOR PACK"
+# is not a real pack.
+TMP_EP4="$(mktemp -d)"; ( cd "$TMP_EP4" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '\n## notes\nTODO: add EXECUTOR PACK later\n' > ROADMAP.md
+  "$CLI" check --deep --json | grep -q EXECUTOR_PACK_MISSING ) \
+  && _pass "a bare EXECUTOR PACK mention (no trap-sheet) still warns" || _fail "bare mention wrongly passed"
+rm -rf "$TMP_EP4"
+
+# a pack whose trap-sheet cites a REAL SCARS anchor (not the template's
+# literal `§ANCHOR` placeholder) does NOT warn.
+TMP_EP5="$(mktemp -d)"; ( cd "$TMP_EP5" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  grep -q "§NO-COAUTHOR" ROADMAP.md ) \
+  && _pass "the template's own pack now seeds a real §NO-COAUTHOR citation" || _fail "template pack has no real anchor citation"
+rm -rf "$TMP_EP5"
+
+# an illustrative §ANCHOR cited elsewhere in the pack (e.g. the DoD's own
+# §ATLAS-IS-INDEX example) must NOT satisfy the check when the TRAP-SHEET
+# itself has no real citation — only the trap-sheet subsection counts.
+TMP_EP6="$(mktemp -d)"; ( cd "$TMP_EP6" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  awk '/- \*\*T1\*\* Never add/{print "- <T1> <placeholder> (`§ANCHOR`)."; next} {print}' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
+  grep -q "§ATLAS-IS-INDEX" ROADMAP.md \
+    && "$CLI" check --deep --json | grep -q EXECUTOR_PACK_MISSING ) \
+  && _pass "a DoD-only anchor citation (outside the trap-sheet) doesn't satisfy the check" || _fail "DoD-only citation wrongly satisfied the check"
+rm -rf "$TMP_EP6"
+
 # --- RM-26: capability tiers (atlas check UNMAPPED_TIER_TAG) --------------
 echo ""
 echo "-- capability tiers (atlas check UNMAPPED_TIER_TAG) --"
@@ -550,18 +609,21 @@ TMP_T1="$(mktemp -d)"; ( cd "$TMP_T1" && git init -q -b main 2>/dev/null && "$CL
   && _pass "no mapping block: tier: tags are never validated" || _fail "UNMAPPED_TIER_TAG fired with no mapping block"
 rm -rf "$TMP_T1"
 
-# a mapping block + only mapped (case-insensitive) tier tags: no warning.
+# a mapping block + only mapped (case-insensitive) tier tags in the active
+# queue: no warning.
 TMP_T2="$(mktemp -d)"; ( cd "$TMP_T2" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
   printf '\n## Model tier mapping (RM-26)\n\n| tier | model |\n|---|---|\n| fast | A |\n| strong | B |\n| frontier | C |\n' >> LOOP.md
-  printf '\n- [ ] ticket A (tier: fast)\n- [ ] ticket B (tier: Strong)\n' >> ROADMAP.md
+  awk '/^## Done/{print "- [ ] ticket A (tier: fast)\n- [ ] ticket B (tier: Strong)\n"} {print}' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
   ! "$CLI" check --json | grep -q UNMAPPED_TIER_TAG ) \
   && _pass "mapping block + only mapped tiers: no warning (case-insensitive)" || _fail "false positive with mapped tiers"
 rm -rf "$TMP_T2"
 
 # a mapping block + a ROADMAP tier: tag not in the block: warns, naming it.
+# (tickets are inserted BEFORE the template's own '## Done' heading — RM-42's
+# Done-log exclusion means content appended past it would be silently ignored.)
 TMP_T3="$(mktemp -d)"; ( cd "$TMP_T3" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
   printf '\n## Model tier mapping (RM-26)\n\n| tier | model |\n|---|---|\n| fast | A |\n| strong | B |\n' >> LOOP.md
-  printf '\n- [ ] ticket A (tier: fast)\n- [ ] ticket B (tier: quantum)\n' >> ROADMAP.md
+  awk '/^## Done/{print "- [ ] ticket A (tier: fast)\n- [ ] ticket B (tier: quantum)\n"} {print}' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
   "$CLI" check --json | grep -q 'UNMAPPED_TIER_TAG.*quantum' ) \
   && _pass "mapping block + unmapped tier tag warns, naming it" || _fail "UNMAPPED_TIER_TAG not detected"
 rm -rf "$TMP_T3"
@@ -574,6 +636,33 @@ TMP_T4="$(mktemp -d)"; ( cd "$TMP_T4" && git init -q -b main 2>/dev/null && "$CL
   ! "$CLI" check --json | grep -q UNMAPPED_TIER_TAG ) \
   && _pass "'frontier:' prose doesn't false-match the tier: substring" || _fail "frontier: substring false-positive"
 rm -rf "$TMP_T4"
+
+# RM-42 (critic-stage finding #4): a stale tier: tag in the Done log (from a
+# scheme predating a mapping change) must NOT warn — only the active queue
+# is routing-relevant.
+TMP_T5="$(mktemp -d)"; ( cd "$TMP_T5" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '\n## Model tier mapping (RM-26)\n\n| tier | model |\n|---|---|\n| fast | A |\n' >> LOOP.md
+  awk '/^## Done/{print "- [ ] active ticket (tier: fast)\n"} {print}' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
+  printf '- [x] old ticket (tier: quantum)\n' >> ROADMAP.md
+  ! "$CLI" check --json | grep -q UNMAPPED_TIER_TAG ) \
+  && _pass "a stale tier: tag in the Done log doesn't warn" || _fail "Done-log tier tag wrongly warned"
+rm -rf "$TMP_T5"
+
+# a tier: mention inside a fenced code block (an example/snippet) must NOT warn.
+TMP_T6="$(mktemp -d)"; ( cd "$TMP_T6" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '\n## Model tier mapping (RM-26)\n\n| tier | model |\n|---|---|\n| fast | A |\n' >> LOOP.md
+  awk '/^## Done/{print "- [ ] active ticket (tier: fast)\n\n```\nexample: tier: quantum\n```\n"} {print}' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
+  ! "$CLI" check --json | grep -q UNMAPPED_TIER_TAG ) \
+  && _pass "a tier: mention inside a fenced code block doesn't warn" || _fail "fenced tier tag wrongly warned"
+rm -rf "$TMP_T6"
+
+# an unmapped tier tag in the ACTIVE (non-Done, non-fenced) queue still warns.
+TMP_T7="$(mktemp -d)"; ( cd "$TMP_T7" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '\n## Model tier mapping (RM-26)\n\n| tier | model |\n|---|---|\n| fast | A |\n' >> LOOP.md
+  awk '/^## Done/{print "- [ ] active ticket (tier: quantum)\n"} {print}' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
+  "$CLI" check --json | grep -q 'UNMAPPED_TIER_TAG.*quantum' ) \
+  && _pass "an unmapped tier tag in the active queue still warns" || _fail "active unmapped tier tag didn't warn"
+rm -rf "$TMP_T7"
 
 # --- new commands (smoke) ------------------------------------------------
 echo ""
