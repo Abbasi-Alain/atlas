@@ -25,6 +25,8 @@
 - [§PIPE-HEAD-SIGPIPE — `cmd | head` SIGPIPEs the producer; aborts under pipefail](#pipe-head-sigpipe)
 - [§BASH-MONOLITH — `bin/atlas` is one file; keep shellcheck green](#bash-monolith)
 - [§MACOS-SED — `sed -i` is not portable; use the `.bak` + `rm` idiom](#macos-sed)
+- [§AWK-MULTILINE-V — a multi-line value via `awk -v` warns on macOS's default awk](#awk-multiline-v)
+- [§PRINTF-LEADING-DASH — a printf format string starting with `-` is misparsed as an option](#printf-leading-dash)
 - [§PRIVATE-STYLE-OVERLAY — never commit the `abbasi` style symlink](#private-style-overlay)
 - [§BUGS-LINK-NOT-SUBSTRING — "linked from ATLAS.md" must match a link, not a filename mention](#bugs-link-not-substring)
 
@@ -171,6 +173,51 @@ correctness (contributors may run `shfmt -d` locally if they like).
 for anything structural.
 
 **Where.** `bin/atlas::cmd_adr_add`.
+
+---
+
+<a id="awk-multiline-v"></a>
+### §AWK-MULTILINE-V — a multi-line value via `awk -v` warns on macOS's default awk
+
+**Symptom.** `awk: newline in string <...>` printed to stderr (once per
+embedded newline) when replacing a marker block in a file — the final output
+can still end up looking correct, so this is easy to miss unless stderr is
+actually checked.
+
+**Root cause.** macOS ships `/usr/bin/awk` as the "one true awk" (BWK awk),
+which does not reliably handle `-v name="multi\nline\nvalue"`. It doesn't
+depend on content length or a specific trigger threshold in any principled
+way — "hasn't warned yet" on one block's content is not evidence it's safe.
+
+**Do NOT.** Pass a multi-line bash variable to awk via `-v` for a
+marker-block replace.
+
+**Do.** Write the multi-line content to a temp file and stream it in with
+`getline line < file` inside the awk program (`close()` it after) — portable
+across every awk variant.
+
+**Where.** `bin/atlas::cmd_auth`, `bin/atlas::cmd_leaderboard`.
+
+---
+
+<a id="printf-leading-dash"></a>
+### §PRINTF-LEADING-DASH — a printf format string starting with `-` is misparsed as an option
+
+**Symptom.** `printf: - : invalid option` on stderr; the intended content is
+silently never written. A caller that doesn't check `$?` (or a test fixture
+whose later assertion happens to still pass) can miss this entirely — the
+RM-42 regression test this broke passed vacuously for an entire iteration.
+
+**Root cause.** bash's builtin `printf` parses a leading `-` in the format
+argument as an option flag unless told otherwise.
+
+**Do NOT.** Pass literal content starting with `-` (or containing `%`) as
+printf's format argument directly.
+
+**Do.** Use `printf -- '...'` to end option parsing, or `printf '%s\n' '...'`
+so the content is never interpreted as a format string at all.
+
+**Where.** `tests/bootstrap.test.sh`.
 
 ---
 
