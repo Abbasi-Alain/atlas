@@ -265,6 +265,54 @@ TMP_BG4="$(mktemp -d)"; ( cd "$TMP_BG4" && git init -q -b main 2>/dev/null && "$
   && _pass "git-ignored BUGS.md doesn't warn (SCARS §PRIVATE-STYLE-OVERLAY)" || _fail "gitignored BUGS.md still warns"
 rm -rf "$TMP_BG4"
 
+# --- RM-2: CRITICS.md second-opinion log (init --critics + check awareness) ---
+echo ""
+echo "-- CRITICS.md second-opinion log (init --critics / check) --"
+
+# init --critics scaffolds CRITICS.md; repo still passes --strict clean; --json reports it.
+TMP_CR1="$(mktemp -d)"; ( cd "$TMP_CR1" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  [[ -f CRITICS.md ]] && "$CLI" check --strict >/dev/null 2>&1 && "$CLI" check --json | grep -q '"critics":true' ) \
+  && _pass "init --critics scaffolds CRITICS.md, passes --strict, reports critics:true" || _fail "init --critics"
+rm -rf "$TMP_CR1"
+
+# a repo without --critics is unaffected (no CRITICS.md, critics:false, no warning).
+TMP_CR2="$(mktemp -d)"; ( cd "$TMP_CR2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  [[ ! -f CRITICS.md ]] && "$CLI" check --json | grep -q '"critics":false' && ! "$CLI" check --json | grep -q CRITICS_STALE ) \
+  && _pass "no-critics repo unaffected (no CRITICS.md, critics:false)" || _fail "critics opt-in leak"
+rm -rf "$TMP_CR2"
+
+# a ROADMAP Done log grown to 3+ shipped items with zero critique rows warns CRITICS_STALE.
+TMP_CR3="$(mktemp -d)"; ( cd "$TMP_CR3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# ROADMAP\n- [ ] x\n## Done\n- [x] a\n- [x] b\n- [x] c\n' > ROADMAP.md
+  printf '# CRITICS\n' > CRITICS.md
+  "$CLI" check --json | grep -q CRITICS_STALE ) \
+  && _pass "check warns CRITICS_STALE (Done log grew, zero critique rows)" || _fail "CRITICS_STALE not detected"
+rm -rf "$TMP_CR3"
+
+# a logged critique row silences the warning even with the same Done log.
+TMP_CR4="$(mktemp -d)"; ( cd "$TMP_CR4" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# ROADMAP\n- [ ] x\n## Done\n- [x] a\n- [x] b\n- [x] c\n' > ROADMAP.md
+  printf '# CRITICS\n| # | Critique | Severity | Disposition | link |\n|---|---|---|---|---|\n| 1 | obj | high | accepted | - |\n' > CRITICS.md
+  ! "$CLI" check --json | grep -q CRITICS_STALE ) \
+  && _pass "a logged critique row silences CRITICS_STALE" || _fail "critique row didn't silence CRITICS_STALE"
+rm -rf "$TMP_CR4"
+
+# below the 3-item threshold, no warning.
+TMP_CR5="$(mktemp -d)"; ( cd "$TMP_CR5" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# ROADMAP\n- [ ] x\n## Done\n- [x] a\n' > ROADMAP.md
+  printf '# CRITICS\n' > CRITICS.md
+  ! "$CLI" check --json | grep -q CRITICS_STALE ) \
+  && _pass "below-threshold Done log doesn't warn CRITICS_STALE" || _fail "threshold not respected"
+rm -rf "$TMP_CR5"
+
+# a git-ignored CRITICS.md is exempt from the staleness check (private register).
+TMP_CR6="$(mktemp -d)"; ( cd "$TMP_CR6" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# ROADMAP\n- [ ] x\n## Done\n- [x] a\n- [x] b\n- [x] c\n' > ROADMAP.md
+  printf '# CRITICS\n' > CRITICS.md && printf 'CRITICS.md\n' >> .gitignore
+  ! "$CLI" check --json | grep -q CRITICS_STALE ) \
+  && _pass "git-ignored CRITICS.md exempt from CRITICS_STALE (SCARS §PRIVATE-STYLE-OVERLAY)" || _fail "gitignored CRITICS.md still warns"
+rm -rf "$TMP_CR6"
+
 # --- v0.5.0: deep anchor validation (atlas check --deep) ------------------
 echo ""
 echo "-- check --deep (anchor-body conformance) --"

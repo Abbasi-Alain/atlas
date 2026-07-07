@@ -312,3 +312,37 @@ full cost. `BUGS.md` is that home: the SCARS antechamber.
 --bugs` scaffolds a `BUGS.md` already linked from `ATLAS.md`. The SessionStart
 hook surfaces a one-line pointer ("check BUGS.md before debugging") when a repo
 has one.
+
+---
+
+## 10. CRITICS.md — the second-opinion log (OPTIONAL surface)
+
+Same-family agents share blind spots: a model reviewing its own design tends
+to rationalize its own choices. `CRITICS.md` is the standard home for a
+**cross-vendor adversarial pass** — the strongest objection a different model
+family raises against a decision, logged before that decision ships.
+
+- `CRITICS.md` is OPTIONAL. A repo without it is fully conformant and
+  unaffected.
+- Entry shape: one block per review session — `### <date> — <topic>`,
+  `**Critic:**` (the model/vendor consulted), `**Topic:**`, `**Inputs they
+  had:**`, followed by a table of individual critique rows: *# · critique
+  (verbatim) · severity (high/med/low) · disposition (accepted / rejected
+  with rationale / deferred) · ADR/GAPS link*.
+- Mantra: bring the strongest objection, not the most polite one.
+- **Graduation convention.** A critique that was rejected or deferred and is
+  later proven right MUST become a new `SCARS.md` `§ANCHOR` citing the
+  `CRITICS.md` row — an ignored-then-vindicated objection is a scar, not a
+  footnote.
+- A `CRITICS.md` that is **git-ignored** is a valid, private choice (SCARS
+  §PRIVATE-STYLE-OVERLAY) — it is exempt from the staleness check below (a
+  private review log's cadence is the repo's own business).
+
+`atlas check` validates `CRITICS.md` **only when present**. When both
+`CRITICS.md` and `ROADMAP.md` exist and `CRITICS.md` is tracked
+(non-git-ignored), a `ROADMAP.md` **Done** log that has grown to 3+ shipped
+items while `CRITICS.md` logs zero critique rows warns (`CRITICS_STALE`) —
+decisions are landing with no adversarial pass. `atlas init --critics`
+scaffolds `templates/CRITICS.md.tmpl`. `atlas critique "<topic>"` prints (and,
+via `--with-codex`/`--with-claude`, runs) the hostile-review prompt and
+appends a stub row. Reported under `"critics"` in `--json`.

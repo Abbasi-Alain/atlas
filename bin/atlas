@@ -2,11 +2,13 @@
 # atlas — CLI for the ATLAS project-map standard.
 #
 # Subcommands:
-#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs]
+#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs] [--critics]
 #                                     (--loop also scaffolds LOOP.md + ROADMAP.md,
 #                                     the optional autonomous-loop 5th surface)
 #                                     (--bugs scaffolds BUGS.md, the optional
 #                                     open-issues register, linked from ATLAS.md)
+#                                     (--critics scaffolds CRITICS.md, the optional
+#                                     cross-vendor second-opinion log)
 #                                     bootstrap ATLAS.md + SKILL.md + SCARS.md
 #                                     + CLAUDE.md + AGENTS.md + EXAMPLES.md (+ seeds).
 #                                     --analyze scans the repo + pre-fills the map.
@@ -383,13 +385,14 @@ ${inv}"
 }
 
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0
+  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f)  force=1; shift ;;
       --analyze)   analyze=1; shift ;;
       --loop)      loop=1; shift ;;
       --bugs)      bugs=1; shift ;;
+      --critics)   critics=1; shift ;;
       --style)     style="${2:-default}"; shift 2 ;;
       --style=*)   style="${1#--style=}"; shift ;;
       --stack)     stacks="${2:-}"; shift 2 ;;
@@ -447,6 +450,11 @@ cmd_init() {
       printf '\n> Open issues: [`BUGS.md`](BUGS.md) — known-not-yet-understood issues (SPEC §9).\n' >> "$PWD/ATLAS.md"
       _say "linked BUGS.md from ATLAS.md"
     fi
+  fi
+  # Optional second-opinion log (SPEC §10). Opt-in via --critics; scaffold-
+  # missing-only like the quartet. `atlas critique` appends rows to it.
+  if [[ $critics -eq 1 ]]; then
+    _render "$(_src CRITICS.md.tmpl)" "$PWD/CRITICS.md" "$force"
   fi
   # Optional per-style seed files (extra documents shipped beyond the trio).
   # Some styles ship ARCHITECTURE.md / GAPS.md / CRITICS.md / STATUS.md /
@@ -614,6 +622,7 @@ cmd_check() {
   local errs_json=() warns_json=()
   local q_atlas=false q_scars=false q_skill=false q_claude=false q_agents="missing"
   local q_loop_md=false q_roadmap=false
+  local q_critics=false
 
   # --- ATLAS.md (SPEC §1/§2): MUST exist at root with a §0 quick-orientation.
   if [[ ! -f "$atlas" ]]; then
@@ -714,18 +723,45 @@ cmd_check() {
     fi
   fi
 
+  # --- CRITICS.md (SPEC §10): OPTIONAL cross-vendor second-opinion log.
+  # Validated only when present. A git-ignored CRITICS.md (a repo's own
+  # private convention, SCARS §PRIVATE-STYLE-OVERLAY) is a valid choice and is
+  # exempt from the staleness check below — a private log's cadence is the
+  # repo's own business.
+  if [[ -f "$PWD/CRITICS.md" ]]; then
+    q_critics=true; _ck_ok "CRITICS.md present (second-opinion log)"
+    local critics_ignored=0
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git check-ignore -q "$PWD/CRITICS.md" 2>/dev/null; then
+      critics_ignored=1
+    fi
+    if [[ $critics_ignored -eq 0 && -f "$PWD/ROADMAP.md" ]]; then
+      local done_count critique_count
+      done_count=$(awk '
+        BEGIN { in_done=0; c=0 }
+        tolower($0) ~ /^#+[[:space:]]+done([[:space:]]|\(|:|$)/ { in_done=1; next }
+        in_done && /^#+[[:space:]]/ { in_done=0 }
+        in_done && /^- \[[xX]\]/ { c++ }
+        END { print c }
+      ' "$PWD/ROADMAP.md")
+      critique_count=$(grep -cE '^\|[[:space:]]*[0-9]+[[:space:]]*\|' "$PWD/CRITICS.md" 2>/dev/null || true)
+      if [[ "${done_count:-0}" -ge 3 && "${critique_count:-0}" -eq 0 ]]; then
+        _ck_warn CRITICS_STALE "ROADMAP.md's Done log has $done_count shipped item(s) but CRITICS.md logs zero critiques — decisions are landing unreviewed (SPEC §10); log one with 'atlas critique \"<topic>\"'" "§10"
+      fi
+    fi
+  fi
+
   # --- emit -------------------------------------------------------------------
   if [[ $json -eq 1 ]]; then
     local ok=true strict_bool=false deep_bool=false
     if [[ $errs -gt 0 ]]; then ok=false; fi
     if [[ $strict -eq 1 ]]; then strict_bool=true; if [[ $warns -gt 0 ]]; then ok=false; fi; fi
     if [[ $deep -eq 1 ]]; then deep_bool=true; fi
-    printf '{"ok":%s,"version":"%s","strict":%s,"deep":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s}}\n' \
+    printf '{"ok":%s,"version":"%s","strict":%s,"deep":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s},"critics":%s}\n' \
       "$ok" "$ATLAS_VERSION" "$strict_bool" "$deep_bool" "$errs" "$warns" \
       "$(_json_join ${errs_json[@]+"${errs_json[@]}"})" \
       "$(_json_join ${warns_json[@]+"${warns_json[@]}"})" \
       "$q_atlas" "$q_scars" "$q_skill" "$q_claude" "$q_agents" \
-      "$q_loop_md" "$q_roadmap"
+      "$q_loop_md" "$q_roadmap" "$q_critics"
     [[ "$ok" == true ]] && exit 0
     exit 1
   fi

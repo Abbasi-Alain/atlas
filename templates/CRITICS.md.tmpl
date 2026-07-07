@@ -1,0 +1,25 @@
+# CRITICS — {{PROJECT_NAME}} second-opinion log
+
+> The cross-vendor adversarial pass: before a non-trivial decision ships, a
+> model OUTSIDE this repo's usual family reviews it and logs its strongest
+> objection here — not the most polite one. [`SCARS.md`](SCARS.md) holds
+> lessons already paid for; this file is where objections are logged BEFORE
+> they become one.
+>
+> **Graduation convention.** A critique that was rejected or deferred and is
+> later proven right MUST become a new `SCARS.md` `§ANCHOR` citing the row
+> below (`atlas anchor add`) — an ignored-then-vindicated objection is a scar,
+> not a footnote.
+>
+> Dispatch: `atlas critique "<topic>" [--with-codex | --with-claude]` prints
+> the hostile-review prompt (and runs it against a real CLI with the flag),
+> then appends a stub block below for you to fill in.
+
+### {{DATE}} — example topic
+**Critic:** _(a model/vendor different from the one that designed this)_
+**Topic:** example topic
+**Inputs they had:** ATLAS.md, SCARS.md, the diff/ADR under review
+
+| # | Critique | Severity | Disposition | ADR/GAPS link |
+|---|---|---|---|---|
+| 1 | _(paste verbatim — the objection itself)_ | high/med/low | accepted / rejected (rationale) / deferred | _(ADR-NNNN / GAPS G00N, if any)_ |

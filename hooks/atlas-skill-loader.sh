@@ -2,8 +2,8 @@
 # atlas-skill-loader — SessionStart-equivalent hook.
 #
 # Detects ATLAS.md, SCARS.md, .agents/skill/<project>/SKILL.md (and, if present,
-# the optional LOOP.md / BUGS.md) in the cwd and prints their navigational spine
-# to stdout. Whichever agent
+# the optional LOOP.md / BUGS.md / CRITICS.md) in the cwd and prints their
+# navigational spine to stdout. Whichever agent
 # runtime invokes this hook will see that output and feed it into
 # the conversation as context — so the main agent automatically
 # knows where things live and what NOT to do.
@@ -14,11 +14,12 @@
 #   - exit 0 always
 #
 # Output is bounded:
-#   - ATLAS: through end of §1 (~80 lines)
-#   - SCARS: Table-of-contents section only (failure anchors)
-#   - SKILL: ToC section only (anchors with one-line summaries)
-#   - LOOP:  a one-line pointer (only if the repo runs an autonomous loop)
-#   - BUGS:  a one-line pointer (only if the repo has an open-issues register)
+#   - ATLAS:   through end of §1 (~80 lines)
+#   - SCARS:   Table-of-contents section only (failure anchors)
+#   - SKILL:   ToC section only (anchors with one-line summaries)
+#   - LOOP:    a one-line pointer (only if the repo runs an autonomous loop)
+#   - BUGS:    a one-line pointer (only if the repo has an open-issues register)
+#   - CRITICS: a one-line pointer (only if the repo has a second-opinion log)
 #
 # Sub-agents do NOT inherit this hook; their parent must include a
 # "read ATLAS.md, SCARS.md, and SKILL.md first" instruction in the prompt.
@@ -101,6 +102,18 @@ if [[ -f "$BUGS" ]]; then
   echo "================================================================"
   echo "check BUGS.md before debugging — a known-not-yet-understood issue may"
   echo "already be logged there, so you don't re-discover it at full cost."
+  echo ""
+fi
+
+CRITICS="$CWD/CRITICS.md"
+if [[ -f "$CRITICS" ]]; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "CRITICS.md (second-opinion log) detected at $CRITICS"
+  echo "================================================================"
+  echo "before a non-trivial decision ships, run 'atlas critique \"<topic>\"'"
+  echo "for a cross-vendor adversarial pass — check CRITICS.md for prior"
+  echo "objections first so you don't repeat one already raised."
   echo ""
 fi
 

@@ -115,6 +115,7 @@ a monolith — see SCARS §BASH-MONOLITH for the modularization plan.
 | `CLAUDE.md.tmpl` | `CLAUDE.md` (then mirrored to `AGENTS.md`) |
 | `EXAMPLES.md.tmpl` | `EXAMPLES.md` |
 | `BUGS.md.tmpl` | `BUGS.md` — optional open-issues register, opt-in via `atlas init --bugs` |
+| `CRITICS.md.tmpl` | `CRITICS.md` — optional cross-vendor second-opinion log, opt-in via `atlas init --critics` |
 | `styles/<name>/` | Per-style overrides + `seeds/` + `stacks/`. Resolution: a style file wins over the root `.tmpl`; missing files fall back to root. |
 
 > The `abbasi` style is **private** (maintained in a sibling GitLab repo,
