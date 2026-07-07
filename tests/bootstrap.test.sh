@@ -499,6 +499,45 @@ TMP_D5="$(mktemp -d)"; ( cd "$TMP_D5" && git init -q -b main 2>/dev/null && "$CL
   && _pass "check --deep ignores example anchors inside code blocks" || _fail "--deep code-block immunity"
 rm -rf "$TMP_D5"
 
+# --- RM-1: EXECUTOR PACK (cross-model handoff, SPEC §8) -------------------
+echo ""
+echo "-- EXECUTOR PACK (atlas check --deep EXECUTOR_PACK_MISSING) --"
+
+# a fresh init --loop scaffold ships the pack skeleton by default, so --deep
+# --strict stays clean regardless of the default SCARS.md's anchor count.
+TMP_EP0="$(mktemp -d)"; ( cd "$TMP_EP0" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  grep -qi "EXECUTOR PACK" ROADMAP.md \
+    && "$CLI" check --deep --strict >/dev/null 2>&1 \
+    && ! "$CLI" check --deep --json | grep -q EXECUTOR_PACK_MISSING ) \
+  && _pass "fresh init --loop ships an EXECUTOR PACK; --deep --strict stays clean" || _fail "fresh EXECUTOR PACK scaffold"
+rm -rf "$TMP_EP0"
+
+# a ROADMAP.md with the pack stripped + SCARS.md at/above the 5-anchor floor
+# warns EXECUTOR_PACK_MISSING under --deep (knowledge exists, unpackaged).
+TMP_EP1="$(mktemp -d)"; ( cd "$TMP_EP1" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  awk '/^## ⚡ EXECUTOR PACK/{skip=1} /^## Now \(high EV\)/{skip=0} !skip' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
+  ! grep -qi "EXECUTOR PACK" ROADMAP.md \
+    && [[ "$(grep -c '<a id=' SCARS.md)" -ge 5 ]] \
+    && "$CLI" check --deep --json | grep -q EXECUTOR_PACK_MISSING ) \
+  && _pass "5+ SCARS anchors + no pack warns EXECUTOR_PACK_MISSING" || _fail "EXECUTOR_PACK_MISSING not detected"
+rm -rf "$TMP_EP1"
+
+# below the 5-anchor floor, no warning even with the pack stripped.
+TMP_EP2="$(mktemp -d)"; ( cd "$TMP_EP2" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  awk '/^## ⚡ EXECUTOR PACK/{skip=1} /^## Now \(high EV\)/{skip=0} !skip' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
+  printf '# SCARS\n\n## Table of contents\n\n- [a](#a)\n\n---\n\n<a id="a"></a>\n### a\nbody\n' > SCARS.md
+  ! "$CLI" check --deep --json | grep -q EXECUTOR_PACK_MISSING ) \
+  && _pass "below-threshold SCARS.md (< 5 anchors) doesn't warn EXECUTOR_PACK_MISSING" || _fail "threshold not respected"
+rm -rf "$TMP_EP2"
+
+# EXECUTOR_PACK_MISSING is a --deep-only check — a plain 'check' (no --deep)
+# must never emit it, even on the same no-pack + 5+ anchor repo.
+TMP_EP3="$(mktemp -d)"; ( cd "$TMP_EP3" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  awk '/^## ⚡ EXECUTOR PACK/{skip=1} /^## Now \(high EV\)/{skip=0} !skip' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
+  ! "$CLI" check --json | grep -q EXECUTOR_PACK_MISSING ) \
+  && _pass "EXECUTOR_PACK_MISSING is --deep-only (plain check doesn't warn)" || _fail "EXECUTOR_PACK_MISSING leaked into plain check"
+rm -rf "$TMP_EP3"
+
 # --- new commands (smoke) ------------------------------------------------
 echo ""
 echo "-- new commands --"

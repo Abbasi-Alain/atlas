@@ -18,6 +18,7 @@
 #   - SCARS:   Table-of-contents section only (failure anchors)
 #   - SKILL:   ToC section only (anchors with one-line summaries)
 #   - LOOP:    a one-line pointer (only if the repo runs an autonomous loop)
+#   - PACK:    a one-line pointer (only if ROADMAP.md has an EXECUTOR PACK block)
 #   - BUGS:    a one-line pointer (only if the repo has an open-issues register)
 #   - CRITICS: a one-line pointer (only if the repo has a second-opinion log)
 #
@@ -91,6 +92,17 @@ if [[ -f "$LOOP" ]]; then
   echo "This repo runs an ATLAS autonomous loop. One iteration: pick the top"
   echo "ROADMAP.md item by expected value → implement → 'atlas check --strict'"
   echo "→ commit (cite SCARS §ANCHORS). Read LOOP.md for the rules."
+  echo ""
+fi
+
+ROADMAP="$CWD/ROADMAP.md"
+if [[ -f "$ROADMAP" ]] && grep -qi "EXECUTOR PACK" "$ROADMAP"; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "ROADMAP.md has an EXECUTOR PACK — read it before your first ticket"
+  echo "================================================================"
+  echo "Non-frontier models especially: the pack's trap-sheet + universal"
+  echo "definition-of-done save you from repo-specific landmines. Read it once."
   echo ""
 fi
 

@@ -24,6 +24,8 @@
 #                                     machine-readable report; --strict fails on
 #                                     warnings; --deep adds SCARS anchor-schema
 #                                     validation (ToC↔body, labels, Where: paths)
+#                                     + EXECUTOR_PACK_MISSING (5+ SCARS anchors,
+#                                     ROADMAP.md present, no EXECUTOR PACK block)
 #   atlas fix                         auto-resolve conformance warnings: kebab the
 #                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
 #   atlas measure [--badge]           estimate orientation-token savings (with
@@ -713,6 +715,9 @@ cmd_check() {
     q_roadmap=true; _ck_ok "ROADMAP.md present"
     grep -qE "^- \[[ xX]\]" "$PWD/ROADMAP.md" || _ck_warn ROADMAP_NO_QUEUE "ROADMAP.md has no '- [ ]' task queue (SPEC §8)" "§8"
     grep -qiE "^#+[[:space:]]+done([[:space:]]|\(|:|$)" "$PWD/ROADMAP.md" || _ck_warn ROADMAP_NO_DONE "ROADMAP.md has no Done log (a heading starting with 'Done') — the loop's shipped-archive (SPEC §8)" "§8"
+    if [[ $deep -eq 1 && "${n:-0}" -ge 5 ]] && ! grep -qi "EXECUTOR PACK" "$PWD/ROADMAP.md"; then
+      _ck_warn EXECUTOR_PACK_MISSING "SCARS.md has ${n:-0} anchors but ROADMAP.md has no EXECUTOR PACK — trap knowledge exists but isn't packaged for a cross-model handoff (SPEC §8)" "§8"
+    fi
   fi
   # SPEC §8 frames the loop as the pair LOOP.md + ROADMAP.md — warn if a half is missing.
   if [[ "$q_loop_md" != "$q_roadmap" ]]; then

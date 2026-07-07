@@ -5,6 +5,48 @@
 > Pick by expected value (LOOP rule 2), not queue order. Tick + move to **Done**
 > when shipped (with the commit SHA).
 
+## ⚡ EXECUTOR PACK — read before ANY ticket (cross-model handoff)
+
+**Tickets point to specs; never restate or re-scope them.** If a ticket cites a
+design doc, ADR, or SCARS section, read that first. Universal **definition of
+done** for every ticket:
+
+1. The project's test/lint suite passes clean (fill in your repo's exact
+   command here, e.g. `npm test && npm run lint`).
+2. At least one NEW regression test covers the change.
+3. `atlas check --deep --strict` passes on this repo (the scaffold stays exemplary).
+4. Docs/spec updated coherently in the SAME commit as any behavior change;
+   `ATLAS.md` updated on any structural change (SCARS §ATLAS-IS-INDEX).
+5. One commit; message cites relevant SCARS `§ANCHORS`.
+6. Never take an irreversible/production action (a release tag, a deploy, a
+   destructive migration) without maintainer approval, if your project has one.
+
+**Trap-sheet (derive from `SCARS.md` — every trap MUST cite its anchor):**
+
+- <T1> <one-line trap a fresh executor would otherwise rediscover the hard
+  way> (`§ANCHOR`).
+- <add one row per SCARS anchor worth pre-empting; a stale or empty
+  trap-sheet is worse than none — keep it current as SCARS.md grows>
+
+**Model/tier routing:** tag each ticket `tier: fast|strong|frontier` (or your
+stack's own model names) for, respectively: mechanical/well-spec'd work ·
+cross-cutting/subtle-correctness work · spec-design or scarred-core surgery.
+
+**ESCALATE-UP PROTOCOL (when a ticket exceeds your tier).** The moment you
+detect it — two failed approaches, a DoD check you cannot make pass, or the
+ticket turns out to touch a scarred core — do not thrash and do not
+half-commit: (a) revert to a clean tree; (b) annotate the ticket —
+`blocked: <your tier> <UTC> — <reason + the exact failing evidence>` — and
+bump its difficulty one tier; (c) log what was LEARNED as a sub-bullet so the
+next executor doesn't repeat the failed approach; (d) take the next ticket
+within your tier. A clean escalation with evidence is a SUCCESSFUL outcome,
+not a failure: verifying correctness is easier than designing it, so an
+executor that couldn't have designed a ticket can usually still prove whether
+an implementation satisfies it — if it can't run that proof, the ticket is
+above its tier by definition.
+
+---
+
 ## Now (high EV)
 
 - [ ] **<one-line title>**

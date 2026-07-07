@@ -285,6 +285,53 @@ on a half-configured loop (one of the pair present without the other). The
 SessionStart hook surfaces a one-line pointer, and the `llms.txt` export lists
 `LOOP.md` in its read-first set, when a repo has a loop.
 
+### EXECUTOR PACK — cross-model handoff (optional enrichment of `ROADMAP.md`)
+
+Strong-model planning + weak-model execution is the only affordable way to run
+long autonomous loops, but a weaker executor fails in specific, avoidable ways:
+repo-specific landmines it has no way to know about, over-claiming success
+without the test that would falsify it, and architectural drift ("improving"
+scarred code whose shape is load-bearing). The **EXECUTOR PACK** is a block at
+the top of `ROADMAP.md` that packages `SCARS.md`'s accumulated knowledge into a
+handoff any executor reads once, before its first ticket.
+
+- Required fields when a pack is present:
+  1. **Ticket→spec pointer convention** — tickets point at specs (a design doc,
+     ADR, or the ticket's own why/how); an executor never restates or
+     re-scopes them.
+  2. **Trap-sheet** — a numbered list derived from `SCARS.md`, each row citing
+     its anchor (`§ANCHOR`) — the traps an executor would otherwise rediscover
+     at the cost of a broken commit.
+  3. **Per-ticket model/tier tag** — which capability tier a ticket needs
+     (mechanical/well-spec'd · cross-cutting/subtle-correctness ·
+     spec-design/scarred-core-surgery), so routing doesn't depend on a human.
+  4. **Universal Definition of Done** — the checks every ticket must pass
+     regardless of which model executes it (test suite green with a new
+     regression test, `atlas check --deep --strict`, docs/spec updated
+     coherently, one commit citing anchors).
+  5. **Escalate-up protocol** — when a ticket exceeds an executor's tier (two
+     failed approaches, a DoD check it cannot make pass, or the ticket turns
+     out to touch a scarred core): revert to a clean tree, annotate the ticket
+     `blocked: <tier> <UTC> — <reason + failing evidence>` and bump its
+     difficulty, log what was learned so the next executor doesn't repeat the
+     failed approach, then take the next in-tier ticket. A clean escalation
+     with evidence is a successful outcome, not a failure — verifying
+     correctness is easier than designing it, so even an executor that
+     couldn't have designed a ticket can usually prove whether an
+     implementation satisfies it.
+- The pack is OPTIONAL. A repo with `LOOP.md`/`ROADMAP.md` but no pack is fully
+  conformant — the pack is a scaling aid for repos running enough autonomous
+  iterations that `SCARS.md` has accumulated real trap knowledge worth
+  packaging, not a requirement for adopting the loop surface at all.
+
+`atlas init --loop` scaffolds `templates/ROADMAP.md.tmpl` with a generic pack
+skeleton (universal DoD + escalate-up protocol pre-filled; the trap-sheet starts
+empty for the adopter to grow from their own `SCARS.md`). `atlas check --deep`
+warns `EXECUTOR_PACK_MISSING` when `SCARS.md` has accumulated 5 or more anchors
+and a present `ROADMAP.md` has no pack — knowledge exists but isn't packaged for
+handoff. The SessionStart hook surfaces a one-line pointer when a pack is
+present.
+
 ---
 
 ## 9. BUGS.md — the open-issues register (OPTIONAL surface)
