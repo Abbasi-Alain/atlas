@@ -319,10 +319,14 @@ handoff any executor reads once, before its first ticket.
      correctness is easier than designing it, so even an executor that
      couldn't have designed a ticket can usually prove whether an
      implementation satisfies it.
-- The pack is OPTIONAL. A repo with `LOOP.md`/`ROADMAP.md` but no pack is fully
-  conformant — the pack is a scaling aid for repos running enough autonomous
-  iterations that `SCARS.md` has accumulated real trap knowledge worth
-  packaging, not a requirement for adopting the loop surface at all.
+- The pack is OPTIONAL. A repo with `LOOP.md`/`ROADMAP.md` but no pack is not
+  flagged by a plain `atlas check` — the pack is a scaling aid for repos
+  running enough autonomous iterations that `SCARS.md` has accumulated real
+  trap knowledge worth packaging, not a requirement for adopting the loop
+  surface at all. (`atlas check --deep --strict` — a repo's own optional,
+  stricter gate — CAN fail on `EXECUTOR_PACK_MISSING` once `SCARS.md` reaches
+  the anchor floor below; "optional" describes the base surface, not every
+  gate a repo might choose to run.)
 
 `atlas init --loop` scaffolds `templates/ROADMAP.md.tmpl` with a generic pack
 skeleton (universal DoD + escalate-up protocol pre-filled; the trap-sheet starts
@@ -343,10 +347,10 @@ tiers keep the EXECUTOR PACK and `LOOP.md` copy-paste portable to any stack
 (Claude, GPT, Gemini, Qwen, a local model).
 
 - An OPTIONAL **tier mapping block** binds tiers to an operator's actual
-  models for THIS repo — typically a `## Model tier mapping` section in
-  `LOOP.md` (or `.atlas/models`), a two-column table: *tier · the operator's
-  model for it*. A repo with no mapping block is fully conformant; tiers stay
-  descriptive-only until one is added.
+  models for THIS repo — a `## Model tier mapping` section in `LOOP.md`
+  (the only location `atlas check` parses today), a two-column table: *tier ·
+  the operator's model for it*. A repo with no mapping block is unaffected;
+  tiers stay descriptive-only until one is added.
 - `atlas check` (no `--deep` needed) warns `UNMAPPED_TIER_TAG` when a mapping
   block is present but a `ROADMAP.md` ticket's `tier:` value isn't one of the
   block's declared tiers (a typo'd or stale tag silently escapes routing).
