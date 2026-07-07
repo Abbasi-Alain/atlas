@@ -22,9 +22,12 @@
 #                                     also fails on structural drift (files moved but
 #                                     ATLAS.md not updated); --json emits a
 #                                     machine-readable report; --strict fails on
-#                                     warnings; --deep adds SCARS anchor-schema
-#                                     validation (ToC↔body, labels, Where: paths)
-#                                     + EXECUTOR_PACK_MISSING (5+ SCARS anchors,
+#                                     warnings; warns UNMAPPED_TIER_TAG when
+#                                     LOOP.md has a 'Model tier mapping' block
+#                                     and ROADMAP.md uses a tier: tag not in it;
+#                                     --deep adds SCARS anchor-schema validation
+#                                     (ToC↔body, labels, Where: paths) +
+#                                     EXECUTOR_PACK_MISSING (5+ SCARS anchors,
 #                                     ROADMAP.md present, no EXECUTOR PACK block)
 #   atlas fix                         auto-resolve conformance warnings: kebab the
 #                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
@@ -725,6 +728,36 @@ cmd_check() {
       _ck_warn LOOP_NO_ROADMAP "LOOP.md present but no ROADMAP.md — the loop has no task queue (SPEC §8)" "§8"
     else
       _ck_warn ROADMAP_NO_LOOP "ROADMAP.md present but no LOOP.md — the queue has no rulebook (SPEC §8)" "§8"
+    fi
+  fi
+
+  # --- Capability tiers (SPEC §8, RM-26): an OPTIONAL 'Model tier mapping'
+  # block in LOOP.md binds tier: fast|strong|frontier to the operator's real
+  # models. Only validated when a mapping block exists — no block means tiers
+  # stay descriptive-only and nothing is checked against them.
+  if [[ "$q_loop_md" = true && "$q_roadmap" = true ]]; then
+    local valid_tiers
+    valid_tiers="$(awk '
+      /^##[[:space:]]+Model tier mapping/ { inb=1; next }
+      inb && /^##[[:space:]]/ { inb=0 }
+      inb && /^\|/ {
+        line=$0; sub(/^\|[[:space:]]*/,"",line); n=split(line,parts,"|")
+        cell=parts[1]; gsub(/^[[:space:]]+|[[:space:]]+$/,"",cell)
+        if (cell != "" && tolower(cell) != "tier" && cell !~ /^-+$/) print tolower(cell)
+      }
+    ' "$PWD/LOOP.md" 2>/dev/null)" || valid_tiers=""
+    if [[ -n "$valid_tiers" ]]; then
+      local found_tiers unmapped=""
+      found_tiers="$(grep -oE '(^|[^A-Za-z])tier:[[:space:]]*[A-Za-z0-9_-]+' "$PWD/ROADMAP.md" 2>/dev/null \
+        | sed -E 's/^.*tier:[[:space:]]*//' | tr '[:upper:]' '[:lower:]' | sort -u)" || found_tiers=""
+      local t
+      while IFS= read -r t; do
+        [[ -z "$t" ]] && continue
+        grep -qxF "$t" <<< "$valid_tiers" || unmapped="${unmapped}${unmapped:+, }${t}"
+      done <<< "$found_tiers"
+      if [[ -n "$unmapped" ]]; then
+        _ck_warn UNMAPPED_TIER_TAG "ROADMAP.md uses tier tag(s) not in LOOP.md's Model tier mapping: ${unmapped} (SPEC §8)" "§8"
+      fi
     fi
   fi
 

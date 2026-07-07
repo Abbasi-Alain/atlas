@@ -332,6 +332,27 @@ and a present `ROADMAP.md` has no pack — knowledge exists but isn't packaged f
 handoff. The SessionStart hook surfaces a one-line pointer when a pack is
 present.
 
+### Capability tiers — portable routing (RM-26)
+
+The pack's model/tier tag (field 3 above) is deliberately vendor-neutral:
+tickets are tagged `tier: fast|strong|frontier` by ROLE — mechanical/
+well-spec'd work · cross-cutting/subtle-correctness work · spec-design or
+scarred-core surgery — never a vendor's specific model name. A standard that
+hardcodes `sonnet`/`opus`/`gpt-5` into its routing silently assumes one vendor;
+tiers keep the EXECUTOR PACK and `LOOP.md` copy-paste portable to any stack
+(Claude, GPT, Gemini, Qwen, a local model).
+
+- An OPTIONAL **tier mapping block** binds tiers to an operator's actual
+  models for THIS repo — typically a `## Model tier mapping` section in
+  `LOOP.md` (or `.atlas/models`), a two-column table: *tier · the operator's
+  model for it*. A repo with no mapping block is fully conformant; tiers stay
+  descriptive-only until one is added.
+- `atlas check` (no `--deep` needed) warns `UNMAPPED_TIER_TAG` when a mapping
+  block is present but a `ROADMAP.md` ticket's `tier:` value isn't one of the
+  block's declared tiers (a typo'd or stale tag silently escapes routing).
+  Without a mapping block, tier values are never validated — there is nothing
+  to check them against.
+
 ---
 
 ## 9. BUGS.md — the open-issues register (OPTIONAL surface)

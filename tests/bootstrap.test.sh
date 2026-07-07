@@ -538,6 +538,43 @@ TMP_EP3="$(mktemp -d)"; ( cd "$TMP_EP3" && git init -q -b main 2>/dev/null && "$
   && _pass "EXECUTOR_PACK_MISSING is --deep-only (plain check doesn't warn)" || _fail "EXECUTOR_PACK_MISSING leaked into plain check"
 rm -rf "$TMP_EP3"
 
+# --- RM-26: capability tiers (atlas check UNMAPPED_TIER_TAG) --------------
+echo ""
+echo "-- capability tiers (atlas check UNMAPPED_TIER_TAG) --"
+
+# no Model tier mapping block at all: tier: tags in ROADMAP.md are never
+# validated (descriptive-only until a mapping block exists).
+TMP_T1="$(mktemp -d)"; ( cd "$TMP_T1" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '\n- [ ] ticket A (tier: fast)\n- [ ] ticket B (tier: madeup)\n' >> ROADMAP.md
+  ! "$CLI" check --json | grep -q UNMAPPED_TIER_TAG ) \
+  && _pass "no mapping block: tier: tags are never validated" || _fail "UNMAPPED_TIER_TAG fired with no mapping block"
+rm -rf "$TMP_T1"
+
+# a mapping block + only mapped (case-insensitive) tier tags: no warning.
+TMP_T2="$(mktemp -d)"; ( cd "$TMP_T2" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '\n## Model tier mapping (RM-26)\n\n| tier | model |\n|---|---|\n| fast | A |\n| strong | B |\n| frontier | C |\n' >> LOOP.md
+  printf '\n- [ ] ticket A (tier: fast)\n- [ ] ticket B (tier: Strong)\n' >> ROADMAP.md
+  ! "$CLI" check --json | grep -q UNMAPPED_TIER_TAG ) \
+  && _pass "mapping block + only mapped tiers: no warning (case-insensitive)" || _fail "false positive with mapped tiers"
+rm -rf "$TMP_T2"
+
+# a mapping block + a ROADMAP tier: tag not in the block: warns, naming it.
+TMP_T3="$(mktemp -d)"; ( cd "$TMP_T3" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '\n## Model tier mapping (RM-26)\n\n| tier | model |\n|---|---|\n| fast | A |\n| strong | B |\n' >> LOOP.md
+  printf '\n- [ ] ticket A (tier: fast)\n- [ ] ticket B (tier: quantum)\n' >> ROADMAP.md
+  "$CLI" check --json | grep -q 'UNMAPPED_TIER_TAG.*quantum' ) \
+  && _pass "mapping block + unmapped tier tag warns, naming it" || _fail "UNMAPPED_TIER_TAG not detected"
+rm -rf "$TMP_T3"
+
+# the word 'frontier:' in prose must not false-match the 'tier:' substring
+# it contains (a plain grep for 'tier:' would wrongly split 'frontier:').
+TMP_T4="$(mktemp -d)"; ( cd "$TMP_T4" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '\n## Model tier mapping (RM-26)\n\n| tier | model |\n|---|---|\n| fast | A |\n' >> LOOP.md
+  printf '\n- [ ] ticket A (tier: fast) — frontier: some unrelated prose here\n' >> ROADMAP.md
+  ! "$CLI" check --json | grep -q UNMAPPED_TIER_TAG ) \
+  && _pass "'frontier:' prose doesn't false-match the tier: substring" || _fail "frontier: substring false-positive"
+rm -rf "$TMP_T4"
+
 # --- new commands (smoke) ------------------------------------------------
 echo ""
 echo "-- new commands --"
