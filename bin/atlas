@@ -220,6 +220,16 @@ _kebab() {
 # (validate) so the expectation is derived, never hardcoded per repo.
 _project_slug() { _kebab "$(_project_name)"; }
 
+# A REAL Markdown link to BUGS.md — not merely the substring "BUGS.md"
+# appearing in prose. Matches `[BUGS.md](BUGS.md)`, `` [`BUGS.md`](./BUGS.md) ``,
+# etc.; only the link target (inside the parens) is significant, so any label
+# text (backticked or not) passes. Used identically by `init --bugs`
+# (auto-link) and `check` (BUGS_MD_UNLINKED) so a plain-text mention still
+# warns while a real link passes (SCARS §BUGS-LINK-NOT-SUBSTRING).
+_bugs_md_linked() {
+  grep -qE '\]\((\./)?BUGS\.md\)' "$1" 2>/dev/null
+}
+
 _render() {
   local in="$1" out="$2" force="${3:-0}"
   if [[ -e "$out" && "$force" != "1" ]]; then
@@ -445,7 +455,7 @@ cmd_init() {
   # warning-free (BUGS_MD_UNLINKED only fires on a hand-added, unlinked file).
   if [[ $bugs -eq 1 ]]; then
     _render "$(_src BUGS.md.tmpl)" "$PWD/BUGS.md" "$force"
-    if [[ -f "$PWD/ATLAS.md" ]] && ! grep -q "BUGS.md" "$PWD/ATLAS.md"; then
+    if [[ -f "$PWD/ATLAS.md" ]] && ! _bugs_md_linked "$PWD/ATLAS.md"; then
       # shellcheck disable=SC2016  # literal backticks (Markdown), no expansion intended
       printf '\n> Open issues: [`BUGS.md`](BUGS.md) — known-not-yet-understood issues (SPEC §9).\n' >> "$PWD/ATLAS.md"
       _say "linked BUGS.md from ATLAS.md"
@@ -718,7 +728,7 @@ cmd_check() {
       bugs_ignored=1
     fi
     if [[ $bugs_ignored -eq 0 ]]; then
-      grep -q "BUGS.md" "$atlas" 2>/dev/null \
+      _bugs_md_linked "$atlas" \
         || _ck_warn BUGS_MD_UNLINKED "BUGS.md present but not linked from ATLAS.md — link it so agents find the open-issues register (SPEC §9); 'atlas init --bugs' scaffolds a linked one" "§9"
     fi
   fi

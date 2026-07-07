@@ -239,10 +239,11 @@ rm -rf "$TMP_L9"
 echo ""
 echo "-- BUGS.md open-issues register (init --bugs / check) --"
 
-# init --bugs scaffolds a linked BUGS.md; repo still passes --strict clean.
+# init --bugs scaffolds a REAL Markdown link to BUGS.md (not just a mention);
+# repo still passes --strict clean.
 TMP_BG1="$(mktemp -d)"; ( cd "$TMP_BG1" && git init -q -b main 2>/dev/null && "$CLI" init --bugs >/dev/null 2>&1
-  [[ -f BUGS.md ]] && grep -q "BUGS.md" ATLAS.md && "$CLI" check --strict >/dev/null 2>&1 ) \
-  && _pass "init --bugs scaffolds a linked BUGS.md and passes --strict" || _fail "init --bugs"
+  [[ -f BUGS.md ]] && grep -qE '\]\((\./)?BUGS\.md\)' ATLAS.md && "$CLI" check --strict >/dev/null 2>&1 ) \
+  && _pass "init --bugs scaffolds a REAL-linked BUGS.md and passes --strict" || _fail "init --bugs"
 rm -rf "$TMP_BG1"
 
 # a repo without --bugs is unaffected (no BUGS.md, no warning).
@@ -264,6 +265,63 @@ TMP_BG4="$(mktemp -d)"; ( cd "$TMP_BG4" && git init -q -b main 2>/dev/null && "$
   ! "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
   && _pass "git-ignored BUGS.md doesn't warn (SCARS §PRIVATE-STYLE-OVERLAY)" || _fail "gitignored BUGS.md still warns"
 rm -rf "$TMP_BG4"
+
+# RM-3b (SCARS §BUGS-LINK-NOT-SUBSTRING): a plain-text mention of "BUGS.md" is
+# NOT a link — it must still warn (the pre-fix regex treated this as linked).
+TMP_BG5="$(mktemp -d)"; ( cd "$TMP_BG5" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > BUGS.md
+  printf '\nSee BUGS.md for known issues.\n' >> ATLAS.md
+  "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "plain-text 'BUGS.md' mention still warns (not a real link)" || _fail "substring mention wrongly suppressed BUGS_MD_UNLINKED"
+rm -rf "$TMP_BG5"
+
+# a real Markdown link — plain form `[BUGS.md](BUGS.md)` — passes (no warning).
+TMP_BG6="$(mktemp -d)"; ( cd "$TMP_BG6" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > BUGS.md
+  printf '\nOpen issues: [BUGS.md](BUGS.md)\n' >> ATLAS.md
+  ! "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "a real Markdown link to BUGS.md passes (no warning)" || _fail "real link wrongly still warns"
+rm -rf "$TMP_BG6"
+
+# a real link with a backticked label + ./ prefix also passes.
+TMP_BG7="$(mktemp -d)"; ( cd "$TMP_BG7" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > BUGS.md
+  printf '\nOpen issues: [`BUGS.md`](./BUGS.md)\n' >> ATLAS.md
+  ! "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "backticked label + ./ prefix link passes (no warning)" || _fail "backtick/./ prefix link wrongly still warns"
+rm -rf "$TMP_BG7"
+
+# missing/failing git binary at check-time doesn't abort check (the
+# rev-parse/check-ignore guard is an `if A && B` condition, safe under set -e).
+FAKE_BIN_BG8="$(mktemp -d)"
+printf '#!/bin/sh\nexit 127\n' > "$FAKE_BIN_BG8/git"; chmod +x "$FAKE_BIN_BG8/git"
+TMP_BG8="$(mktemp -d)"; ( cd "$TMP_BG8" && git init -q -b main 2>/dev/null && "$CLI" init --bugs >/dev/null 2>&1
+  PATH="$FAKE_BIN_BG8:$PATH" "$CLI" check --strict >/dev/null 2>&1 ) \
+  && _pass "check tolerates a missing/failing git binary (no abort)" || _fail "check aborted with git unavailable"
+rm -rf "$TMP_BG8" "$FAKE_BIN_BG8"
+
+# a non-git directory (no .git at all): unlinked BUGS.md still warns — the
+# link requirement has no hard git dependency.
+TMP_BG9="$(mktemp -d)"; ( cd "$TMP_BG9" && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > BUGS.md
+  "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "non-git dir: unlinked BUGS.md still warns" || _fail "non-git dir BUGS_MD_UNLINKED behavior wrong"
+rm -rf "$TMP_BG9"
+
+# a symlinked BUGS.md is detected like a regular file — unlinked still warns,
+# and check doesn't choke resolving the symlink.
+TMP_BG10="$(mktemp -d)"; ( cd "$TMP_BG10" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BUGS\n' > .bugs-real.md && ln -s .bugs-real.md BUGS.md
+  "$CLI" check --json | grep -q BUGS_MD_UNLINKED ) \
+  && _pass "symlinked BUGS.md (unlinked) still warns" || _fail "symlinked BUGS.md behavior wrong"
+rm -rf "$TMP_BG10"
+
+# fresh `init --bugs` ships zero fake open entries (SCARS ghost-work fix):
+# nothing between '## Open' and the next heading looks like a real BUG-N bullet.
+TMP_BG11="$(mktemp -d)"; ( cd "$TMP_BG11" && git init -q -b main 2>/dev/null && "$CLI" init --bugs >/dev/null 2>&1
+  ! awk '/^## Open/{f=1;next} /^## /{f=0} f' BUGS.md | grep -qE '^- \*\*BUG-[0-9]' ) \
+  && _pass "fresh init --bugs has zero fake open entries" || _fail "fake BUG-N ghost entry present under ## Open"
+rm -rf "$TMP_BG11"
 
 # --- RM-2: CRITICS.md second-opinion log (init --critics + check awareness) ---
 echo ""

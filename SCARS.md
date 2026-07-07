@@ -26,6 +26,7 @@
 - [§BASH-MONOLITH — `bin/atlas` is one file; keep shellcheck green](#bash-monolith)
 - [§MACOS-SED — `sed -i` is not portable; use the `.bak` + `rm` idiom](#macos-sed)
 - [§PRIVATE-STYLE-OVERLAY — never commit the `abbasi` style symlink](#private-style-overlay)
+- [§BUGS-LINK-NOT-SUBSTRING — "linked from ATLAS.md" must match a link, not a filename mention](#bugs-link-not-substring)
 
 **Release / packaging**
 - [§TAG-TRIGGER-NOT-RELEASE — channel workflows must fire on tag push](#tag-trigger-not-release)
@@ -184,6 +185,32 @@ pointing at the maintainer's local disk — broken style + leaked path.
 **Do.** Keep it `.gitignore`d; the private overlay installer symlinks it locally.
 
 **Where.** `.gitignore`, `templates/styles/`.
+
+---
+
+<a id="bugs-link-not-substring"></a>
+### §BUGS-LINK-NOT-SUBSTRING — "linked from ATLAS.md" must match a link, not a filename mention
+
+**Symptom.** `BUGS_MD_UNLINKED` (and `init --bugs`'s auto-link guard) never
+fired once `ATLAS.md` merely *mentioned* the string "BUGS.md" anywhere — a
+plain sentence, a comment — with no actual Markdown link to the register.
+Agents landed on an unlinked `BUGS.md` and never found it; found by an
+adversarial cross-vendor review (CRITICS.md, 2026-07-07).
+
+**Root cause.** The check used `grep -q "BUGS.md" file` — a substring test,
+not a link test. Any incidental occurrence of those six characters satisfied
+it, and the regression test asserted the same weak oracle.
+
+**Do NOT.** Test "is X referenced from file" with a bare substring grep when X
+is meant to be a Markdown *link* target — false positives suppress the very
+warning meant to catch a missing link.
+
+**Do.** Match the link syntax, not the filename: `grep -qE '\]\((\./)?BUGS\.md\)'`
+— label text (backticked or not) doesn't matter, only the `(...)` target does.
+One helper (`_bugs_md_linked`) backs both the `init --bugs` auto-link guard and
+the `check` warning so they can't drift apart.
+
+**Where.** `bin/atlas::_bugs_md_linked`, `cmd_init`, `cmd_check`.
 
 ---
 
