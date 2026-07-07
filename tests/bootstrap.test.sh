@@ -479,6 +479,44 @@ TMP_CR12="$(mktemp -d)"; ( cd "$TMP_CR12" && git init -q -b main 2>/dev/null && 
   && _pass "critique stub carries the richer schema (verified-no-issue/assumptions/proposals)" || _fail "critique stub missing richer schema"
 rm -rf "$TMP_CR12"
 
+# RM-43 (critic-stage finding #3): a critic CLI that exits non-zero must be
+# recorded as a FAILED dispatch, not a counted critique row — and must not
+# silence CRITICS_STALE.
+FAKE_BIN_CR13="$(mktemp -d)"
+cat > "$FAKE_BIN_CR13/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+echo "error: auth token expired" >&2
+exit 42
+FAKECODEX
+chmod +x "$FAKE_BIN_CR13/codex"
+TMP_CR13="$(mktemp -d)"; ( cd "$TMP_CR13" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  printf '# ROADMAP\n- [ ] x\n## Done\n- [x] a\n- [x] b\n- [x] c\n' > ROADMAP.md
+  printf '# CRITICS\n' > CRITICS.md
+  PATH="$FAKE_BIN_CR13:$PATH" "$CLI" critique "failed dispatch test" >/dev/null 2>&1
+  grep -q "DISPATCH FAILED" CRITICS.md \
+    && ! grep -qE '^\|[[:space:]]*[0-9]+[[:space:]]*\|.*paste verbatim' CRITICS.md \
+    && "$CLI" check --json | grep -q CRITICS_STALE ) \
+  && _pass "a failed critic dispatch is recorded as failed, not a counted critique" || _fail "failed dispatch masqueraded as a real critique"
+rm -rf "$TMP_CR13" "$FAKE_BIN_CR13"
+
+# RM-43 (critic-stage finding #7): the critique prompt only lists context
+# files that actually exist — a plain conformant repo (no ARCHITECTURE.md/
+# docs/adr//research/) doesn't get pointed at them.
+TMP_CR14="$(mktemp -d)"; ( cd "$TMP_CR14" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  ! "$CLI" critique "portable prompt test" --no-auto 2>&1 | grep -qE "ARCHITECTURE\.md|docs/adr/|research/" ) \
+  && _pass "critique prompt omits ARCHITECTURE.md/docs/adr//research/ when absent" || _fail "critique prompt mentioned nonexistent private-style files"
+rm -rf "$TMP_CR14"
+
+# when those files DO exist, the prompt still lists them (backward-compat).
+TMP_CR15="$(mktemp -d)"; ( cd "$TMP_CR15" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  printf '# Architecture\n' > ARCHITECTURE.md
+  mkdir -p docs/adr research
+  "$CLI" critique "portable prompt test 3" --no-auto 2>&1 | grep -q "ARCHITECTURE.md" \
+    && "$CLI" critique "portable prompt test 4" --no-auto 2>&1 | grep -q "docs/adr/" \
+    && "$CLI" critique "portable prompt test 5" --no-auto 2>&1 | grep -q "research/" ) \
+  && _pass "critique prompt lists ARCHITECTURE.md/docs/adr//research/ when present" || _fail "existing private-style files wrongly omitted"
+rm -rf "$TMP_CR15"
+
 # --- v0.5.0: deep anchor validation (atlas check --deep) ------------------
 echo ""
 echo "-- check --deep (anchor-body conformance) --"

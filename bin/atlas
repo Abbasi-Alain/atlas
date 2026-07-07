@@ -1127,9 +1127,45 @@ cmd_critique() {
     critic_label="claude (model: ${claude_model}, source: ${claude_src})"
   fi
 
-  # Build the prompt.
-  local atlas_blurb="(no ATLAS.md found in $PWD)"
-  [[ -f "$PWD/ATLAS.md" ]] && atlas_blurb="ATLAS.md is at $PWD/ATLAS.md — read §0, §A2 (rationale), §A3 (ADRs), §I (idea trail)."
+  # Build the prompt. The "Context to read" list is built from files that
+  # ACTUALLY exist in $PWD (RM-43, critic-stage finding #7) — a prior version
+  # unconditionally listed ARCHITECTURE.md/docs/adr/research/, which assumed
+  # one project's private layout even though ATLAS conformance never requires
+  # them; a plain conformant repo got a prompt that pointed a critic at
+  # nonexistent files.
+  local ctx_items="" ctx_n=0
+  if [[ -f "$PWD/ATLAS.md" ]]; then
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. ATLAS.md is at $PWD/ATLAS.md — read §0 (quick orientation) and any other sections present."$'\n'
+  else
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. (no ATLAS.md found in $PWD)"$'\n'
+  fi
+  if [[ -f "$PWD/SCARS.md" ]]; then
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. SCARS.md — hard-won failure memory; anchors are stable, load-bearing constraints"$'\n'
+  fi
+  local skill_glob; skill_glob=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+  if [[ -n "$skill_glob" ]]; then
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. .agents/skill/*/SKILL.md — anchors are stable; treat them as load-bearing constraints"$'\n'
+  fi
+  if [[ -f "$PWD/docs/SPEC.md" ]]; then
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. docs/SPEC.md — the design spec"$'\n'
+  fi
+  if [[ -f "$PWD/CLAUDE.md" ]]; then
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. CLAUDE.md — the behavioral contract"$'\n'
+  fi
+  # A private-style layout (ARCHITECTURE.md/docs/adr//research/) is only
+  # listed when it actually exists — never assumed.
+  if [[ -f "$PWD/ARCHITECTURE.md" ]]; then
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. ARCHITECTURE.md — the proposed shape"$'\n'
+  fi
+  if [[ -d "$PWD/docs/adr" ]]; then
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. docs/adr/ — past decisions"$'\n'
+  fi
+  if [[ -d "$PWD/research" ]]; then
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. research/ — what the field already does"$'\n'
+  fi
+  if [[ -f "$critics" ]]; then
+    ctx_n=$((ctx_n+1)); ctx_items="${ctx_items}${ctx_n}. CRITICS.md — prior objections (do NOT repeat them)"$'\n'
+  fi
   local prompt
   prompt="You are a hostile reviewer for the project at $PWD.
 
@@ -1138,13 +1174,7 @@ Diff range under review: ${range_line} (files touched: ${files_line})
 Verification commands already run: ${verify_line}
 
 Context to read (in this order):
-1. ${atlas_blurb}
-2. .agents/skill/*/SKILL.md — anchors are stable; treat them as load-bearing constraints
-3. ARCHITECTURE.md — the proposed shape
-4. docs/adr/ — past decisions
-5. research/<topic>.md — what the field already does
-6. CRITICS.md — prior objections (do NOT repeat them)
-
+${ctx_items}
 Your job: bring me the strongest objections, not the most polite ones.
 
 For EACH critique you produce:
@@ -1181,14 +1211,14 @@ End with 'Top 3 things to do BEFORE locking the ADR' as a bullet list."
   # Dispatch + capture the critic's raw response synchronously — the
   # CRITICS.md entry carries the real reply, not just a terminal echo the
   # human has to copy back by hand (RM-2b "receive rows back").
-  local raw_output="" dispatched=0
+  local raw_output="" dispatched=0 dispatch_rc=0
   if [[ "$with" == "codex" ]]; then
     if _have codex; then
       dispatched=1
       echo "================================================================"
       echo "running: codex exec (model: $codex_model)$( if [[ $auto -eq 1 ]]; then echo " [auto-detected]"; fi )"
       echo "================================================================"
-      raw_output="$(CODEX_MODEL="$codex_model" codex exec --model "$codex_model" "$prompt" 2>&1)" || true
+      raw_output="$(CODEX_MODEL="$codex_model" codex exec --model "$codex_model" "$prompt" 2>&1)" || dispatch_rc=$?
       echo "$raw_output"
     elif [[ $auto -eq 0 ]]; then
       _die "'codex' CLI not found on PATH (https://github.com/openai/codex)"
@@ -1199,7 +1229,7 @@ End with 'Top 3 things to do BEFORE locking the ADR' as a bullet list."
       echo "================================================================"
       echo "running: claude --print  (model: \${ANTHROPIC_MODEL:-opus})"
       echo "================================================================"
-      raw_output="$(claude --print "$prompt" 2>&1)" || true
+      raw_output="$(claude --print "$prompt" 2>&1)" || dispatch_rc=$?
       echo "$raw_output"
     else
       _die "'claude' CLI not found on PATH"
@@ -1208,6 +1238,21 @@ End with 'Top 3 things to do BEFORE locking the ADR' as a bullet list."
   [[ $dispatched -eq 0 ]] && _say "(print-only; pass --with-codex/--with-claude, or install 'codex' on PATH to auto-dispatch)"
 
   [[ $have_critics -eq 0 ]] && return 0
+
+  # A failed dispatch must never masquerade as a real review (RM-43, critic-
+  # stage finding #3): record it plainly and skip the critique-row stub
+  # entirely, so it can never satisfy CRITICS_STALE's row count.
+  if [[ $dispatched -eq 1 && $dispatch_rc -ne 0 ]]; then
+    {
+      printf '\n### %s — %s\n' "$date_now" "$topic"
+      printf '**Critic:** %s\n' "$critic_label"
+      printf '**DISPATCH FAILED** (exit %s) — this is NOT a critique; nothing was reviewed.\n\n' "$dispatch_rc"
+      # shellcheck disable=SC2016  # literal backticks (Markdown fence), no expansion intended
+      printf '<details><summary>Failure output</summary>\n\n```\n%s\n```\n\n</details>\n' "$raw_output"
+    } >> "$critics"
+    _warn "critic dispatch failed (exit $dispatch_rc) — recorded as a failed dispatch, not a critique"
+    return 0
+  fi
 
   # Append a stub row to CRITICS.md, stamped with real provenance + inputs
   # (RM-2b) and the critic's raw response when one was actually dispatched.
