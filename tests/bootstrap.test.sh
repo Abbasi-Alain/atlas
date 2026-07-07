@@ -371,6 +371,81 @@ TMP_CR6="$(mktemp -d)"; ( cd "$TMP_CR6" && git init -q -b main 2>/dev/null && "$
   && _pass "git-ignored CRITICS.md exempt from CRITICS_STALE (SCARS §PRIVATE-STYLE-OVERLAY)" || _fail "gitignored CRITICS.md still warns"
 rm -rf "$TMP_CR6"
 
+# --- RM-2b: atlas critique auto-dispatch + provenance stamping -----------
+echo ""
+echo "-- atlas critique (auto-dispatch + provenance stamping) --"
+
+# a stubbed codex CLI on PATH: atlas critique auto-detects it (no --with-*
+# flag needed), dispatches synchronously, and stamps the entry with real
+# provenance (model id + effort) — never a static placeholder.
+FAKE_BIN_CR7="$(mktemp -d)"
+cat > "$FAKE_BIN_CR7/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+[[ "$1" == "--version" ]] && { echo "codex-cli 0.0.0-stub"; exit 0; }
+echo "STUB CRITIQUE: | 1 | fake finding | low | verified-no-issue | - |"
+FAKECODEX
+chmod +x "$FAKE_BIN_CR7/codex"
+TMP_CR7="$(mktemp -d)"; ( cd "$TMP_CR7" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="$FAKE_BIN_CR7:$PATH" HOME="$TMP_CR7" "$CLI" critique "auto dispatch" >/dev/null 2>&1
+  grep -q "auto-detected" CRITICS.md \
+    && grep -q "STUB CRITIQUE" CRITICS.md \
+    && grep -q '\*\*Critic:\*\* codex (model:' CRITICS.md \
+    && grep -q "effort:" CRITICS.md ) \
+  && _pass "critique auto-detects installed codex CLI, dispatches, stamps provenance" || _fail "critique auto-dispatch/provenance"
+rm -rf "$TMP_CR7" "$FAKE_BIN_CR7"
+
+# without any critic CLI on PATH, critique degrades to print-only — no raw
+# output block, no crash — and still stamps the manual-paste placeholder.
+TMP_CR8="$(mktemp -d)"; ( cd "$TMP_CR8" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="/usr/bin:/bin" "$CLI" critique "no critic installed" >/dev/null 2>&1
+  ! grep -q "Raw critic output" CRITICS.md \
+    && grep -q "manual paste" CRITICS.md ) \
+  && _pass "critique degrades to print-only when no critic CLI is installed" || _fail "critique print-only fallback"
+rm -rf "$TMP_CR8"
+
+# --no-auto forces print-only even when a critic CLI IS on PATH.
+FAKE_BIN_CR9="$(mktemp -d)"
+cat > "$FAKE_BIN_CR9/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+echo "SHOULD NOT RUN"
+FAKECODEX
+chmod +x "$FAKE_BIN_CR9/codex"
+TMP_CR9="$(mktemp -d)"; ( cd "$TMP_CR9" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="$FAKE_BIN_CR9:$PATH" "$CLI" critique "no-auto forced" --no-auto >/dev/null 2>&1
+  ! grep -q "SHOULD NOT RUN" CRITICS.md && grep -q "manual paste" CRITICS.md ) \
+  && _pass "--no-auto forces print-only even with a critic CLI installed" || _fail "--no-auto didn't suppress auto-dispatch"
+rm -rf "$TMP_CR9" "$FAKE_BIN_CR9"
+
+# --range/--verify feed real diff-range/files/verification-command inputs
+# into the appended entry — never a static placeholder (RM-2b provenance).
+TMP_CR10="$(mktemp -d)"; ( cd "$TMP_CR10" && git init -q -b main 2>/dev/null
+  echo one > a.txt && git add a.txt && git -c user.email=t@t -c user.name=t commit -q -m one
+  echo two >> a.txt && git add a.txt && git -c user.email=t@t -c user.name=t commit -q -m two
+  "$CLI" init --critics >/dev/null 2>&1
+  PATH="/usr/bin:/bin" "$CLI" critique "ranged" --range "HEAD~1..HEAD" --verify "bash tests/x.sh" >/dev/null 2>&1
+  grep -q "diff range: HEAD~1..HEAD" CRITICS.md \
+    && grep -q "1 file(s)" CRITICS.md \
+    && grep -q "verification commands run: bash tests/x.sh" CRITICS.md ) \
+  && _pass "critique --range/--verify stamp real diff-range/files/verification inputs" || _fail "critique --range/--verify inputs"
+rm -rf "$TMP_CR10"
+
+# a malformed/unresolvable --range degrades gracefully instead of aborting
+# under set -e + pipefail (the diff pipeline can exit non-zero on a bad ref).
+TMP_CR11="$(mktemp -d)"; ( cd "$TMP_CR11" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="/usr/bin:/bin" "$CLI" critique "bad range" --range "not..a..real..range" >/dev/null 2>&1 ) \
+  && _pass "critique tolerates an unresolvable --range (no set -e/pipefail abort)" || _fail "critique aborted on bad --range"
+rm -rf "$TMP_CR11"
+
+# the appended stub's disposition legend + new sections match the richer
+# schema (verified-no-issue disposition, Assumptions challenged, Proposals).
+TMP_CR12="$(mktemp -d)"; ( cd "$TMP_CR12" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="/usr/bin:/bin" "$CLI" critique "schema check" >/dev/null 2>&1
+  grep -q "verified-no-issue" CRITICS.md \
+    && grep -q "Assumptions challenged" CRITICS.md \
+    && grep -q "Proposals (with evidence bar)" CRITICS.md ) \
+  && _pass "critique stub carries the richer schema (verified-no-issue/assumptions/proposals)" || _fail "critique stub missing richer schema"
+rm -rf "$TMP_CR12"
+
 # --- v0.5.0: deep anchor validation (atlas check --deep) ------------------
 echo ""
 echo "-- check --deep (anchor-body conformance) --"

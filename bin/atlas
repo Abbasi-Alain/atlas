@@ -52,12 +52,18 @@
 #                                     codex|copilot|gemini|cursor|llms-txt|all
 #   atlas anchors                     list every SCARS anchor (machine-readable)
 #   atlas anchor add NAME "summary"   append a stub anchor to SCARS.md
-#   atlas critique <topic> [--with-codex|--with-claude]
+#   atlas critique <topic> [--range A..B] [--verify "cmds"]
+#                          [--with-codex|--with-claude|--no-auto]
 #                                     append CRITICS.md row stub + print the
-#                                     brutal-honest prompt template. Optional
-#                                     flags pipe the prompt to a real CLI
-#                                     (codex / claude) for an actual second
-#                                     opinion. Defaults to print-only.
+#                                     brutal-honest prompt template, stamped
+#                                     with provenance (critic model + effort +
+#                                     override-vs-default) and the exact diff
+#                                     range/files/verification inputs. Auto-
+#                                     detects an installed cross-vendor critic
+#                                     (codex CLI) and dispatches it, capturing
+#                                     the raw response into CRITICS.md;
+#                                     degrades to print-only when none is
+#                                     installed. --no-auto forces print-only.
 #   atlas gap-to-article <gap-id> [--writer <path>]
 #                                     scaffold an article dir for a resolved
 #                                     novel implementation gap.
@@ -951,37 +957,79 @@ cmd_stacks() {
 # 'codex' / 'claude' CLIs). Default behavior is print-only.
 # ---------------------------------------------------------------------------
 cmd_critique() {
-  local topic="" with=""
+  local topic="" with="" range="" verify="" no_auto=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --with-codex)  with="codex";  shift ;;
       --with-claude) with="claude"; shift ;;
+      --range)       range="${2:-}"; shift 2 ;;
+      --verify)      verify="${2:-}"; shift 2 ;;
+      --no-auto)     no_auto=1; shift ;;
       --*)           shift ;;
       *)             [[ -z "$topic" ]] && topic="$1"; shift ;;
     esac
   done
-  [[ -z "$topic" ]] && _die "usage: atlas critique <topic> [--with-codex | --with-claude]"
+  [[ -z "$topic" ]] && _die "usage: atlas critique <topic> [--range <A>..<B>] [--verify \"<cmds>\"] [--with-codex | --with-claude | --no-auto]"
+
+  # RM-2b: auto-detect a cross-vendor critic when the caller didn't force
+  # one. Preference order matches LOOP.md's documented critic-selection —
+  # a direct CLI (codex exec) is the reliable, synchronous dispatch; degrade
+  # to print-only when nothing is installed (zero-dep). --no-auto forces
+  # print-only even when a critic CLI is on PATH.
+  local auto=0
+  if [[ -z "$with" && "$no_auto" -eq 0 ]] && _have codex; then
+    with="codex"; auto=1
+  fi
 
   local critics="$PWD/CRITICS.md"
   local date_now; date_now="$(date +%Y-%m-%d)"
-
+  local have_critics=1
   if [[ ! -f "$critics" ]]; then
+    have_critics=0
     _say "no CRITICS.md in $PWD (run 'atlas init' first (style must scaffold this file))"
-  else
-    # Append a stub row to CRITICS.md.
-    cat >> "$critics" <<EOF
+  fi
 
-### ${date_now} — ${topic}
-**Critic:** $( [[ -n "$with" ]] && echo "$with (auto)" || echo "_(ChatGPT 5.5 Extended Thinking — manual paste)_" )
-**Topic:** ${topic}
-**Inputs they had:** research/<file>, ARCHITECTURE.md, ADR-draft, GAPS-Implementation.md row(s)
+  # "Inputs they had" (RM-2b provenance): the exact diff range, files
+  # touched, and verification commands already run — never a static
+  # placeholder line.
+  local range_line="not specified" files_line="n/a" verify_line="none recorded"
+  [[ -n "$verify" ]] && verify_line="$verify"
+  if [[ -n "$range" ]]; then
+    range_line="$range"
+    if _have git && git -C "$PWD" rev-parse --git-dir >/dev/null 2>&1; then
+      local nfiles
+      nfiles="$(git -C "$PWD" diff --name-only "$range" 2>/dev/null | wc -l | tr -d '[:space:]')" || nfiles=0
+      files_line="${nfiles:-0} file(s) (git diff --name-only $range)"
+    fi
+  fi
 
-| # | Critique | Severity | Disposition | ADR/GAPS link |
-|---|---|---|---|---|
-| 1 | _(paste verbatim)_ | high/med/low | accepted / rejected / deferred | _(ADR-NNNN / GAPS G00N)_ |
-
-EOF
-    _say "appended CRITICS.md row for: ${topic}"
+  # Provenance: critic model id + reasoning effort, and whether each came
+  # from an explicit override or the tool's own config default (RM-2b).
+  local critic_label="_(ChatGPT 5.5 Extended Thinking — manual paste)_"
+  local codex_model=""
+  if [[ "$with" == "codex" ]]; then
+    local model_src="tool default" effort_src="tool default" codex_effort=""
+    if [[ -n "${CODEX_MODEL:-}" ]]; then
+      codex_model="$CODEX_MODEL"; model_src="override (\$CODEX_MODEL)"
+    elif [[ -f "$HOME/.codex/config.toml" ]]; then
+      codex_model="$(grep -m1 -E '^model[[:space:]]*=' "$HOME/.codex/config.toml" 2>/dev/null \
+        | sed -E 's/^model[[:space:]]*=[[:space:]]*"?([^"#[:space:]]+).*/\1/' || true)"
+      [[ -n "$codex_model" ]] && model_src="config default (~/.codex/config.toml)"
+    fi
+    codex_model="${codex_model:-gpt-5}"
+    if [[ -n "${CODEX_EFFORT:-}" ]]; then
+      codex_effort="$CODEX_EFFORT"; effort_src="override (\$CODEX_EFFORT)"
+    elif [[ -f "$HOME/.codex/config.toml" ]]; then
+      codex_effort="$(grep -m1 -E '^model_reasoning_effort[[:space:]]*=' "$HOME/.codex/config.toml" 2>/dev/null \
+        | sed -E 's/^model_reasoning_effort[[:space:]]*=[[:space:]]*"?([^"#[:space:]]+).*/\1/' || true)"
+      [[ -n "$codex_effort" ]] && effort_src="config default (~/.codex/config.toml)"
+    fi
+    codex_effort="${codex_effort:-unset}"
+    critic_label="codex (model: ${codex_model}, source: ${model_src}; effort: ${codex_effort}, source: ${effort_src})$( if [[ $auto -eq 1 ]]; then echo "; auto-detected"; fi )"
+  elif [[ "$with" == "claude" ]]; then
+    local claude_model="${ANTHROPIC_MODEL:-opus}" claude_src="CLI default"
+    [[ -n "${ANTHROPIC_MODEL:-}" ]] && claude_src="override (\$ANTHROPIC_MODEL)"
+    critic_label="claude (model: ${claude_model}, source: ${claude_src})"
   fi
 
   # Build the prompt.
@@ -991,6 +1039,8 @@ EOF
   prompt="You are a hostile reviewer for the project at $PWD.
 
 Topic under review: ${topic}
+Diff range under review: ${range_line} (files touched: ${files_line})
+Verification commands already run: ${verify_line}
 
 Context to read (in this order):
 1. ${atlas_blurb}
@@ -1009,7 +1059,12 @@ For EACH critique you produce:
   - WHEN this would break (load, scale, edge case, time horizon).
   - WHY it would break (root cause, not symptom).
   - HOW to fix or mitigate (concrete pattern, library, or pattern name).
-  - Suggested disposition: accept | reject (with reason) | defer (with GAPS link).
+  - Suggested disposition: fixed | accept | reject (with reason) | defer (with GAPS link) | verified-no-issue.
+
+Also call out:
+  - Assumptions challenged: anything this change takes for granted that may not hold.
+  - Proposals: any concrete alternative you'd make instead, each with an evidence bar
+    (what would have to be true, or what test would confirm it).
 
 Rules:
   - NO polite endorsements. If you can't find an objection, the prompt is wrong — re-ask.
@@ -1028,26 +1083,56 @@ End with 'Top 3 things to do BEFORE locking the ADR' as a bullet list."
   echo "$prompt"
   echo ""
 
+  # Dispatch + capture the critic's raw response synchronously — the
+  # CRITICS.md entry carries the real reply, not just a terminal echo the
+  # human has to copy back by hand (RM-2b "receive rows back").
+  local raw_output="" dispatched=0
   if [[ "$with" == "codex" ]]; then
-    if ! _have codex; then
+    if _have codex; then
+      dispatched=1
+      echo "================================================================"
+      echo "running: codex exec (model: $codex_model)$( if [[ $auto -eq 1 ]]; then echo " [auto-detected]"; fi )"
+      echo "================================================================"
+      raw_output="$(CODEX_MODEL="$codex_model" codex exec --model "$codex_model" "$prompt" 2>&1)" || true
+      echo "$raw_output"
+    elif [[ $auto -eq 0 ]]; then
       _die "'codex' CLI not found on PATH (https://github.com/openai/codex)"
     fi
-    local codex_model="${CODEX_MODEL:-gpt-5}"
-    echo "================================================================"
-    echo "running: codex exec (model: $codex_model)"
-    echo "================================================================"
-    CODEX_MODEL="$codex_model" codex exec --model "$codex_model" "$prompt"
   elif [[ "$with" == "claude" ]]; then
-    if ! _have claude; then
+    if _have claude; then
+      dispatched=1
+      echo "================================================================"
+      echo "running: claude --print  (model: \${ANTHROPIC_MODEL:-opus})"
+      echo "================================================================"
+      raw_output="$(claude --print "$prompt" 2>&1)" || true
+      echo "$raw_output"
+    else
       _die "'claude' CLI not found on PATH"
     fi
-    echo "================================================================"
-    echo "running: claude --print  (model: \${ANTHROPIC_MODEL:-opus})"
-    echo "================================================================"
-    claude --print "$prompt"
-  else
-    _say "(print-only; pass --with-codex or --with-claude to invoke a CLI)"
   fi
+  [[ $dispatched -eq 0 ]] && _say "(print-only; pass --with-codex/--with-claude, or install 'codex' on PATH to auto-dispatch)"
+
+  [[ $have_critics -eq 0 ]] && return 0
+
+  # Append a stub row to CRITICS.md, stamped with real provenance + inputs
+  # (RM-2b) and the critic's raw response when one was actually dispatched.
+  {
+    printf '\n### %s — %s\n' "$date_now" "$topic"
+    printf '**Critic:** %s\n' "$critic_label"
+    printf '**Topic:** %s\n' "$topic"
+    printf '**Inputs they had:** diff range: %s; files: %s; verification commands run: %s\n\n' \
+      "$range_line" "$files_line" "$verify_line"
+    printf '| # | Critique | Severity | Disposition | ADR/GAPS link |\n'
+    printf '|---|---|---|---|---|\n'
+    printf '| 1 | _(paste verbatim)_ | high/med/low | fixed / accepted / rejected (rationale) / deferred / verified-no-issue | _(ADR-NNNN / GAPS G00N)_ |\n\n'
+    printf '**Assumptions challenged:**\n- _(fill in from critic output)_\n\n'
+    printf '**Proposals (with evidence bar):**\n- _(fill in from critic output)_\n'
+    if [[ $dispatched -eq 1 ]]; then
+      # shellcheck disable=SC2016  # literal backticks (Markdown fence), no expansion intended
+      printf '\n<details><summary>Raw critic output (auto-captured)</summary>\n\n```\n%s\n```\n\n</details>\n' "$raw_output"
+    fi
+  } >> "$critics"
+  _say "appended CRITICS.md row for: ${topic}"
 }
 
 # ---------------------------------------------------------------------------

@@ -330,10 +330,18 @@ family raises against a decision, logged before that decision ships.
 - `CRITICS.md` is OPTIONAL. A repo without it is fully conformant and
   unaffected.
 - Entry shape: one block per review session — `### <date> — <topic>`,
-  `**Critic:**` (the model/vendor consulted), `**Topic:**`, `**Inputs they
-  had:**`, followed by a table of individual critique rows: *# · critique
-  (verbatim) · severity (high/med/low) · disposition (accepted / rejected
-  with rationale / deferred) · ADR/GAPS link*.
+  `**Critic:**` (the model/vendor consulted, stamped with **provenance**:
+  model id + reasoning effort, and whether each came from an explicit
+  override or the tool's own config default — so authority is auditable),
+  `**Topic:**`, `**Inputs they had:**` (the exact diff range · files touched
+  · verification commands already run — never a static placeholder),
+  followed by a table of individual critique rows: *# · critique (verbatim)
+  · severity (high/med/low) · disposition (fixed / accepted / rejected with
+  rationale / deferred / **verified-no-issue**) · ADR/GAPS link*, an
+  **Assumptions challenged** section, and a **Proposals** section (each
+  proposal carries an explicit evidence bar — what would have to be true, or
+  what test would confirm it). A critic that only finds bugs is
+  under-reporting what it checked — `verified-no-issue` rows are first-class.
 - Mantra: bring the strongest objection, not the most polite one.
 - **Graduation convention.** A critique that was rejected or deferred and is
   later proven right MUST become a new `SCARS.md` `§ANCHOR` citing the
@@ -348,6 +356,18 @@ family raises against a decision, logged before that decision ships.
 (non-git-ignored), a `ROADMAP.md` **Done** log that has grown to 3+ shipped
 items while `CRITICS.md` logs zero critique rows warns (`CRITICS_STALE`) —
 decisions are landing with no adversarial pass. `atlas init --critics`
-scaffolds `templates/CRITICS.md.tmpl`. `atlas critique "<topic>"` prints (and,
-via `--with-codex`/`--with-claude`, runs) the hostile-review prompt and
-appends a stub row. Reported under `"critics"` in `--json`.
+scaffolds `templates/CRITICS.md.tmpl`.
+
+`atlas critique "<topic>" [--range <A>..<B>] [--verify "<cmds>"]
+[--with-codex | --with-claude | --no-auto]` prints the hostile-review
+prompt. When the caller doesn't force a choice, it **auto-detects an
+installed cross-vendor critic** (a `codex` CLI on `PATH` first — the
+reliable, synchronous dispatch; a background/fire-and-forget integration is
+deliberately NOT used here, since its output can't be captured back) and
+drives it: the diff range + files + verification inputs are sent, the raw
+response is captured **synchronously**, and the appended `CRITICS.md` entry
+is stamped with real provenance automatically. It degrades to the manual,
+print-only prompt (unchanged from the base surface) when no critic CLI is
+installed — `--no-auto` forces print-only even when one is, and
+`--with-codex`/`--with-claude` force a specific critic. Reported under
+`"critics"` in `--json`.

@@ -11,15 +11,27 @@
 > below (`atlas anchor add`) — an ignored-then-vindicated objection is a scar,
 > not a footnote.
 >
-> Dispatch: `atlas critique "<topic>" [--with-codex | --with-claude]` prints
-> the hostile-review prompt (and runs it against a real CLI with the flag),
-> then appends a stub block below for you to fill in.
+> Dispatch: `atlas critique "<topic>" [--range <A>..<B>] [--verify "<cmds>"]
+> [--with-codex | --with-claude | --no-auto]` prints the hostile-review
+> prompt. It auto-detects an installed cross-vendor critic CLI (`codex` on
+> PATH first) and dispatches it, stamping the entry below with real
+> provenance (critic model + reasoning effort + whether each came from an
+> env override or the tool's own config default) and the exact inputs it
+> had (diff range · files touched · verification commands run) — never a
+> static placeholder. Degrades to print-only when no critic CLI is
+> installed (`--no-auto` forces print-only even when one is).
 
 ### {{DATE}} — example topic
-**Critic:** _(a model/vendor different from the one that designed this)_
+**Critic:** _(a model/vendor different from the one that designed this, e.g. `codex (model: gpt-5, source: config default; effort: high, source: override)`)_
 **Topic:** example topic
-**Inputs they had:** ATLAS.md, SCARS.md, the diff/ADR under review
+**Inputs they had:** diff range: _(e.g. `abc123..def456`)_; files: _(N changed)_; verification commands run: _(e.g. `bash tests/bootstrap.test.sh`)_
 
 | # | Critique | Severity | Disposition | ADR/GAPS link |
 |---|---|---|---|---|
-| 1 | _(paste verbatim — the objection itself)_ | high/med/low | accepted / rejected (rationale) / deferred | _(ADR-NNNN / GAPS G00N, if any)_ |
+| 1 | _(paste verbatim — the objection itself)_ | high/med/low | fixed / accepted / rejected (rationale) / deferred / verified-no-issue | _(ADR-NNNN / GAPS G00N, if any)_ |
+
+**Assumptions challenged:**
+- _(anything the reviewed decision takes for granted that may not hold)_
+
+**Proposals (with evidence bar):**
+- _(a concrete alternative, with what would have to be true / what test would confirm it)_
