@@ -958,6 +958,60 @@ rm -rf "$TMP_HK"
 # leaderboard share
 ( cd "$TMP" && "$CLI" measure --share 2>/dev/null | grep -q 'share your savings' ) && _pass "measure --share prints a submission" || _fail "measure --share"
 
+# --- RM-9: atlas leaderboard --render (CSV -> Markdown table) ------------
+echo ""
+echo "-- atlas leaderboard --render --"
+
+# a single-row CSV renders deterministically between markers, preserving
+# surrounding content, with no stderr noise (macOS's default awk warns on
+# multi-line -v values — the temp-file/getline approach must avoid that).
+TMP_LB1="$(mktemp -d)"; ( cd "$TMP_LB1" && mkdir -p data docs
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100,90,99,0.5.0,2026-01-01\n' > data/leaderboard.csv
+  printf 'intro\n<!-- leaderboard:start -->\nold\n<!-- leaderboard:end -->\noutro\n' > docs/LEADERBOARD.md
+  out="$("$CLI" leaderboard --render 2>&1)"
+  ! echo "$out" | grep -qi "awk:" \
+    && grep -q "foo/bar" docs/LEADERBOARD.md \
+    && grep -q "^intro$" docs/LEADERBOARD.md \
+    && grep -q "^outro$" docs/LEADERBOARD.md ) \
+  && _pass "leaderboard --render regenerates the table, no awk warnings, preserves surrounding content" || _fail "leaderboard --render basic case"
+rm -rf "$TMP_LB1"
+
+# multiple rows all render; re-running is idempotent (same output twice).
+TMP_LB2="$(mktemp -d)"; ( cd "$TMP_LB2" && mkdir -p data docs
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100,90,99,0.5.0,2026-01-01\nbaz/qux,def456,50,5000,300,90,94,0.5.0,2026-02-02\n' > data/leaderboard.csv
+  printf '<!-- leaderboard:start -->\n<!-- leaderboard:end -->\n' > docs/LEADERBOARD.md
+  "$CLI" leaderboard --render >/dev/null 2>&1
+  out1="$(cat docs/LEADERBOARD.md)"
+  "$CLI" leaderboard --render >/dev/null 2>&1
+  out2="$(cat docs/LEADERBOARD.md)"
+  [[ "$out1" == "$out2" ]] && grep -q "foo/bar" docs/LEADERBOARD.md && grep -q "baz/qux" docs/LEADERBOARD.md ) \
+  && _pass "leaderboard --render handles multiple rows and is idempotent" || _fail "leaderboard --render multi-row/idempotency"
+rm -rf "$TMP_LB2"
+
+# a header mismatch is a hard error (schema validation).
+TMP_LB3="$(mktemp -d)"; ( cd "$TMP_LB3" && mkdir -p data docs
+  printf 'wrong,header\nfoo,bar\n' > data/leaderboard.csv
+  printf '<!-- leaderboard:start -->\n<!-- leaderboard:end -->\n' > docs/LEADERBOARD.md
+  ! "$CLI" leaderboard --render >/dev/null 2>&1 ) \
+  && _pass "leaderboard --render rejects a header mismatch" || _fail "leaderboard --render accepted bad header"
+rm -rf "$TMP_LB3"
+
+# a malformed row (wrong field count) is a hard error.
+TMP_LB4="$(mktemp -d)"; ( cd "$TMP_LB4" && mkdir -p data docs
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100\n' > data/leaderboard.csv
+  printf '<!-- leaderboard:start -->\n<!-- leaderboard:end -->\n' > docs/LEADERBOARD.md
+  ! "$CLI" leaderboard --render >/dev/null 2>&1 ) \
+  && _pass "leaderboard --render rejects a malformed row" || _fail "leaderboard --render accepted malformed row"
+rm -rf "$TMP_LB4"
+
+# a docs/LEADERBOARD.md with no markers is a clear error, not silent no-op.
+TMP_LB5="$(mktemp -d)"; ( cd "$TMP_LB5" && mkdir -p data docs
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100,90,99,0.5.0,2026-01-01\n' > data/leaderboard.csv
+  printf '# no markers here\n' > docs/LEADERBOARD.md
+  ! "$CLI" leaderboard --render >/dev/null 2>&1 ) \
+  && _pass "leaderboard --render errors when markers are missing" || _fail "leaderboard --render silently no-op'd without markers"
+rm -rf "$TMP_LB5"
+
 # MCP router: deep tools light up + route when an ecosystem CLI (stub graphify) is on PATH
 if command -v python3 >/dev/null 2>&1; then
   GFD="$(mktemp -d)"; printf '#!/usr/bin/env bash\necho ok\n' > "$GFD/graphify"; chmod +x "$GFD/graphify"

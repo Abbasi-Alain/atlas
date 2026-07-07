@@ -7,9 +7,11 @@ repo? Run it and submit your number — one click:
 atlas measure --share     # prints your row + a one-click GitHub-issue link
 ```
 
+<!-- leaderboard:start -->
 | repo | orientation tokens (without → with) | reduction | date |
 |---|---|---|---|
-| Abbasi-Alain/atlas | ~16,591 → ~1,225 tok | −93% to −99% | 2026-06-09 |
+| Abbasi-Alain/atlas | ~19105 → ~1341 tok | −93% to −99% | 2026-07-07 |
+<!-- leaderboard:end -->
 
 > The reduction is a **range** — *smart skim → whole-repo dump* (see the
 > [methodology](benchmarks/methodology.md)). The deterministic single-shot
@@ -17,9 +19,12 @@ atlas measure --share     # prints your row + a one-click GitHub-issue link
 
 ## Submit yours
 
-1. `atlas measure --share` in your repo.
-2. Click the printed link (opens a pre-filled GitHub issue) — or open a PR adding
-   your row above.
+1. `atlas measure --share` in your repo — prints your row + a one-click
+   GitHub-issue submit link.
+2. Or open a PR adding a row to [`data/leaderboard.csv`](../data/leaderboard.csv)
+   (see its header for column order) — a maintainer runs
+   `atlas leaderboard --render` to regenerate the table above before merging.
 
 Keep it honest: `atlas measure` is reproducible, so anyone can re-run your number.
 Bigger repos → bigger savings (the spine stays ~constant while the skim grows).
+The table above is generated from `data/leaderboard.csv` — don't hand-edit it.

@@ -33,6 +33,9 @@
 #                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
 #   atlas measure [--badge]           estimate orientation-token savings (with
 #                                     vs without ATLAS); --badge prints a shield
+#   atlas leaderboard --render        regenerate docs/LEADERBOARD.md's table
+#                                     from data/leaderboard.csv (the CSV is
+#                                     what contributors edit in a PR)
 #   atlas bench [--runtime claude|codex|opencode|openai] [--model M] [--effort L]
 #               [--api-base URL] [--exec CMD] [--task "…"] [--reps N] [--dry-run]
 #                                     A/B a task with vs without ATLAS. Agentic
@@ -2748,6 +2751,78 @@ cmd_measure() {
 }
 
 # ---------------------------------------------------------------------------
+# leaderboard --render — regenerate a Markdown table (RM-9) from a CSV source
+# of truth: data/leaderboard.csv (repo · commit · files · skim_tok · spine_tok
+# · reduction_pct_low · reduction_pct_high · atlas_version · date) renders
+# into docs/LEADERBOARD.md between marker comments. The CSV is what
+# contributors edit in a PR; the Markdown table is a derived, deterministic
+# render — never hand-edited directly once markers are present.
+# ---------------------------------------------------------------------------
+cmd_leaderboard() {
+  local render=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --render) render=1; shift ;;
+      *) shift ;;
+    esac
+  done
+  [[ $render -eq 1 ]] || _die "usage: atlas leaderboard --render"
+
+  local csv="$PWD/data/leaderboard.csv"
+  local md="$PWD/docs/LEADERBOARD.md"
+  [[ -f "$csv" ]] || _die "no data/leaderboard.csv in $PWD"
+  [[ -f "$md" ]]  || _die "no docs/LEADERBOARD.md in $PWD"
+
+  local expected_header="repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date"
+  local header; header="$(head -n1 "$csv" | tr -d '\r')"
+  [[ "$header" == "$expected_header" ]] \
+    || _die "data/leaderboard.csv header mismatch — expected: $expected_header"
+
+  # Field-count validation (simple comma count — the schema is all
+  # identifiers/numbers, no field is ever expected to contain a comma).
+  local expected_fields=9 line_no=1 line n
+  while IFS= read -r line; do
+    line_no=$((line_no+1))
+    [[ -z "$line" ]] && continue
+    n=$(( $(grep -o ',' <<< "$line" | wc -l) + 1 ))
+    [[ "$n" -eq "$expected_fields" ]] \
+      || _die "data/leaderboard.csv line $line_no has $n field(s), expected $expected_fields: $line"
+  done < <(tail -n +2 "$csv")
+
+  local table
+  table="$(awk -F',' 'NF==9 {
+    printf "| %s | ~%s → ~%s tok | −%s%% to −%s%% | %s |\n", $1, $4, $5, $6, $7, $9
+  }' <(tail -n +2 "$csv"))"
+
+  local marker_start="<!-- leaderboard:start -->"
+  local marker_end="<!-- leaderboard:end -->"
+
+  grep -q "$marker_start" "$md" \
+    || _die "docs/LEADERBOARD.md has no $marker_start marker — add it around the table first"
+
+  # Write the new block to a temp file and have awk stream it in via getline —
+  # passing a MULTI-LINE value through -v is unreliable on macOS's default
+  # (one-true-awk) /usr/bin/awk ("newline in string"); a file is portable
+  # across every awk variant.
+  local block_file; block_file="$(mktemp)"
+  {
+    printf '%s\n' "$marker_start"
+    printf '| repo | orientation tokens (without → with) | reduction | date |\n'
+    printf '|---|---|---|---|\n'
+    printf '%s\n' "$table"
+    printf '%s\n' "$marker_end"
+  } > "$block_file"
+  awk -v s="$marker_start" -v e="$marker_end" -v bf="$block_file" '
+    $0 == s { while ((getline line < bf) > 0) print line; close(bf); skipping = 1; next }
+    $0 == e { skipping = 0; next }
+    !skipping { print }
+  ' "$md" > "$md.tmp" && mv "$md.tmp" "$md"
+  rm -f "$block_file"
+  local n_rows; n_rows=$(( $(wc -l < "$csv" | tr -d ' ') - 1 ))
+  _ok "regenerated docs/LEADERBOARD.md table from data/leaderboard.csv ($n_rows row(s))"
+}
+
+# ---------------------------------------------------------------------------
 # doctor — diagnose the ATLAS install + this project's harness + runtime wiring.
 # ---------------------------------------------------------------------------
 cmd_doctor() {
@@ -3615,6 +3690,7 @@ main() {
     mcp)      cmd_mcp "$@" ;;
     doctor)   cmd_doctor "$@" ;;
     badge)    cmd_badge "$@" ;;
+    leaderboard) cmd_leaderboard "$@" ;;
     export)   cmd_export "$@" ;;
     anchors)  cmd_anchors "$@" ;;
     anchor)   cmd_anchor "$@" ;;
