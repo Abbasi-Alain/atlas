@@ -2322,12 +2322,18 @@ $marker_end
 EOF
 )
   if grep -q "$marker_start" "$cfg"; then
-    # Replace the existing block.
-    awk -v s="$marker_start" -v e="$marker_end" -v b="$block" '
-      $0 == s { skipping = 1; print b; next }
+    # Replace the existing block. A multi-line value via awk -v is unreliable
+    # on macOS's default (one-true-awk) /usr/bin/awk ("newline in string") —
+    # write the block to a temp file and stream it in via getline instead
+    # (the same fix RM-9 needed for the leaderboard renderer, ported here).
+    local block_file; block_file="$(mktemp)"
+    printf '%s\n' "$block" > "$block_file"
+    awk -v s="$marker_start" -v e="$marker_end" -v bf="$block_file" '
+      $0 == s { while ((getline line < bf) > 0) print line; close(bf); skipping = 1; next }
       $0 == e { skipping = 0; next }
       !skipping { print }
     ' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+    rm -f "$block_file"
     _say "updated $cfg (atlas-auth block replaced)"
   else
     printf "\n%s\n" "$block" >> "$cfg"

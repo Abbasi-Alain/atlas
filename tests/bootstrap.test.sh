@@ -713,7 +713,7 @@ rm -rf "$TMP_T4"
 TMP_T5="$(mktemp -d)"; ( cd "$TMP_T5" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
   printf '\n## Model tier mapping (RM-26)\n\n| tier | model |\n|---|---|\n| fast | A |\n' >> LOOP.md
   awk '/^## Done/{print "- [ ] active ticket (tier: fast)\n"} {print}' ROADMAP.md > ROADMAP.md.new && mv ROADMAP.md.new ROADMAP.md
-  printf '- [x] old ticket (tier: quantum)\n' >> ROADMAP.md
+  printf -- '- [x] old ticket (tier: quantum)\n' >> ROADMAP.md
   ! "$CLI" check --json | grep -q UNMAPPED_TIER_TAG ) \
   && _pass "a stale tier: tag in the Done log doesn't warn" || _fail "Done-log tier tag wrongly warned"
 rm -rf "$TMP_T5"
@@ -902,10 +902,13 @@ HOME="$FAKE_HOME" "$CLI" auth login --method ssh --email "t@t" >/dev/null 2>&1
 [[ -f "$FAKE_HOME/.ssh/id_ed25519_github" ]]     && _pass "auth login creates github key"  || _fail "no github key"
 [[ -f "$FAKE_HOME/.ssh/id_ed25519_gitlab" ]]     && _pass "auth login creates gitlab key"  || _fail "no gitlab key"
 grep -q "atlas-auth:start" "$FAKE_HOME/.ssh/config" && _pass "auth login adds marker block" || _fail "no marker block"
-HOME="$FAKE_HOME" "$CLI" auth login --method ssh --email "t@t" >/dev/null 2>&1; rc=$?
+replay_out="$(HOME="$FAKE_HOME" "$CLI" auth login --method ssh --email "t@t" 2>&1)"; rc=$?
 [[ $rc -eq 0 ]] && _pass "auth login --method ssh is idempotent" || _fail "re-run failed"
 n=$(grep -c "atlas-auth:start" "$FAKE_HOME/.ssh/config")
 [[ "$n" == "1" ]] && _pass "auth login doesn't duplicate marker on re-run" || _fail "marker duplicated ($n)"
+# the re-run exercises the ssh-config marker REPLACE path (a multi-line awk
+# -v value is unreliable on macOS's default awk — RM-9's finding, ported here).
+echo "$replay_out" | grep -qi "awk:" && _fail "ssh-config marker replace triggered an awk warning" || _pass "ssh-config marker replace produces no awk warnings"
 rm -rf "$FAKE_HOME"
 
 # --- runtime adapters ---------------------------------------------------
