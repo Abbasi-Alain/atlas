@@ -517,6 +517,38 @@ TMP_CR15="$(mktemp -d)"; ( cd "$TMP_CR15" && git init -q -b main 2>/dev/null && 
   && _pass "critique prompt lists ARCHITECTURE.md/docs/adr//research/ when present" || _fail "existing private-style files wrongly omitted"
 rm -rf "$TMP_CR15"
 
+# RM-44: a verbose critic's captured output is capped at a byte budget (the
+# TAIL is kept, since the final answer usually lands at the end) instead of
+# silently ballooning CRITICS.md.
+FAKE_BIN_CR16="$(mktemp -d)"
+cat > "$FAKE_BIN_CR16/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+[[ "$1" == "--version" ]] && { echo "codex-cli 0.0.0-stub"; exit 0; }
+awk 'BEGIN{for(i=0;i<50000;i++) printf "X"}'
+echo ""
+echo "FINAL_ANSWER_MARKER: the real critique"
+FAKECODEX
+chmod +x "$FAKE_BIN_CR16/codex"
+TMP_CR16="$(mktemp -d)"; ( cd "$TMP_CR16" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="$FAKE_BIN_CR16:$PATH" "$CLI" critique "cap test" >/dev/null 2>&1
+  grep -q "truncated: showing the final" CRITICS.md && grep -q "FINAL_ANSWER_MARKER" CRITICS.md ) \
+  && _pass "a verbose critic's output is capped, keeping the tail" || _fail "output wasn't capped or lost the final answer"
+rm -rf "$TMP_CR16" "$FAKE_BIN_CR16"
+
+# a critic's small, real output is never truncated.
+FAKE_BIN_CR17="$(mktemp -d)"
+cat > "$FAKE_BIN_CR17/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+[[ "$1" == "--version" ]] && { echo "codex-cli 0.0.0-stub"; exit 0; }
+echo "a small, real critique response"
+FAKECODEX
+chmod +x "$FAKE_BIN_CR17/codex"
+TMP_CR17="$(mktemp -d)"; ( cd "$TMP_CR17" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="$FAKE_BIN_CR17:$PATH" "$CLI" critique "no cap test" >/dev/null 2>&1
+  ! grep -q "truncated: showing the final" CRITICS.md ) \
+  && _pass "a small critic response is never truncated" || _fail "small output wrongly truncated"
+rm -rf "$TMP_CR17" "$FAKE_BIN_CR17"
+
 # --- v0.5.0: deep anchor validation (atlas check --deep) ------------------
 echo ""
 echo "-- check --deep (anchor-body conformance) --"

@@ -1237,6 +1237,19 @@ End with 'Top 3 things to do BEFORE locking the ADR' as a bullet list."
   fi
   [[ $dispatched -eq 0 ]] && _say "(print-only; pass --with-codex/--with-claude, or install 'codex' on PATH to auto-dispatch)"
 
+  # Cap the captured output at a byte budget (RM-44): a verbose critic CLI's
+  # full transcript must never silently balloon CRITICS.md — a future
+  # dispatch that reads "CRITICS.md — prior objections" would pay the full
+  # cost of every past one. Keep the TAIL (the final answer usually lands at
+  # the end of a transcript), regardless of format (JSON events or plain text).
+  local raw_cap_bytes=20000
+  if [[ $dispatched -eq 1 && ${#raw_output} -gt $raw_cap_bytes ]]; then
+    local raw_total=${#raw_output} raw_tail
+    raw_tail="$(printf '%s' "$raw_output" | tail -c "$raw_cap_bytes")"
+    raw_output="[...truncated: showing the final ${raw_cap_bytes} of ${raw_total} bytes captured...]
+${raw_tail}"
+  fi
+
   [[ $have_critics -eq 0 ]] && return 0
 
   # A failed dispatch must never masquerade as a real review (RM-43, critic-
