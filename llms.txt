@@ -8,3 +8,6 @@ directory reads this file *first* and follows links to the exact
 - [SCARS.md](SCARS.md): failure memory — read before fixing a bug; stable §anchors (symptom → root cause → do NOT → do).
 - .agents/skill/atlas/SKILL.md: procedural playbook — how to run, test, and do common tasks here.
 - [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md): behavioral contract for coding agents.
+- [LOOP.md](LOOP.md): autonomous improvement loop — one iteration = pick the top [ROADMAP.md](ROADMAP.md) item by EV → implement → 'atlas check' → commit.
+- [AKIGI.md](AKIGI.md): purpose contract — why this repo exists, scope/non-goals, how incoming requests are triaged.
+- [FRQ.md](FRQ.md): cross-agent feature-request queue — outside agents: read AKIGI.md first, then file your ask here.

@@ -49,6 +49,9 @@
 | [`tests/`](tests/) | `bootstrap.test.sh` smoke test (§5) | bin/atlas |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history (drives release notes) | §6 |
 | [`CITATION.cff`](CITATION.cff) | Citation metadata — GitHub "Cite this repository" + Zenodo DOI on release | §6 |
+| [`AKIGI.md`](AKIGI.md) | **Purpose contract** (SPEC §11) — why this repo exists; the triage criterion for incoming requests | FRQ.md |
+| [`FRQ.md`](FRQ.md) | **Feature Request Queue** (SPEC §11) — sibling-repo agents file asks here; triaged against AKIGI.md | AKIGI.md |
+| [`data/leaderboard.csv`](data/leaderboard.csv) | Leaderboard dataset — source of truth for [`docs/LEADERBOARD.md`](docs/LEADERBOARD.md) (`atlas leaderboard --render`) | docs/ |
 
 > **Not applicable** (deleted per spec convention): §3 service layer,
 > §4 front-end, §D data model, §R runtime topology, §O observability,
