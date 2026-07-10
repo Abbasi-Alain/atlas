@@ -502,11 +502,57 @@ read).
   without `AKIGI.md`. Listed in the `llms.txt` export. Reported with
   `"akigi"`/`"frq"` in `check --json`.
 
-### Reserved phase-2 names (declared, NOT yet validated)
+### BRD.md — Bugs Responsible Disclosure
 
-**BRD.md** (Bugs Responsible Disclosure) and **SRD.md** (Security Responsible
-Disclosure) are the reserved intake names for defects and security reports
-from outside agents. They are *not yet scaffolded or validated by the CLI* —
-this section only reserves the names and the split (FRQ = asks · BRD =
-defects · SRD = security, never auto-triaged). A repo may adopt the names
-early; `atlas check` says nothing about them today.
+The defect-disclosure inbox for OUTSIDE agents. The split is architectural:
+**`BUGS.md` (§9) is internal** — this repo's own agents' register — while
+**`BRD.md` is external** — a sibling-repo agent consuming this repo hit
+broken behavior. An ACCEPTED disclosure graduates into the internal flow
+(BUGS.md / fix ticket → fixed → SCARS lesson) and the outcome is replied
+inline in the BRD entry.
+
+- OPTIONAL; repo root when present. Entry: `## BRD-NNN — <symptom> (date)`
+  with **Reported by** · **Evidence** (exact command + wrong output) ·
+  **Repro** · **Impact**, plus an Index row (`🕒 open`). No evidence/repro →
+  declined asking for it (evidence is what makes disclosure *responsible*).
+- Owner dispositions: `### ✅ FIXED BRD-NNN` (fix commit, how the discloser
+  verifies) or `### ⛔ DECLINED BRD-NNN` (reason + what would change it).
+- `atlas init --brd` scaffolds it (implies `--akigi`). `atlas check` warns
+  `BRD_NO_PROTOCOL` / `BRD_NO_INDEX` / `BRD_NO_AKIGI` only-when-present.
+
+### SRD.md — Security Responsible Disclosure
+
+Like BRD but for vulnerabilities, with two hard differences:
+
+1. **Nothing exploitable in public.** The public entry is a minimal marker
+   only — `## SRD-NNN — <affected surface, no detail> (date)` with reporter,
+   severity class, and nothing an attacker can act on. Full detail goes
+   through the file's **Private channel** (a security email or the repo's
+   private-advisory link). `atlas check` warns `SRD_NO_CONTACT` on an SRD.md
+   with no private channel — the file would otherwise invite exploit detail
+   into public.
+2. **Never auto-triaged.** Agents may acknowledge but never dispose; the
+   maintainer is always escalated (the AKIGI escalation line). Disposition
+   after the fix ships: `### ✅ FIXED SRD-NNN` / `### ⛔ INVALID SRD-NNN`.
+
+`atlas init --srd` scaffolds it (implies `--akigi`); also warns
+`SRD_NO_PROTOCOL` / `SRD_NO_INDEX` / `SRD_NO_AKIGI`. `atlas init --intake`
+scaffolds the full quartet (AKIGI + FRQ + BRD + SRD) in one command.
+Reported as `"brd"`/`"srd"` in `check --json`; both listed in the `llms.txt`
+export.
+
+### The AKIGI protocol (v0) — where this is going
+
+AKIGI + FRQ + BRD + SRD are the **file-based v0 of the AKIGI protocol** for
+multi-repo, multi-agent coordination: with them, a repo *lives* — it
+improves from ecosystem demand (requests and disclosures from outside
+agents, triaged against its own purpose contract), not just its owner's
+attention. Each repo's AKIGI facets (Purpose · Serves whom · Scope ·
+Non-goals · Acceptance principles · Values) differ, like ikigai differs per
+human; the constant is the PROTOCOL: read the AKIGI → file into the right
+intake → get an inline, machine-readable disposition. The protocol is
+designed to graduate into its own standard (an `AKIGI` repo) and evolve
+beyond files — per-agent identity/registration, inboxes, and compensation
+for verified disclosures are planned protocol phases, deliberately NOT part
+of this spec yet. ATLAS remains a first-class integration of whatever the
+protocol becomes.

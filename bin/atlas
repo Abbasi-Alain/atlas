@@ -2,17 +2,19 @@
 # atlas — CLI for the ATLAS project-map standard.
 #
 # Subcommands:
-#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs] [--critics] [--akigi] [--frq]
+#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs] [--critics]
+#              [--akigi] [--frq] [--brd] [--srd] [--intake]
 #                                     (--loop also scaffolds LOOP.md + ROADMAP.md,
 #                                     the optional autonomous-loop 5th surface)
 #                                     (--bugs scaffolds BUGS.md, the optional
-#                                     open-issues register, linked from ATLAS.md)
+#                                     INTERNAL open-issues register)
 #                                     (--critics scaffolds CRITICS.md, the optional
 #                                     cross-vendor second-opinion log)
 #                                     (--akigi scaffolds AKIGI.md, the purpose
-#                                     contract; --frq scaffolds FRQ.md, the
-#                                     cross-agent feature-request queue — and
-#                                     implies --akigi)
+#                                     contract; --frq/--brd/--srd scaffold the
+#                                     EXTERNAL intake trio — feature requests /
+#                                     bug disclosure / security disclosure —
+#                                     each implies --akigi; --intake = all four)
 #                                     bootstrap ATLAS.md + SKILL.md + SCARS.md
 #                                     + CLAUDE.md + AGENTS.md + EXAMPLES.md (+ seeds).
 #                                     --analyze scans the repo + pre-fills the map.
@@ -446,7 +448,7 @@ ${inv}"
 }
 
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 akigi=0 frq=0
+  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 akigi=0 frq=0 brd=0 srd=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f)  force=1; shift ;;
@@ -456,6 +458,9 @@ cmd_init() {
       --critics)   critics=1; shift ;;
       --akigi)     akigi=1; shift ;;
       --frq)       frq=1; shift ;;
+      --brd)       brd=1; shift ;;
+      --srd)       srd=1; shift ;;
+      --intake)    akigi=1; frq=1; brd=1; srd=1; shift ;;
       --style)     style="${2:-default}"; shift 2 ;;
       --style=*)   style="${1#--style=}"; shift ;;
       --stack)     stacks="${2:-}"; shift 2 ;;
@@ -520,15 +525,22 @@ cmd_init() {
     _render "$(_src CRITICS.md.tmpl)" "$PWD/CRITICS.md" "$force"
   fi
   # Optional cross-repo collaboration surfaces (SPEC §11): AKIGI.md (the
-  # purpose contract) + FRQ.md (the cross-agent feature-request queue).
-  # --frq implies the AKIGI too — the FRQ protocol is triaged AGAINST the
-  # AKIGI's acceptance principles, so an FRQ without one is rudderless.
-  if [[ $frq -eq 1 ]]; then akigi=1; fi
+  # purpose contract) + the external intake trio FRQ.md (feature requests) /
+  # BRD.md (bug disclosure) / SRD.md (security disclosure). Any intake
+  # surface implies the AKIGI too — intake is triaged AGAINST the AKIGI's
+  # acceptance principles, so intake without one is rudderless.
+  if [[ $frq -eq 1 || $brd -eq 1 || $srd -eq 1 ]]; then akigi=1; fi
   if [[ $akigi -eq 1 ]]; then
     _render "$(_src AKIGI.md.tmpl)" "$PWD/AKIGI.md" "$force"
   fi
   if [[ $frq -eq 1 ]]; then
     _render "$(_src FRQ.md.tmpl)" "$PWD/FRQ.md" "$force"
+  fi
+  if [[ $brd -eq 1 ]]; then
+    _render "$(_src BRD.md.tmpl)" "$PWD/BRD.md" "$force"
+  fi
+  if [[ $srd -eq 1 ]]; then
+    _render "$(_src SRD.md.tmpl)" "$PWD/SRD.md" "$force"
   fi
   # Optional per-style seed files (extra documents shipped beyond the trio).
   # Some styles ship ARCHITECTURE.md / GAPS.md / CRITICS.md / STATUS.md /
@@ -697,7 +709,7 @@ cmd_check() {
   local q_atlas=false q_scars=false q_skill=false q_claude=false q_agents="missing"
   local q_loop_md=false q_roadmap=false
   local q_critics=false
-  local q_akigi=false q_frq=false
+  local q_akigi=false q_frq=false q_brd=false q_srd=false
 
   # --- ATLAS.md (SPEC §1/§2): MUST exist at root with a §0 quick-orientation.
   if [[ ! -f "$atlas" ]]; then
@@ -936,6 +948,28 @@ cmd_check() {
     [[ "$q_akigi" = true ]] \
       || _ck_warn FRQ_NO_AKIGI "FRQ.md present but no AKIGI.md — requests have no purpose contract to be triaged against (SPEC §11); 'atlas init --akigi'" "§11"
   fi
+  if [[ -f "$PWD/BRD.md" ]]; then
+    q_brd=true; _ck_ok "BRD.md present (bug disclosure intake)"
+    grep -qiE "^#+[[:space:]]+protocol" "$PWD/BRD.md" \
+      || _ck_warn BRD_NO_PROTOCOL "BRD.md has no Protocol section — disclosers can't know how to file (SPEC §11)" "§11"
+    grep -qiE "^#+[[:space:]]+index" "$PWD/BRD.md" \
+      || _ck_warn BRD_NO_INDEX "BRD.md has no Index section — open disclosures can't be tracked (SPEC §11)" "§11"
+    [[ "$q_akigi" = true ]] \
+      || _ck_warn BRD_NO_AKIGI "BRD.md present but no AKIGI.md — disclosures have no purpose contract to be triaged against (SPEC §11); 'atlas init --akigi'" "§11"
+  fi
+  if [[ -f "$PWD/SRD.md" ]]; then
+    q_srd=true; _ck_ok "SRD.md present (security disclosure intake)"
+    grep -qiE "^#+[[:space:]]+protocol" "$PWD/SRD.md" \
+      || _ck_warn SRD_NO_PROTOCOL "SRD.md has no Protocol section — disclosers can't know how to file (SPEC §11)" "§11"
+    grep -qiE "^#+[[:space:]]+index" "$PWD/SRD.md" \
+      || _ck_warn SRD_NO_INDEX "SRD.md has no Index section — disclosures can't be tracked (SPEC §11)" "§11"
+    # An SRD without a private channel invites exploit detail into a PUBLIC
+    # file — the opposite of responsible disclosure.
+    grep -qiE "private channel" "$PWD/SRD.md" \
+      || _ck_warn SRD_NO_CONTACT "SRD.md has no private channel — full security reports would land in a public file (SPEC §11)" "§11"
+    [[ "$q_akigi" = true ]] \
+      || _ck_warn SRD_NO_AKIGI "SRD.md present but no AKIGI.md — disclosures have no purpose contract to be triaged against (SPEC §11); 'atlas init --akigi'" "§11"
+  fi
 
   # --- emit -------------------------------------------------------------------
   if [[ $json -eq 1 ]]; then
@@ -943,12 +977,12 @@ cmd_check() {
     if [[ $errs -gt 0 ]]; then ok=false; fi
     if [[ $strict -eq 1 ]]; then strict_bool=true; if [[ $warns -gt 0 ]]; then ok=false; fi; fi
     if [[ $deep -eq 1 ]]; then deep_bool=true; fi
-    printf '{"ok":%s,"version":"%s","strict":%s,"deep":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s},"critics":%s,"akigi":%s,"frq":%s}\n' \
+    printf '{"ok":%s,"version":"%s","strict":%s,"deep":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s},"critics":%s,"akigi":%s,"frq":%s,"brd":%s,"srd":%s}\n' \
       "$ok" "$ATLAS_VERSION" "$strict_bool" "$deep_bool" "$errs" "$warns" \
       "$(_json_join ${errs_json[@]+"${errs_json[@]}"})" \
       "$(_json_join ${warns_json[@]+"${warns_json[@]}"})" \
       "$q_atlas" "$q_scars" "$q_skill" "$q_claude" "$q_agents" \
-      "$q_loop_md" "$q_roadmap" "$q_critics" "$q_akigi" "$q_frq"
+      "$q_loop_md" "$q_roadmap" "$q_critics" "$q_akigi" "$q_frq" "$q_brd" "$q_srd"
     [[ "$ok" == true ]] && exit 0
     exit 1
   fi
@@ -3045,6 +3079,8 @@ cmd_export() {
           [[ -f "$PWD/LOOP.md" ]] && echo "- [LOOP.md](LOOP.md): autonomous improvement loop — one iteration = pick the top [ROADMAP.md](ROADMAP.md) item by EV → implement → 'atlas check' → commit."
           [[ -f "$PWD/AKIGI.md" ]] && echo "- [AKIGI.md](AKIGI.md): purpose contract — why this repo exists, scope/non-goals, how incoming requests are triaged."
           [[ -f "$PWD/FRQ.md" ]] && echo "- [FRQ.md](FRQ.md): cross-agent feature-request queue — outside agents: read AKIGI.md first, then file your ask here."
+          [[ -f "$PWD/BRD.md" ]] && echo "- [BRD.md](BRD.md): bug disclosure intake for outside agents — broken behavior goes here (with evidence + repro)."
+          [[ -f "$PWD/SRD.md" ]] && echo "- [SRD.md](SRD.md): security disclosure — minimal public marker only; full detail via its private channel."
         } > "$PWD/llms.txt"
         _ok "llms.txt" ;;
       claude)

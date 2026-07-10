@@ -11,3 +11,5 @@ directory reads this file *first* and follows links to the exact
 - [LOOP.md](LOOP.md): autonomous improvement loop — one iteration = pick the top [ROADMAP.md](ROADMAP.md) item by EV → implement → 'atlas check' → commit.
 - [AKIGI.md](AKIGI.md): purpose contract — why this repo exists, scope/non-goals, how incoming requests are triaged.
 - [FRQ.md](FRQ.md): cross-agent feature-request queue — outside agents: read AKIGI.md first, then file your ask here.
+- [BRD.md](BRD.md): bug disclosure intake for outside agents — broken behavior goes here (with evidence + repro).
+- [SRD.md](SRD.md): security disclosure — minimal public marker only; full detail via its private channel.

@@ -798,6 +798,43 @@ TMP_AK8="$(mktemp -d)"; ( cd "$TMP_AK8" && git init -q -b main 2>/dev/null && "$
   && _pass "hook surfaces the AKIGI pointer + FRQ mention" || _fail "hook missing akigi/frq pointer"
 rm -rf "$TMP_AK8"
 
+# phase 2: init --intake scaffolds the full quartet (AKIGI+FRQ+BRD+SRD) and
+# passes --deep --strict; json reports all four true.
+TMP_AK9="$(mktemp -d)"; ( cd "$TMP_AK9" && git init -q -b main 2>/dev/null && "$CLI" init --intake >/dev/null 2>&1
+  [[ -f AKIGI.md && -f FRQ.md && -f BRD.md && -f SRD.md ]] \
+    && "$CLI" check --deep --strict >/dev/null 2>&1 \
+    && "$CLI" check --json | grep -q '"akigi":true,"frq":true,"brd":true,"srd":true' ) \
+  && _pass "init --intake scaffolds AKIGI+FRQ+BRD+SRD; passes --deep --strict" || _fail "init --intake"
+rm -rf "$TMP_AK9"
+
+# --brd alone implies --akigi (and nothing else); passes --deep --strict.
+TMP_AK10="$(mktemp -d)"; ( cd "$TMP_AK10" && git init -q -b main 2>/dev/null && "$CLI" init --brd >/dev/null 2>&1
+  [[ -f AKIGI.md && -f BRD.md && ! -f FRQ.md && ! -f SRD.md ]] \
+    && "$CLI" check --deep --strict >/dev/null 2>&1 ) \
+  && _pass "init --brd implies --akigi only; passes --deep --strict" || _fail "init --brd"
+rm -rf "$TMP_AK10"
+
+# bare BRD.md / SRD.md warn their section codes — incl. SRD_NO_CONTACT (an
+# SRD without a private channel invites exploit detail into a public file).
+TMP_AK11="$(mktemp -d)"; ( cd "$TMP_AK11" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# BRD\nbare\n' > BRD.md
+  printf '# SRD\nbare\n' > SRD.md
+  out="$("$CLI" check --json)"
+  echo "$out" | grep -q BRD_NO_PROTOCOL && echo "$out" | grep -q BRD_NO_INDEX \
+    && echo "$out" | grep -q BRD_NO_AKIGI && echo "$out" | grep -q SRD_NO_PROTOCOL \
+    && echo "$out" | grep -q SRD_NO_INDEX && echo "$out" | grep -q SRD_NO_CONTACT \
+    && echo "$out" | grep -q SRD_NO_AKIGI ) \
+  && _pass "bare BRD.md/SRD.md warn all section codes incl. SRD_NO_CONTACT" || _fail "BRD/SRD warnings not detected"
+rm -rf "$TMP_AK11"
+
+# llms.txt lists the whole quartet for outside-agent discovery.
+TMP_AK12="$(mktemp -d)"; ( cd "$TMP_AK12" && git init -q -b main 2>/dev/null && "$CLI" init --intake >/dev/null 2>&1
+  "$CLI" export --to llms-txt >/dev/null 2>&1
+  grep -q "AKIGI.md" llms.txt && grep -q "FRQ.md" llms.txt \
+    && grep -q "BRD.md" llms.txt && grep -q "SRD.md" llms.txt ) \
+  && _pass "llms.txt lists the full AKIGI+FRQ+BRD+SRD quartet" || _fail "llms.txt missing brd/srd"
+rm -rf "$TMP_AK12"
+
 # --- new commands (smoke) ------------------------------------------------
 echo ""
 echo "-- new commands --"

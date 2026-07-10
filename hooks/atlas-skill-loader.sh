@@ -143,6 +143,15 @@ if [[ -f "$AKIGI" ]]; then
     echo "FRQ.md is the cross-agent feature-request queue: triage open FRQs"
     echo "against the AKIGI; outside agents read the AKIGI before filing."
   fi
+  if [[ -f "$CWD/BRD.md" ]]; then
+    echo "BRD.md is the external bug-disclosure intake: triage open BRDs"
+    echo "(evidence + repro required); accepted ones graduate to the"
+    echo "internal BUGS.md flow."
+  fi
+  if [[ -f "$CWD/SRD.md" ]]; then
+    echo "SRD.md is the security-disclosure surface: NEVER triage it as an"
+    echo "agent — escalate to the maintainer; no exploit detail in public."
+  fi
   echo ""
 fi
 
