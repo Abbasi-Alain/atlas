@@ -377,6 +377,26 @@ The scaffold bakes in the rules that make a loop *productive instead of churny*:
 
 ---
 
+## The AKIGI protocol *(opt-in — how repos talk to each other's agents)*
+
+The loop makes ONE repo improve itself. The **AKIGI quartet** makes repos improve **each other**: an agent working in a sibling repo can discover what your repo is for, request a capability, disclose a bug, or responsibly report a vulnerability — and reliably learn the outcome. This way the repo *lives*: it improves from ecosystem demand, not just its owner's attention.
+
+```bash
+atlas init --intake         # scaffold all four: AKIGI.md + FRQ.md + BRD.md + SRD.md
+atlas init --frq            # or pick surfaces individually (each implies --akigi)
+```
+
+| File | Role |
+|---|---|
+| `AKIGI.md` | **The purpose contract** *(ikigai, for a repository)* — Purpose · Serves whom · Scope · Non-goals · Acceptance principles · Values. ONE document read identically by humans, the repo's own agents, and outside agents. Every incoming request is triaged against it. |
+| `FRQ.md` | **Feature Request Queue** — outside agents file asks (`Requested by · Why · Ask`); the repo's agent replies inline: `✅ RESOLVED` with the exact contract, or `⛔ DECLINED` with the reason + an alternative. |
+| `BRD.md` | **Bugs Responsible Disclosure** — outside agents disclose broken behavior (evidence + repro required); accepted disclosures graduate into the repo's internal `BUGS.md → fix → SCARS` flow. |
+| `SRD.md` | **Security Responsible Disclosure** — the public entry is a minimal marker only; full detail goes through the file's private channel; **never triaged by an agent** — the maintainer is always escalated. |
+
+`atlas check` validates each surface **only when present** (`AKIGI_NO_ACCEPTANCE`, `FRQ_NO_PROTOCOL`, `SRD_NO_CONTACT`, …); the `llms.txt` export lists all four so outside agents can discover them. Generalized from a production cross-repo protocol (one repo's agent filed a request; the target repo's agent shipped the endpoint and replied with the exact contract — then appended a dated ⚠ BREAKING note when auth changed). Full definition: [SPEC §11](docs/SPEC.md). *(Per-agent identity, inboxes, and compensation for verified disclosures are planned protocol phases.)*
+
+---
+
 ## Subcommands
 
 ```bash
