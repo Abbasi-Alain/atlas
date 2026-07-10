@@ -1015,6 +1015,69 @@ TMP_LB5="$(mktemp -d)"; ( cd "$TMP_LB5" && mkdir -p data docs
   && _pass "leaderboard --render errors when markers are missing" || _fail "leaderboard --render silently no-op'd without markers"
 rm -rf "$TMP_LB5"
 
+# 2026-07-10 critic finding #1: a START marker without its END marker must
+# hard-error and leave the file untouched — the awk state machine would
+# otherwise silently truncate everything after the start marker.
+TMP_LB6="$(mktemp -d)"; ( cd "$TMP_LB6" && mkdir -p data docs
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100,90,99,0.5.0,2026-01-01\n' > data/leaderboard.csv
+  printf 'intro\n<!-- leaderboard:start -->\nold\nTRAILING CONTENT\n' > docs/LEADERBOARD.md
+  ! "$CLI" leaderboard --render >/dev/null 2>&1 \
+    && grep -q "TRAILING CONTENT" docs/LEADERBOARD.md ) \
+  && _pass "a missing end marker hard-errors without truncating the file" || _fail "missing end marker truncated or silently passed"
+rm -rf "$TMP_LB6"
+
+# same guard on the auth path: a corrupted ~/.ssh/config marker pair must
+# hard-error, never truncate the user's own Host entries after the marker.
+FAKE_HOME_MB="$(mktemp -d)"
+HOME="$FAKE_HOME_MB" "$CLI" auth login --method ssh --email "t@t" >/dev/null 2>&1
+grep -v "# atlas-auth:end" "$FAKE_HOME_MB/.ssh/config" > "$FAKE_HOME_MB/.ssh/config.new" && mv "$FAKE_HOME_MB/.ssh/config.new" "$FAKE_HOME_MB/.ssh/config"
+printf 'Host usercustom\n  User me\n' >> "$FAKE_HOME_MB/.ssh/config"
+if HOME="$FAKE_HOME_MB" "$CLI" auth login --method ssh --email "t@t" >/dev/null 2>&1; then
+  _fail "auth login succeeded on a broken marker pair"
+else
+  grep -q "Host usercustom" "$FAKE_HOME_MB/.ssh/config" \
+    && _pass "auth login hard-errors on a broken marker pair without truncating config" \
+    || _fail "auth login truncated user content after broken marker"
+fi
+rm -rf "$FAKE_HOME_MB"
+
+# 2026-07-10 critic finding #3: a FAILED dispatch whose output happens to be
+# table-shaped (inside the fenced failure block) must NOT silence CRITICS_STALE.
+FAKE_BIN_CR18="$(mktemp -d)"
+cat > "$FAKE_BIN_CR18/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+echo "| 1 | partial table row before crash | high | - | - |"
+echo "error: auth token expired" >&2
+exit 42
+FAKECODEX
+chmod +x "$FAKE_BIN_CR18/codex"
+TMP_CR18="$(mktemp -d)"; ( cd "$TMP_CR18" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  printf '# ROADMAP\n- [ ] x\n## Done\n- [x] a\n- [x] b\n- [x] c\n' > ROADMAP.md
+  printf '# CRITICS\n' > CRITICS.md
+  PATH="$FAKE_BIN_CR18:$PATH" "$CLI" critique "fail with table output" >/dev/null 2>&1
+  "$CLI" check --json | grep -q CRITICS_STALE ) \
+  && _pass "table-shaped failure output (fenced) doesn't silence CRITICS_STALE" || _fail "fenced failure table silenced CRITICS_STALE"
+rm -rf "$TMP_CR18" "$FAKE_BIN_CR18"
+
+# 2026-07-10 critic finding #4: the 20KB cap must be measured in BYTES —
+# multibyte UTF-8 output (>20KB bytes, <20k characters) must still be capped.
+if command -v python3 >/dev/null 2>&1; then
+  FAKE_BIN_CR19="$(mktemp -d)"
+  cat > "$FAKE_BIN_CR19/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+python3 -c "print('\U0001F389' * 8000)"
+echo "FINAL_ANSWER_MARKER"
+FAKECODEX
+  chmod +x "$FAKE_BIN_CR19/codex"
+  TMP_CR19="$(mktemp -d)"; ( cd "$TMP_CR19" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+    PATH="$FAKE_BIN_CR19:$PATH" "$CLI" critique "utf8 cap" >/dev/null 2>&1
+    grep -q "truncated: showing the final" CRITICS.md && grep -q "FINAL_ANSWER_MARKER" CRITICS.md ) \
+    && _pass "the output cap is byte-based (UTF-8 transcript over 20KB bytes gets capped)" || _fail "UTF-8 transcript escaped the byte cap"
+  rm -rf "$TMP_CR19" "$FAKE_BIN_CR19"
+else
+  _pass "UTF-8 byte-cap test skipped (no python3)"
+fi
+
 # MCP router: deep tools light up + route when an ecosystem CLI (stub graphify) is on PATH
 if command -v python3 >/dev/null 2>&1; then
   GFD="$(mktemp -d)"; printf '#!/usr/bin/env bash\necho ok\n' > "$GFD/graphify"; chmod +x "$GFD/graphify"

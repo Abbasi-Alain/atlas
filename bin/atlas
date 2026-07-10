@@ -248,6 +248,35 @@ _bugs_md_linked() {
   grep -qE '\]\(<?(\./)?BUGS\.md>?(#[^) "]*)?([[:space:]]+"[^"]*")?\)' "$1" 2>/dev/null
 }
 
+# _replace_marker_block <file> <start-marker> <end-marker> <block-file>
+# Replace the marker-bounded block in <file> with <block-file>'s content
+# (which must itself carry the markers). The marker PAIR is validated first —
+# exactly one of each, start before end — and the file is left untouched
+# otherwise: the awk state machine skips from the start marker until it sees
+# the end marker, so a missing/duplicated end marker would silently TRUNCATE
+# everything after the start (2026-07-10 critic-stage finding #1 — reproduced
+# against both docs/LEADERBOARD.md and ~/.ssh/config before this guard).
+_replace_marker_block() {
+  local file="$1" s="$2" e="$3" block_file="$4"
+  local n_s n_e
+  n_s=$(grep -cxF "$s" "$file" 2>/dev/null || true)
+  n_e=$(grep -cxF "$e" "$file" 2>/dev/null || true)
+  if [[ "${n_s:-0}" -ne 1 || "${n_e:-0}" -ne 1 ]]; then
+    _die "marker pair broken in $file (found ${n_s:-0} × '$s', ${n_e:-0} × '$e'; need exactly 1 of each) — refusing to rewrite; repair the markers first"
+  fi
+  local l_s l_e
+  l_s=$(grep -nxF "$s" "$file" | head -1 | cut -d: -f1)
+  l_e=$(grep -nxF "$e" "$file" | head -1 | cut -d: -f1)
+  if [[ "$l_s" -ge "$l_e" ]]; then
+    _die "marker pair inverted in $file ('$s' line $l_s is not before '$e' line $l_e) — refusing to rewrite; repair the markers first"
+  fi
+  awk -v s="$s" -v e="$e" -v bf="$block_file" '
+    $0 == s { while ((getline line < bf) > 0) print line; close(bf); skipping = 1; next }
+    $0 == e { skipping = 0; next }
+    !skipping { print }
+  ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+}
+
 _render() {
   local in="$1" out="$2" force="${3:-0}"
   if [[ -e "$out" && "$force" != "1" ]]; then
@@ -851,7 +880,13 @@ cmd_check() {
       # throughout the templates (templates/CRITICS.md.tmpl's own example row
       # uses it), so counting placeholder rows as real critiques silenced
       # CRITICS_STALE on every fresh scaffold (RM-42, critic-stage finding #2).
+      # Fenced blocks are skipped entirely: captured raw critic output (incl.
+      # a FAILED dispatch's stderr) lives inside ``` fences and can contain
+      # table-shaped text that must never count as a logged critique
+      # (2026-07-10 critic-stage finding #3 — reproduced before this fix).
       critique_count=$(awk -F'|' '
+        /^```/ { infence = !infence; next }
+        infence { next }
         /^\|[[:space:]]*[0-9]+[[:space:]]*\|/ {
           cell=$3; gsub(/^[[:space:]]+|[[:space:]]+$/,"",cell)
           if (cell !~ /^_\(/) c++
@@ -1245,11 +1280,19 @@ End with 'Top 3 things to do BEFORE locking the ADR' as a bullet list."
   # dispatch that reads "CRITICS.md — prior objections" would pay the full
   # cost of every past one. Keep the TAIL (the final answer usually lands at
   # the end of a transcript), regardless of format (JSON events or plain text).
-  local raw_cap_bytes=20000
-  if [[ $dispatched -eq 1 && ${#raw_output} -gt $raw_cap_bytes ]]; then
-    local raw_total=${#raw_output} raw_tail
+  # The predicate must measure BYTES, not characters: `${#var}` counts
+  # characters under a UTF-8 locale, so a 32KB emoji transcript measured
+  # 8000 "characters" and skipped the cap entirely (2026-07-10 critic-stage
+  # finding #4 — reproduced before this fix). `tail -c` may split one
+  # multibyte character at the cut point; acceptable for a raw transcript.
+  local raw_cap_bytes=20000 raw_total_bytes=0
+  if [[ $dispatched -eq 1 ]]; then
+    raw_total_bytes=$(printf '%s' "$raw_output" | wc -c | tr -d ' ')
+  fi
+  if [[ $dispatched -eq 1 && "${raw_total_bytes:-0}" -gt $raw_cap_bytes ]]; then
+    local raw_tail
     raw_tail="$(printf '%s' "$raw_output" | tail -c "$raw_cap_bytes")"
-    raw_output="[...truncated: showing the final ${raw_cap_bytes} of ${raw_total} bytes captured...]
+    raw_output="[...truncated: showing the final ${raw_cap_bytes} of ${raw_total_bytes} bytes captured...]
 ${raw_tail}"
   fi
 
@@ -2322,17 +2365,13 @@ $marker_end
 EOF
 )
   if grep -q "$marker_start" "$cfg"; then
-    # Replace the existing block. A multi-line value via awk -v is unreliable
-    # on macOS's default (one-true-awk) /usr/bin/awk ("newline in string") —
-    # write the block to a temp file and stream it in via getline instead
-    # (the same fix RM-9 needed for the leaderboard renderer, ported here).
+    # Replace the existing block via the pair-validating helper — a broken
+    # marker pair must hard-error rather than truncate the user's SSH config
+    # (§AWK-MULTILINE-V for the temp-file/getline part; 2026-07-10 critic
+    # finding #1 for the pair validation).
     local block_file; block_file="$(mktemp)"
     printf '%s\n' "$block" > "$block_file"
-    awk -v s="$marker_start" -v e="$marker_end" -v bf="$block_file" '
-      $0 == s { while ((getline line < bf) > 0) print line; close(bf); skipping = 1; next }
-      $0 == e { skipping = 0; next }
-      !skipping { print }
-    ' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+    _replace_marker_block "$cfg" "$marker_start" "$marker_end" "$block_file"
     rm -f "$block_file"
     _say "updated $cfg (atlas-auth block replaced)"
   else
@@ -2806,10 +2845,9 @@ cmd_leaderboard() {
   grep -q "$marker_start" "$md" \
     || _die "docs/LEADERBOARD.md has no $marker_start marker — add it around the table first"
 
-  # Write the new block to a temp file and have awk stream it in via getline —
-  # passing a MULTI-LINE value through -v is unreliable on macOS's default
-  # (one-true-awk) /usr/bin/awk ("newline in string"); a file is portable
-  # across every awk variant.
+  # Replace via the pair-validating helper (temp file + getline for
+  # §AWK-MULTILINE-V; pair validation so a missing end marker hard-errors
+  # instead of truncating everything after the start marker).
   local block_file; block_file="$(mktemp)"
   {
     printf '%s\n' "$marker_start"
@@ -2818,11 +2856,7 @@ cmd_leaderboard() {
     printf '%s\n' "$table"
     printf '%s\n' "$marker_end"
   } > "$block_file"
-  awk -v s="$marker_start" -v e="$marker_end" -v bf="$block_file" '
-    $0 == s { while ((getline line < bf) > 0) print line; close(bf); skipping = 1; next }
-    $0 == e { skipping = 0; next }
-    !skipping { print }
-  ' "$md" > "$md.tmp" && mv "$md.tmp" "$md"
+  _replace_marker_block "$md" "$marker_start" "$marker_end" "$block_file"
   rm -f "$block_file"
   local n_rows; n_rows=$(( $(wc -l < "$csv" | tr -d ' ') - 1 ))
   _ok "regenerated docs/LEADERBOARD.md table from data/leaderboard.csv ($n_rows row(s))"
