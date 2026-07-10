@@ -8,6 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+_(nothing yet)_
+
+## [0.6.0] — 2026-07-10
+
+> **The AKIGI protocol v0** — this release ships the cross-repo agent
+> collaboration quartet (AKIGI + FRQ + BRD + SRD): the first release of the
+> protocol by which a repo *lives*, improving from ecosystem demand. Plus the
+> EXECUTOR PACK cross-model handoff, capability tiers, the leaderboard
+> dataset, and two full cross-vendor critic-review cycles' worth of
+> correctness fixes.
+
 ### Added
 
 - **`BUGS.md` — the open-issues register, an OPTIONAL surface (SPEC §9).** The SCARS antechamber: issues that are open and known but not yet understood (symptom · evidence · suspicion · owner ticket), with a graduation convention (fixed issues strike through and move to a `SCARS.md` `§ANCHOR`). `atlas init --bugs` scaffolds `templates/BUGS.md.tmpl` already linked from `ATLAS.md`, with the entry-shape example fenced outside `## Open` so a fresh scaffold ships zero fake issues. `atlas check` validates `BUGS.md` **only when present**: a `BUGS.md` that is not git-ignored (public) and not referenced from `ATLAS.md` by a real Markdown link warns (`BUGS_MD_UNLINKED`) — a plain-text mention of the filename is not a link and does not suppress the warning; a git-ignored `BUGS.md` (a repo's private choice) is skipped. The SessionStart hook surfaces a one-line "check BUGS.md before debugging" pointer when a repo has one. A repo without `BUGS.md` is fully unaffected.

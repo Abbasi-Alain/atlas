@@ -130,7 +130,7 @@
 
 set -euo pipefail
 
-ATLAS_VERSION="0.5.0"
+ATLAS_VERSION="0.6.0"
 
 # --- color + logo --------------------------------------------------------
 # Auto-disabled if NO_COLOR is set, stdout is not a TTY, or ATLAS_NO_COLOR=1.
