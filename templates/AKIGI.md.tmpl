@@ -1,0 +1,51 @@
+# AKIGI — why {{PROJECT_NAME}} exists
+
+> **What this is.** The repo's purpose contract — its *ikigai*. ONE document,
+> read the same way by three audiences: **humans** deciding whether to adopt
+> or contribute, **this repo's own agents** triaging what to build next, and
+> **outside agents** (from sibling repos) deciding whether — and how — to ask
+> this repo for something. If a request doesn't serve the Purpose below, it
+> gets declined, no matter how good it is; that's what makes autonomous
+> triage trustworthy. Requests are filed in [`FRQ.md`](FRQ.md) (SPEC §11).
+
+## Purpose
+
+_(One paragraph: the single problem this repo exists to solve, and the world
+in which it has succeeded. Write it so a stranger — human or agent — can
+predict what you'd say yes to.)_
+
+## Serves whom
+
+- _(Who consumes this repo: which people, which sibling repos/services, which
+  agents. Name them — "proxima-meme's finance oracle", not "users".)_
+
+## Scope / Non-goals
+
+**In scope:**
+- _(The capability areas this repo owns.)_
+
+**Non-goals (will be declined even if well-argued):**
+- _(The adjacent things this repo deliberately does NOT do — the sharpest
+  triage signal you can give an outside requester.)_
+
+## Acceptance principles
+
+How incoming requests ([`FRQ.md`](FRQ.md)) are triaged, in order:
+
+1. **Purpose-fit first.** A request that serves the Purpose and lands In
+   scope may be auto-accepted by this repo's own agent; anything touching a
+   Non-goal is declined with the reason and a recommended alternative.
+2. **Evidence over assertion.** A request must state the concrete blocker
+   (what fails today, with evidence) — not just the wish.
+3. **Escalation line.** _(What the repo's agent may decide alone vs what
+   must wait for the maintainer — e.g. "new public API surface: agent
+   decides; anything touching auth/payments/release: maintainer only".)_
+4. **Reply always.** Every request gets an inline disposition (resolved /
+   declined with rationale) — a request that never hears back breaks the
+   cross-repo loop.
+
+## Values / constraints
+
+- _(Optional: the standing constraints that shape every decision — e.g.
+  "zero runtime dependencies", "research scope only, never touches live
+  trading", "public API stays backward-compatible within a major".)_

@@ -2,13 +2,17 @@
 # atlas — CLI for the ATLAS project-map standard.
 #
 # Subcommands:
-#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs] [--critics]
+#   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs] [--critics] [--akigi] [--frq]
 #                                     (--loop also scaffolds LOOP.md + ROADMAP.md,
 #                                     the optional autonomous-loop 5th surface)
 #                                     (--bugs scaffolds BUGS.md, the optional
 #                                     open-issues register, linked from ATLAS.md)
 #                                     (--critics scaffolds CRITICS.md, the optional
 #                                     cross-vendor second-opinion log)
+#                                     (--akigi scaffolds AKIGI.md, the purpose
+#                                     contract; --frq scaffolds FRQ.md, the
+#                                     cross-agent feature-request queue — and
+#                                     implies --akigi)
 #                                     bootstrap ATLAS.md + SKILL.md + SCARS.md
 #                                     + CLAUDE.md + AGENTS.md + EXAMPLES.md (+ seeds).
 #                                     --analyze scans the repo + pre-fills the map.
@@ -442,7 +446,7 @@ ${inv}"
 }
 
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0
+  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 akigi=0 frq=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f)  force=1; shift ;;
@@ -450,6 +454,8 @@ cmd_init() {
       --loop)      loop=1; shift ;;
       --bugs)      bugs=1; shift ;;
       --critics)   critics=1; shift ;;
+      --akigi)     akigi=1; shift ;;
+      --frq)       frq=1; shift ;;
       --style)     style="${2:-default}"; shift 2 ;;
       --style=*)   style="${1#--style=}"; shift ;;
       --stack)     stacks="${2:-}"; shift 2 ;;
@@ -512,6 +518,17 @@ cmd_init() {
   # missing-only like the quartet. `atlas critique` appends rows to it.
   if [[ $critics -eq 1 ]]; then
     _render "$(_src CRITICS.md.tmpl)" "$PWD/CRITICS.md" "$force"
+  fi
+  # Optional cross-repo collaboration surfaces (SPEC §11): AKIGI.md (the
+  # purpose contract) + FRQ.md (the cross-agent feature-request queue).
+  # --frq implies the AKIGI too — the FRQ protocol is triaged AGAINST the
+  # AKIGI's acceptance principles, so an FRQ without one is rudderless.
+  if [[ $frq -eq 1 ]]; then akigi=1; fi
+  if [[ $akigi -eq 1 ]]; then
+    _render "$(_src AKIGI.md.tmpl)" "$PWD/AKIGI.md" "$force"
+  fi
+  if [[ $frq -eq 1 ]]; then
+    _render "$(_src FRQ.md.tmpl)" "$PWD/FRQ.md" "$force"
   fi
   # Optional per-style seed files (extra documents shipped beyond the trio).
   # Some styles ship ARCHITECTURE.md / GAPS.md / CRITICS.md / STATUS.md /
@@ -680,6 +697,7 @@ cmd_check() {
   local q_atlas=false q_scars=false q_skill=false q_claude=false q_agents="missing"
   local q_loop_md=false q_roadmap=false
   local q_critics=false
+  local q_akigi=false q_frq=false
 
   # --- ATLAS.md (SPEC §1/§2): MUST exist at root with a §0 quick-orientation.
   if [[ ! -f "$atlas" ]]; then
@@ -899,18 +917,38 @@ cmd_check() {
     fi
   fi
 
+  # --- AKIGI.md + FRQ.md (SPEC §11): OPTIONAL cross-repo collaboration
+  # surfaces — the purpose contract + the cross-agent feature-request queue.
+  # Validated only when present; a repo without them is fully unaffected.
+  if [[ -f "$PWD/AKIGI.md" ]]; then
+    q_akigi=true; _ck_ok "AKIGI.md present (purpose contract)"
+    grep -qiE "^#+[[:space:]].*acceptance" "$PWD/AKIGI.md" \
+      || _ck_warn AKIGI_NO_ACCEPTANCE "AKIGI.md has no Acceptance-principles section — incoming requests can't be triaged against it (SPEC §11)" "§11"
+  fi
+  if [[ -f "$PWD/FRQ.md" ]]; then
+    q_frq=true; _ck_ok "FRQ.md present (feature-request queue)"
+    grep -qiE "^#+[[:space:]]+protocol" "$PWD/FRQ.md" \
+      || _ck_warn FRQ_NO_PROTOCOL "FRQ.md has no Protocol section — requesters can't know how to file (SPEC §11)" "§11"
+    grep -qiE "^#+[[:space:]]+index" "$PWD/FRQ.md" \
+      || _ck_warn FRQ_NO_INDEX "FRQ.md has no Index section — open requests can't be tracked (SPEC §11)" "§11"
+    # The FRQ protocol triages against the AKIGI's acceptance principles —
+    # an FRQ without an AKIGI has no criterion to triage by.
+    [[ "$q_akigi" = true ]] \
+      || _ck_warn FRQ_NO_AKIGI "FRQ.md present but no AKIGI.md — requests have no purpose contract to be triaged against (SPEC §11); 'atlas init --akigi'" "§11"
+  fi
+
   # --- emit -------------------------------------------------------------------
   if [[ $json -eq 1 ]]; then
     local ok=true strict_bool=false deep_bool=false
     if [[ $errs -gt 0 ]]; then ok=false; fi
     if [[ $strict -eq 1 ]]; then strict_bool=true; if [[ $warns -gt 0 ]]; then ok=false; fi; fi
     if [[ $deep -eq 1 ]]; then deep_bool=true; fi
-    printf '{"ok":%s,"version":"%s","strict":%s,"deep":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s},"critics":%s}\n' \
+    printf '{"ok":%s,"version":"%s","strict":%s,"deep":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s},"critics":%s,"akigi":%s,"frq":%s}\n' \
       "$ok" "$ATLAS_VERSION" "$strict_bool" "$deep_bool" "$errs" "$warns" \
       "$(_json_join ${errs_json[@]+"${errs_json[@]}"})" \
       "$(_json_join ${warns_json[@]+"${warns_json[@]}"})" \
       "$q_atlas" "$q_scars" "$q_skill" "$q_claude" "$q_agents" \
-      "$q_loop_md" "$q_roadmap" "$q_critics"
+      "$q_loop_md" "$q_roadmap" "$q_critics" "$q_akigi" "$q_frq"
     [[ "$ok" == true ]] && exit 0
     exit 1
   fi
@@ -3005,6 +3043,8 @@ cmd_export() {
           [[ -n "$skill" ]] && echo "- ${skill#"$PWD"/}: procedural playbook — how to run, test, and do common tasks here."
           echo "- [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md): behavioral contract for coding agents."
           [[ -f "$PWD/LOOP.md" ]] && echo "- [LOOP.md](LOOP.md): autonomous improvement loop — one iteration = pick the top [ROADMAP.md](ROADMAP.md) item by EV → implement → 'atlas check' → commit."
+          [[ -f "$PWD/AKIGI.md" ]] && echo "- [AKIGI.md](AKIGI.md): purpose contract — why this repo exists, scope/non-goals, how incoming requests are triaged."
+          [[ -f "$PWD/FRQ.md" ]] && echo "- [FRQ.md](FRQ.md): cross-agent feature-request queue — outside agents: read AKIGI.md first, then file your ask here."
         } > "$PWD/llms.txt"
         _ok "llms.txt" ;;
       claude)

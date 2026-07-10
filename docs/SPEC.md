@@ -443,3 +443,70 @@ print-only prompt (unchanged from the base surface) when no critic CLI is
 installed — `--no-auto` forces print-only even when one is, and
 `--with-codex`/`--with-claude` force a specific critic. Reported under
 `"critics"` in `--json`.
+
+---
+
+## 11. AKIGI.md + FRQ.md — cross-repo agent collaboration (OPTIONAL surfaces)
+
+Multi-repo agent ecosystems need two things a single repo's quartet doesn't
+give: a durable statement of **why this repo exists** that outsiders can triage
+against, and a **standard inbox** where an agent working in a *sibling* repo
+can request a capability from this one — and reliably learn the outcome.
+
+### AKIGI.md — the purpose contract
+
+One document, read identically by three audiences: humans deciding whether to
+adopt, this repo's own agents triaging what to build, and outside agents
+framing a request (concept: *ikigai*, for a repository).
+
+- `AKIGI.md` is OPTIONAL and lives at the repo root when present.
+- Sections: **Purpose** (the one problem this repo solves) · **Serves whom**
+  (named consumers, not "users") · **Scope / Non-goals** (Non-goals are the
+  sharpest triage signal) · **Acceptance principles** (REQUIRED — how incoming
+  requests are triaged: purpose-fit first, evidence over assertion, the
+  escalation line between what the repo's agent may decide alone and what
+  waits for the maintainer, and reply-always) · optional
+  **Values / constraints**.
+- `atlas init --akigi` scaffolds `templates/AKIGI.md.tmpl`. `atlas check`
+  (only when present) warns `AKIGI_NO_ACCEPTANCE` when no Acceptance section
+  exists — a purpose contract that can't triage is decoration. The
+  SessionStart hook surfaces a one-line pointer; the `llms.txt` export lists
+  `AKIGI.md` so outside agents can discover it.
+
+### FRQ.md — the Feature Request Queue
+
+The cross-agent inbox, generalized from a production protocol (an agent in one
+repo filed a request; the target repo's agent shipped the endpoint and replied
+inline with the exact contract, later appending a dated **⚠ BREAKING** notice
+when auth changed — the requester's agent picked each update up on its next
+read).
+
+- `FRQ.md` is OPTIONAL and lives at the repo root when present. A request is a
+  *new capability*; *broken existing behavior* is a bug report, not an FRQ.
+- **Protocol** (both roles in the file itself): the requesting agent reads
+  `AKIGI.md` FIRST, then appends `## FRQ-NNN — <title> (YYYY-MM-DD)` with
+  **Requested by** · **Why** (the concrete blocker, with evidence) · **Ask**
+  (the exact capability/shape), and adds an Index row with status `🕒 open`.
+  The owning agent triages open FRQs against the AKIGI's acceptance
+  principles and appends `### ✅ RESOLVED FRQ-NNN` (the concrete surface:
+  endpoint/command, request/response shape, errors, auth, how-to-wire) or
+  `### ⛔ DECLINED FRQ-NNN` (reason citing the AKIGI + recommended
+  alternative), flipping the Index row. Contract changes to a shipped FRQ get
+  a dated **⚠ BREAKING** note appended to its RESOLVED subsection.
+- **Index**: a table (*FRQ · Title · Requester · Status*) so open requests are
+  scannable in one read.
+- `atlas init --frq` scaffolds `templates/FRQ.md.tmpl` **and implies
+  `--akigi`** — an FRQ without a purpose contract has no triage criterion.
+  `atlas check` (only when present) warns `FRQ_NO_PROTOCOL` / `FRQ_NO_INDEX`
+  on a file missing those sections, and `FRQ_NO_AKIGI` when `FRQ.md` exists
+  without `AKIGI.md`. Listed in the `llms.txt` export. Reported with
+  `"akigi"`/`"frq"` in `check --json`.
+
+### Reserved phase-2 names (declared, NOT yet validated)
+
+**BRD.md** (Bugs Responsible Disclosure) and **SRD.md** (Security Responsible
+Disclosure) are the reserved intake names for defects and security reports
+from outside agents. They are *not yet scaffolded or validated by the CLI* —
+this section only reserves the names and the split (FRQ = asks · BRD =
+defects · SRD = security, never auto-triaged). A repo may adopt the names
+early; `atlas check` says nothing about them today.

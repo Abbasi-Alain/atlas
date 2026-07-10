@@ -734,6 +734,70 @@ TMP_T7="$(mktemp -d)"; ( cd "$TMP_T7" && git init -q -b main 2>/dev/null && "$CL
   && _pass "an unmapped tier tag in the active queue still warns" || _fail "active unmapped tier tag didn't warn"
 rm -rf "$TMP_T7"
 
+# --- RM-46: AKIGI.md + FRQ.md (cross-repo agent collaboration, SPEC §11) --
+echo ""
+echo "-- AKIGI.md + FRQ.md (init --akigi / --frq / check) --"
+
+# init --akigi scaffolds AKIGI.md only; passes --deep --strict; json reports it.
+TMP_AK1="$(mktemp -d)"; ( cd "$TMP_AK1" && git init -q -b main 2>/dev/null && "$CLI" init --akigi >/dev/null 2>&1
+  [[ -f AKIGI.md && ! -f FRQ.md ]] \
+    && "$CLI" check --deep --strict >/dev/null 2>&1 \
+    && "$CLI" check --json | grep -q '"akigi":true,"frq":false' ) \
+  && _pass "init --akigi scaffolds AKIGI.md, passes --deep --strict, json reports it" || _fail "init --akigi"
+rm -rf "$TMP_AK1"
+
+# init --frq implies --akigi (an FRQ without a purpose contract is rudderless).
+TMP_AK2="$(mktemp -d)"; ( cd "$TMP_AK2" && git init -q -b main 2>/dev/null && "$CLI" init --frq >/dev/null 2>&1
+  [[ -f AKIGI.md && -f FRQ.md ]] \
+    && "$CLI" check --deep --strict >/dev/null 2>&1 \
+    && "$CLI" check --json | grep -q '"akigi":true,"frq":true' ) \
+  && _pass "init --frq scaffolds FRQ.md AND implies --akigi; passes --deep --strict" || _fail "init --frq"
+rm -rf "$TMP_AK2"
+
+# a repo without either file is fully unaffected.
+TMP_AK3="$(mktemp -d)"; ( cd "$TMP_AK3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" check --json | grep -q '"akigi":false,"frq":false' \
+    && ! "$CLI" check --json | grep -qE 'AKIGI_|FRQ_' ) \
+  && _pass "no-akigi/no-frq repo unaffected" || _fail "akigi/frq opt-in leak"
+rm -rf "$TMP_AK3"
+
+# an AKIGI.md with no Acceptance section warns AKIGI_NO_ACCEPTANCE.
+TMP_AK4="$(mktemp -d)"; ( cd "$TMP_AK4" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# AKIGI\n\n## Purpose\nx\n' > AKIGI.md
+  "$CLI" check --json | grep -q AKIGI_NO_ACCEPTANCE ) \
+  && _pass "AKIGI.md without an Acceptance section warns" || _fail "AKIGI_NO_ACCEPTANCE not detected"
+rm -rf "$TMP_AK4"
+
+# an FRQ.md missing Protocol/Index warns both; FRQ without AKIGI warns too.
+TMP_AK5="$(mktemp -d)"; ( cd "$TMP_AK5" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# FRQ\nno sections\n' > FRQ.md
+  out="$("$CLI" check --json)"
+  echo "$out" | grep -q FRQ_NO_PROTOCOL && echo "$out" | grep -q FRQ_NO_INDEX \
+    && echo "$out" | grep -q FRQ_NO_AKIGI ) \
+  && _pass "bare FRQ.md warns FRQ_NO_PROTOCOL + FRQ_NO_INDEX + FRQ_NO_AKIGI" || _fail "FRQ warnings not detected"
+rm -rf "$TMP_AK5"
+
+# adding an AKIGI.md silences FRQ_NO_AKIGI (but section warnings stay honest).
+TMP_AK6="$(mktemp -d)"; ( cd "$TMP_AK6" && git init -q -b main 2>/dev/null && "$CLI" init --akigi >/dev/null 2>&1
+  printf '# FRQ\nno sections\n' > FRQ.md
+  ! "$CLI" check --json | grep -q FRQ_NO_AKIGI ) \
+  && _pass "AKIGI.md presence silences FRQ_NO_AKIGI" || _fail "FRQ_NO_AKIGI wrongly persists"
+rm -rf "$TMP_AK6"
+
+# the llms.txt export lists AKIGI.md + FRQ.md when present (outside-agent discovery).
+TMP_AK7="$(mktemp -d)"; ( cd "$TMP_AK7" && git init -q -b main 2>/dev/null && "$CLI" init --frq >/dev/null 2>&1
+  "$CLI" export --to llms-txt >/dev/null 2>&1
+  grep -q "AKIGI.md" llms.txt && grep -q "FRQ.md" llms.txt ) \
+  && _pass "llms.txt lists AKIGI.md + FRQ.md for outside-agent discovery" || _fail "llms.txt missing akigi/frq"
+rm -rf "$TMP_AK7"
+
+# the SessionStart hook surfaces the AKIGI pointer (and mentions FRQ when present).
+TMP_AK8="$(mktemp -d)"; ( cd "$TMP_AK8" && git init -q -b main 2>/dev/null && "$CLI" init --frq >/dev/null 2>&1
+  out="$(cd "$TMP_AK8" && bash "$ATLAS_HOME/hooks/atlas-skill-loader.sh")"
+  echo "$out" | grep -q "AKIGI.md (purpose contract)" && echo "$out" | grep -q "FRQ.md is the cross-agent" ) \
+  && _pass "hook surfaces the AKIGI pointer + FRQ mention" || _fail "hook missing akigi/frq pointer"
+rm -rf "$TMP_AK8"
+
 # --- new commands (smoke) ------------------------------------------------
 echo ""
 echo "-- new commands --"

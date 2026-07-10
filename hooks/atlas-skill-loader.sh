@@ -21,6 +21,8 @@
 #   - PACK:    a one-line pointer (only if ROADMAP.md has an EXECUTOR PACK block)
 #   - BUGS:    a one-line pointer (only if the repo has an open-issues register)
 #   - CRITICS: a one-line pointer (only if the repo has a second-opinion log)
+#   - AKIGI:   a one-line pointer (only if the repo has a purpose contract;
+#              mentions FRQ.md when the feature-request queue is present too)
 #
 # Sub-agents do NOT inherit this hook; their parent must include a
 # "read ATLAS.md, SCARS.md, and SKILL.md first" instruction in the prompt.
@@ -126,6 +128,21 @@ if [[ -f "$CRITICS" ]]; then
   echo "before a non-trivial decision ships, run 'atlas critique \"<topic>\"'"
   echo "for a cross-vendor adversarial pass — check CRITICS.md for prior"
   echo "objections first so you don't repeat one already raised."
+  echo ""
+fi
+
+AKIGI="$CWD/AKIGI.md"
+if [[ -f "$AKIGI" ]]; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "AKIGI.md (purpose contract) detected at $AKIGI"
+  echo "================================================================"
+  echo "this repo's raison d'être: purpose, scope/non-goals, and the"
+  echo "acceptance principles incoming requests are triaged against."
+  if [[ -f "$CWD/FRQ.md" ]]; then
+    echo "FRQ.md is the cross-agent feature-request queue: triage open FRQs"
+    echo "against the AKIGI; outside agents read the AKIGI before filing."
+  fi
   echo ""
 fi
 
