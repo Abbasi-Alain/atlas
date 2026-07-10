@@ -667,6 +667,25 @@ TMP_EP6="$(mktemp -d)"; ( cd "$TMP_EP6" && git init -q -b main 2>/dev/null && "$
   && _pass "a DoD-only anchor citation (outside the trap-sheet) doesn't satisfy the check" || _fail "DoD-only citation wrongly satisfied the check"
 rm -rf "$TMP_EP6"
 
+# RM-45 (critic finding #2): a degenerate pack — heading + trap-sheet + one
+# real anchor but NONE of the other four SPEC fields — must warn, naming the
+# missing fields.
+TMP_EP7="$(mktemp -d)"; ( cd "$TMP_EP7" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  REAL="$(grep -oE '^### §[A-Z0-9-]+' SCARS.md | head -1 | sed 's/### //')"
+  printf '# ROADMAP\n\n## EXECUTOR PACK\ntrap-sheet: %s\n\n- [ ] x\n## Done\n- [x] a\n' "$REAL" > ROADMAP.md
+  out="$("$CLI" check --deep --json)"
+  echo "$out" | grep -q EXECUTOR_PACK_MISSING \
+    && echo "$out" | grep -q "definition of done" ) \
+  && _pass "a degenerate pack (trap-sheet+anchor only) warns, naming missing fields" || _fail "degenerate pack wrongly passed"
+rm -rf "$TMP_EP7"
+
+# the five-marker match survives line wraps (the template's own 'definition
+# of done' wraps across lines — a line-based grep would false-warn).
+TMP_EP8="$(mktemp -d)"; ( cd "$TMP_EP8" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  ! "$CLI" check --deep --json | grep -q EXECUTOR_PACK_MISSING ) \
+  && _pass "five-marker match is line-wrap tolerant (fresh template passes)" || _fail "line-wrapped field name false-warned"
+rm -rf "$TMP_EP8"
+
 # --- RM-26: capability tiers (atlas check UNMAPPED_TIER_TAG) --------------
 echo ""
 echo "-- capability tiers (atlas check UNMAPPED_TIER_TAG) --"
@@ -733,6 +752,17 @@ TMP_T7="$(mktemp -d)"; ( cd "$TMP_T7" && git init -q -b main 2>/dev/null && "$CL
   "$CLI" check --json | grep -q 'UNMAPPED_TIER_TAG.*quantum' ) \
   && _pass "an unmapped tier tag in the active queue still warns" || _fail "active unmapped tier tag didn't warn"
 rm -rf "$TMP_T7"
+
+# RM-45 (critic finding #6): a tier mention in plain PROSE (a heading/notes
+# paragraph, not a ticket record) must not warn; a tag inside a ticket's
+# indented continuation lines must.
+TMP_T8="$(mktemp -d)"; ( cd "$TMP_T8" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  printf '\n## Model tier mapping\n\n| tier | model |\n|---|---|\n| fast | A |\n' >> LOOP.md
+  awk '/^## Done/{print "## Notes\nprose mentioning tier: quantum in passing\n\n- [ ] real ticket\n  - impact: x · tier: photon\n"} {print}' ROADMAP.md > R.new && mv R.new ROADMAP.md
+  out="$("$CLI" check --json)"
+  ! echo "$out" | grep -q "quantum" && echo "$out" | grep -q "photon" ) \
+  && _pass "prose tier mention ignored; ticket-continuation tier tag warns" || _fail "tier scan not ticket-scoped"
+rm -rf "$TMP_T8"
 
 # --- RM-46: AKIGI.md + FRQ.md (cross-repo agent collaboration, SPEC §11) --
 echo ""
@@ -1070,7 +1100,7 @@ echo "-- atlas leaderboard --render --"
 # surrounding content, with no stderr noise (macOS's default awk warns on
 # multi-line -v values — the temp-file/getline approach must avoid that).
 TMP_LB1="$(mktemp -d)"; ( cd "$TMP_LB1" && mkdir -p data docs
-  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100,90,99,0.5.0,2026-01-01\n' > data/leaderboard.csv
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc1234,10,1000,100,90,99,0.5.0,2026-01-01\n' > data/leaderboard.csv
   printf 'intro\n<!-- leaderboard:start -->\nold\n<!-- leaderboard:end -->\noutro\n' > docs/LEADERBOARD.md
   out="$("$CLI" leaderboard --render 2>&1)"
   ! echo "$out" | grep -qi "awk:" \
@@ -1082,7 +1112,7 @@ rm -rf "$TMP_LB1"
 
 # multiple rows all render; re-running is idempotent (same output twice).
 TMP_LB2="$(mktemp -d)"; ( cd "$TMP_LB2" && mkdir -p data docs
-  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100,90,99,0.5.0,2026-01-01\nbaz/qux,def456,50,5000,300,90,94,0.5.0,2026-02-02\n' > data/leaderboard.csv
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc1234,10,1000,100,90,99,0.5.0,2026-01-01\nbaz/qux,def4567,50,5000,300,90,94,0.5.0,2026-02-02\n' > data/leaderboard.csv
   printf '<!-- leaderboard:start -->\n<!-- leaderboard:end -->\n' > docs/LEADERBOARD.md
   "$CLI" leaderboard --render >/dev/null 2>&1
   out1="$(cat docs/LEADERBOARD.md)"
@@ -1102,7 +1132,7 @@ rm -rf "$TMP_LB3"
 
 # a malformed row (wrong field count) is a hard error.
 TMP_LB4="$(mktemp -d)"; ( cd "$TMP_LB4" && mkdir -p data docs
-  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100\n' > data/leaderboard.csv
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc1234,10,1000,100\n' > data/leaderboard.csv
   printf '<!-- leaderboard:start -->\n<!-- leaderboard:end -->\n' > docs/LEADERBOARD.md
   ! "$CLI" leaderboard --render >/dev/null 2>&1 ) \
   && _pass "leaderboard --render rejects a malformed row" || _fail "leaderboard --render accepted malformed row"
@@ -1110,7 +1140,7 @@ rm -rf "$TMP_LB4"
 
 # a docs/LEADERBOARD.md with no markers is a clear error, not silent no-op.
 TMP_LB5="$(mktemp -d)"; ( cd "$TMP_LB5" && mkdir -p data docs
-  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100,90,99,0.5.0,2026-01-01\n' > data/leaderboard.csv
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc1234,10,1000,100,90,99,0.5.0,2026-01-01\n' > data/leaderboard.csv
   printf '# no markers here\n' > docs/LEADERBOARD.md
   ! "$CLI" leaderboard --render >/dev/null 2>&1 ) \
   && _pass "leaderboard --render errors when markers are missing" || _fail "leaderboard --render silently no-op'd without markers"
@@ -1120,12 +1150,34 @@ rm -rf "$TMP_LB5"
 # hard-error and leave the file untouched — the awk state machine would
 # otherwise silently truncate everything after the start marker.
 TMP_LB6="$(mktemp -d)"; ( cd "$TMP_LB6" && mkdir -p data docs
-  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc123,10,1000,100,90,99,0.5.0,2026-01-01\n' > data/leaderboard.csv
+  printf 'repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date\nfoo/bar,abc1234,10,1000,100,90,99,0.5.0,2026-01-01\n' > data/leaderboard.csv
   printf 'intro\n<!-- leaderboard:start -->\nold\nTRAILING CONTENT\n' > docs/LEADERBOARD.md
   ! "$CLI" leaderboard --render >/dev/null 2>&1 \
     && grep -q "TRAILING CONTENT" docs/LEADERBOARD.md ) \
   && _pass "a missing end marker hard-errors without truncating the file" || _fail "missing end marker truncated or silently passed"
 rm -rf "$TMP_LB6"
+
+# RM-45 (critic finding #5): adversarial CSV values hard-error with the field
+# named — non-numeric counts, out-of-range/inverted percents, pipe injection,
+# a non-hex commit, a bad date; a well-typed row still renders.
+TMP_LB7="$(mktemp -d)"; ( cd "$TMP_LB7" && mkdir -p data docs
+  H='repo,commit,files,skim_tok,spine_tok,reduction_pct_low,reduction_pct_high,atlas_version,date'
+  printf '<!-- leaderboard:start -->\n<!-- leaderboard:end -->\n' > docs/LEADERBOARD.md
+  bad=0
+  for row in \
+    'foo/bar,abc1234,ten,1000,100,90,99,0.5.0,2026-01-01' \
+    'foo/bar,abc1234,10,1000,100,NaN,999,0.5.0,2026-01-01' \
+    'foo|inject,abc1234,10,1000,100,90,99,0.5.0,2026-01-01' \
+    'foo/bar,nothex!,10,1000,100,90,99,0.5.0,2026-01-01' \
+    'foo/bar,abc1234,10,1000,100,95,90,0.5.0,2026-01-01' \
+    'foo/bar,abc1234,10,1000,100,90,99,0.5.0,not-a-date'; do
+    printf '%s\n%s\n' "$H" "$row" > data/leaderboard.csv
+    "$CLI" leaderboard --render >/dev/null 2>&1 && bad=1
+  done
+  printf '%s\nfoo/bar,abc1234,10,1000,100,90,99,0.5.0,2026-01-01\n' "$H" > data/leaderboard.csv
+  [[ $bad -eq 0 ]] && "$CLI" leaderboard --render >/dev/null 2>&1 && grep -q "foo/bar" docs/LEADERBOARD.md ) \
+  && _pass "adversarial CSV rows hard-error; a well-typed row renders" || _fail "CSV schema validation leaked"
+rm -rf "$TMP_LB7"
 
 # same guard on the auth path: a corrupted ~/.ssh/config marker pair must
 # hard-error, never truncate the user's own Host entries after the marker.

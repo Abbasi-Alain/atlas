@@ -8,7 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-_(nothing yet)_
+### Fixed
+
+- **Semantic validators, round 2 (RM-45, from the 2026-07-10 critic-stage review, findings #2/#5/#6).** (1) `EXECUTOR_PACK_MISSING` now requires the heading-bounded pack to carry all five SPEC §8 field markers (`tickets point to specs` · `trap-sheet` · `routing` · `definition of done` · `escalate-up`, case-insensitive, matched across line wraps) plus a real `§ANCHOR` in the trap-sheet — a degenerate two-line pack no longer passes, and the warning names exactly which fields are missing. (2) `atlas leaderboard --render` now validates every CSV field by type (repo slug · 7-40 hex commit · integer counts · 0-100 percents with low≤high · semver-ish version · ISO date) — non-numeric counts, >100% reductions, and Markdown-pipe injection hard-error naming the line and field; pipes are impossible by construction. (3) `UNMAPPED_TIER_TAG` now scans only ticket records (a checkbox line plus its indented continuation lines) — a tier mention in plain prose or a Notes heading no longer warns.
 
 ## [0.6.0] — 2026-07-10
 

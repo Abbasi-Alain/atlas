@@ -332,9 +332,14 @@ handoff any executor reads once, before its first ticket.
 skeleton (universal DoD + escalate-up protocol pre-filled; the trap-sheet starts
 empty for the adopter to grow from their own `SCARS.md`). `atlas check --deep`
 warns `EXECUTOR_PACK_MISSING` when `SCARS.md` has accumulated 5 or more anchors
-and a present `ROADMAP.md` has no pack — knowledge exists but isn't packaged for
-handoff. The SessionStart hook surfaces a one-line pointer when a pack is
-present.
+and a present `ROADMAP.md` has no SEMANTICALLY complete pack: the heading-
+bounded pack section must carry all five field markers — the literal phrases
+`tickets point to specs` · `trap-sheet` · `routing` · `definition of done` ·
+`escalate-up` (case-insensitive, matched across line wraps) — AND the
+trap-sheet must cite at least one real `SCARS.md` `§ANCHOR`. A bare heading
+mention or a degenerate two-line pack does not satisfy it. The warning names
+exactly which fields are missing. The SessionStart hook surfaces a one-line
+pointer when a pack is present.
 
 ### Capability tiers — portable routing (RM-26)
 
