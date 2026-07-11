@@ -205,7 +205,7 @@ MUST) are advisory and still pass (exit 0).
 
 **Errors — must fix:**
 - `ATLAS.md` exists at repo root and has a §0 quick-orientation.
-- `SKILL.md` exists at `.agents/skill/<project-name>/SKILL.md` and has a `## Table of contents`.
+- `SKILL.md` exists at `.agents/skill/<project-name>/SKILL.md` and has a `## Table of contents` with at least one entry (`SKILL_TOC_EMPTY` — a heading with nothing listed beneath it is the same failure as no ToC at all).
 - `SCARS.md` exists at repo root, has a `## Table of contents`, and all its `§ANCHOR` IDs are unique.
 
 **Warnings — should fix:**

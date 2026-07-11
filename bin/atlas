@@ -726,7 +726,21 @@ cmd_check() {
     _ck_err SKILL_MISSING "missing SKILL.md — $init_hint"
   else
     q_skill=true; _ck_ok "SKILL.md present at $skill"
-    grep -q "^## Table of contents" "$skill" || _ck_err SKILL_NO_TOC "SKILL.md missing '## Table of contents' — the orientation hook + 'atlas measure' surface it as the playbook index (SPEC §3); 'atlas init' scaffolds one" "§3"
+    if ! grep -q "^## Table of contents" "$skill"; then
+      _ck_err SKILL_NO_TOC "SKILL.md missing '## Table of contents' — the orientation hook + 'atlas measure' surface it as the playbook index (SPEC §3); 'atlas init' scaffolds one" "§3"
+    else
+      # A ToC heading with zero entries beneath it is the same failure mode as
+      # no ToC at all (SCARS §SKILL-TOC-LOAD-BEARING): the hook + 'atlas
+      # measure' have nothing real to surface as the playbook index.
+      local skill_toc_body
+      skill_toc_body="$(awk '
+        /^## Table of contents/ { intoc=1; next }
+        intoc && /^#/ { intoc=0 }
+        intoc { print }
+      ' "$skill")"
+      grep -qE '^[[:space:]]*-[[:space:]]' <<< "$skill_toc_body" \
+        || _ck_err SKILL_TOC_EMPTY "SKILL.md's '## Table of contents' has no entries — the orientation hook + 'atlas measure' depend on it actually listing the playbook (SPEC §3)" "§3"
+    fi
     # SPEC §1: the directory MUST be the kebab-cased remote/repo basename, so
     # every runtime resolves the same path. Warn (don't fail) on a mismatch —
     # a repo without a remote legitimately uses its root basename.

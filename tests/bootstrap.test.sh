@@ -81,6 +81,25 @@ TMP_B1="$(mktemp -d)"; ( cd "$TMP_B1" && git init -q -b main 2>/dev/null && "$CL
   && _pass "check errors on SKILL.md without a ToC (BUG-1)" || _fail "BUG-1 ToC not enforced"
 rm -rf "$TMP_B1"
 
+# SKILL_TOC_EMPTY: a '## Table of contents' heading with zero entries beneath
+# it is the same failure as no ToC at all (SCARS §SKILL-TOC-LOAD-BEARING).
+TMP_B1E="$(mktemp -d)"; ( cd "$TMP_B1E" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  sk=$(find .agents -name SKILL.md)
+  awk '/^## Table of contents/{print; print ""; f=1; next} f && /^---$/{f=0} f{next} {print}' "$sk" > "$sk.t" && mv "$sk.t" "$sk"
+  out=$("$CLI" check 2>&1); rc=$?
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "SKILL_TOC_EMPTY\|has no entries" ) \
+  && _pass "check errors on an empty ToC (SKILL_TOC_EMPTY)" || _fail "SKILL_TOC_EMPTY not enforced"
+rm -rf "$TMP_B1E"
+
+# A ToC with >=1 real entry does NOT trip SKILL_TOC_EMPTY (fresh init already
+# covers this via the zero-warnings assertion above; assert the negative case
+# explicitly too — a ToC entry survives untouched).
+TMP_B1F="$(mktemp -d)"; ( cd "$TMP_B1F" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  out=$("$CLI" check 2>&1); rc=$?
+  [[ $rc -eq 0 ]] && ! echo "$out" | grep -q "SKILL_TOC_EMPTY" ) \
+  && _pass "check does not flag a populated ToC" || _fail "false positive on populated ToC"
+rm -rf "$TMP_B1F"
+
 # BUG-2: a missing CLAUDE.md is a warning, not a hard failure (still exit 0).
 TMP_B2="$(mktemp -d)"; ( cd "$TMP_B2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
   rm -f CLAUDE.md AGENTS.md
