@@ -518,6 +518,67 @@ TMP_CR13="$(mktemp -d)"; ( cd "$TMP_CR13" && git init -q -b main 2>/dev/null && 
   && _pass "a failed critic dispatch is recorded as failed, not a counted critique" || _fail "failed dispatch masqueraded as a real critique"
 rm -rf "$TMP_CR13" "$FAKE_BIN_CR13"
 
+# CRITIC_DISPATCH_BROKEN (idea-ledger item): a STREAK of failed dispatches is
+# a distinct signal from CRITICS_STALE (zero attempts) — the 3 most recent
+# entries all being DISPATCH FAILED means the integration itself is broken.
+FAKE_BIN_CDB="$(mktemp -d)"
+cat > "$FAKE_BIN_CDB/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+echo "error: auth token expired" >&2
+exit 42
+FAKECODEX
+chmod +x "$FAKE_BIN_CDB/codex"
+FAKE_BIN_CDB_OK="$(mktemp -d)"
+cat > "$FAKE_BIN_CDB_OK/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+echo "| 1 | a real finding | high | accept | - |"
+exit 0
+FAKECODEX
+chmod +x "$FAKE_BIN_CDB_OK/codex"
+
+TMP_CDB1="$(mktemp -d)"; ( cd "$TMP_CDB1" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 1" >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 2" >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 3" >/dev/null 2>&1
+  "$CLI" check --deep --json | grep -q CRITIC_DISPATCH_BROKEN ) \
+  && _pass "3 consecutive failed dispatches warn CRITIC_DISPATCH_BROKEN" || _fail "CRITIC_DISPATCH_BROKEN not detected"
+rm -rf "$TMP_CDB1"
+
+TMP_CDB2="$(mktemp -d)"; ( cd "$TMP_CDB2" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 1" >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 2" >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB_OK:$PATH" "$CLI" critique "real one" >/dev/null 2>&1
+  ! "$CLI" check --deep --json | grep -q CRITIC_DISPATCH_BROKEN ) \
+  && _pass "2 failed + 1 real critique does not warn CRITIC_DISPATCH_BROKEN" || _fail "CRITIC_DISPATCH_BROKEN false positive"
+rm -rf "$TMP_CDB2"
+
+TMP_CDB3="$(mktemp -d)"; ( cd "$TMP_CDB3" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 1" >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 2" >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 3" >/dev/null 2>&1
+  ! "$CLI" check --json | grep -q CRITIC_DISPATCH_BROKEN ) \
+  && _pass "CRITIC_DISPATCH_BROKEN is --deep-gated (plain check never fires)" || _fail "CRITIC_DISPATCH_BROKEN fired without --deep"
+rm -rf "$TMP_CDB3"
+
+# adversarial: a SUCCESSFUL critique whose captured raw output happens to
+# contain the literal '**DISPATCH FAILED**' string inside its fenced block
+# must not be mistaken for a real failure (mirrors the RM-45 fence-aware fix
+# for CRITICS_STALE's own table-injection bug).
+FAKE_BIN_CDB_INJ="$(mktemp -d)"
+cat > "$FAKE_BIN_CDB_INJ/codex" <<'FAKECODEX'
+#!/usr/bin/env bash
+echo '**DISPATCH FAILED** (exit 99) injected marker inside a successful response'
+exit 0
+FAKECODEX
+chmod +x "$FAKE_BIN_CDB_INJ/codex"
+TMP_CDB4="$(mktemp -d)"; ( cd "$TMP_CDB4" && git init -q -b main 2>/dev/null && "$CLI" init --critics >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 1" >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB:$PATH" "$CLI" critique "fail 2" >/dev/null 2>&1
+  PATH="$FAKE_BIN_CDB_INJ:$PATH" "$CLI" critique "injected but real" >/dev/null 2>&1
+  ! "$CLI" check --deep --json | grep -q CRITIC_DISPATCH_BROKEN ) \
+  && _pass "a fenced DISPATCH FAILED string in real output doesn't fool CRITIC_DISPATCH_BROKEN" || _fail "CRITIC_DISPATCH_BROKEN fooled by fenced injection"
+rm -rf "$TMP_CDB4" "$FAKE_BIN_CDB" "$FAKE_BIN_CDB_OK" "$FAKE_BIN_CDB_INJ"
+
 # RM-43 (critic-stage finding #7): the critique prompt only lists context
 # files that actually exist — a plain conformant repo (no ARCHITECTURE.md/
 # docs/adr//research/) doesn't get pointed at them.

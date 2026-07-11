@@ -435,6 +435,14 @@ items while `CRITICS.md` logs zero critique rows warns (`CRITICS_STALE`) —
 decisions are landing with no adversarial pass. `atlas init --critics`
 scaffolds `templates/CRITICS.md.tmpl`.
 
+`atlas check --deep` additionally warns `CRITIC_DISPATCH_BROKEN` when the 3
+most recent `### <date> — <topic>` entries are ALL a failed dispatch (a
+`**DISPATCH FAILED**` marker, never inside a fenced block) — a signal
+distinct from `CRITICS_STALE` (zero attempts): the integration is being
+*tried and consistently failing* (expired auth, a critic CLI's flags
+changing), which needs a different fix than "log one." Same git-ignored
+exemption as `CRITICS_STALE`.
+
 `atlas critique "<topic>" [--range <A>..<B>] [--verify "<cmds>"]
 [--with-codex | --with-claude | --no-auto]` prints the hostile-review
 prompt. When the caller doesn't force a choice, it **auto-detects an

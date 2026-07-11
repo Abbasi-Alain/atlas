@@ -977,6 +977,27 @@ cmd_check() {
         _ck_warn CRITICS_STALE "ROADMAP.md's Done log has $done_count shipped item(s) but CRITICS.md logs zero critiques — decisions are landing unreviewed (SPEC §10); log one with 'atlas critique \"<topic>\"'" "§10"
       fi
     fi
+    # A STREAK of failed dispatches (expired auth token, a critic CLI's flags
+    # changing) is a distinct signal from CRITICS_STALE, which only fires on
+    # ZERO attempts — a repo actively trying and failing looks identical to
+    # one that never tried once failed entries are excluded from that count.
+    # --deep only (a second pass over the file); same private-log exemption.
+    if [[ $deep -eq 1 && $critics_ignored -eq 0 ]]; then
+      local dispatch_flags last3 fails3
+      dispatch_flags="$(awk '
+        /^```/ { fence = !fence; next }
+        fence { next }
+        /^### [0-9]{4}-[0-9]{2}-[0-9]{2}/ { n++; failed[n]=0; next }
+        n > 0 && /\*\*DISPATCH FAILED\*\*/ { failed[n]=1 }
+        END { for (i=1;i<=n;i++) print failed[i] }
+      ' "$PWD/CRITICS.md" 2>/dev/null)" || dispatch_flags=""
+      last3="$(printf '%s\n' "$dispatch_flags" | tail -3 | grep -c . || true)"
+      if [[ "${last3:-0}" -eq 3 ]]; then
+        fails3="$(printf '%s\n' "$dispatch_flags" | tail -3 | grep -c '^1$' || true)"
+        [[ "${fails3:-0}" -eq 3 ]] \
+          && _ck_warn CRITIC_DISPATCH_BROKEN "CRITICS.md's 3 most recent entries are all DISPATCH FAILED — the critic integration is broken (expired auth, a changed CLI contract), not just unreviewed (SPEC §10)" "§10"
+      fi
+    fi
   fi
 
   # --- AKIGI.md + FRQ.md (SPEC §11): OPTIONAL cross-repo collaboration
