@@ -884,6 +884,40 @@ TMP_AK12="$(mktemp -d)"; ( cd "$TMP_AK12" && git init -q -b main 2>/dev/null && 
   && _pass "llms.txt lists the full AKIGI+FRQ+BRD+SRD quartet" || _fail "llms.txt missing brd/srd"
 rm -rf "$TMP_AK12"
 
+# FRQ_UNANSWERED (idea-ledger item, --deep only): an open Index row whose
+# entry date is >14 days old with no disposition warns; a fresh open row and
+# a dispositioned old row don't; plain 'atlas check' (no --deep) never fires.
+_test_days_ago() { local n="$1" d; d="$(date -v-"${n}"d +%Y-%m-%d 2>/dev/null)" && { printf '%s' "$d"; return 0; }; date -d "-${n} days" +%Y-%m-%d; }
+OLD_DATE="$(_test_days_ago 20)"; TODAY_DATE="$(date +%Y-%m-%d)"
+
+TMP_AK13="$(mktemp -d)"; ( cd "$TMP_AK13" && git init -q -b main 2>/dev/null && "$CLI" init --frq >/dev/null 2>&1
+  awk -v row="| FRQ-001 | old request | sibling/agent | 🕒 open |" '{print} /^\|-----\|/{print row}' FRQ.md > FRQ.md.t && mv FRQ.md.t FRQ.md
+  printf '\n## FRQ-001 -- old unanswered request (%s)\n\n**Requested by:** sibling/agent. **Why:** x. **Ask:** x.\n' "$OLD_DATE" >> FRQ.md
+  "$CLI" check --deep --json | grep -q FRQ_UNANSWERED ) \
+  && _pass "old open FRQ row (>14d) warns FRQ_UNANSWERED under --deep" || _fail "FRQ_UNANSWERED not detected"
+rm -rf "$TMP_AK13"
+
+TMP_AK14="$(mktemp -d)"; ( cd "$TMP_AK14" && git init -q -b main 2>/dev/null && "$CLI" init --frq >/dev/null 2>&1
+  awk -v row="| FRQ-001 | fresh request | sibling/agent | 🕒 open |" '{print} /^\|-----\|/{print row}' FRQ.md > FRQ.md.t && mv FRQ.md.t FRQ.md
+  printf '\n## FRQ-001 -- fresh unanswered request (%s)\n\n**Requested by:** sibling/agent. **Why:** x. **Ask:** x.\n' "$TODAY_DATE" >> FRQ.md
+  ! "$CLI" check --deep --json | grep -q FRQ_UNANSWERED ) \
+  && _pass "a fresh open FRQ row does not warn" || _fail "FRQ_UNANSWERED false positive on fresh row"
+rm -rf "$TMP_AK14"
+
+TMP_AK15="$(mktemp -d)"; ( cd "$TMP_AK15" && git init -q -b main 2>/dev/null && "$CLI" init --frq >/dev/null 2>&1
+  awk -v row="| FRQ-001 | resolved request | sibling/agent | ✅ resolved (abc1234) |" '{print} /^\|-----\|/{print row}' FRQ.md > FRQ.md.t && mv FRQ.md.t FRQ.md
+  printf '\n## FRQ-001 -- old but resolved request (%s)\n\n**Requested by:** sibling/agent. **Why:** x. **Ask:** x.\n' "$OLD_DATE" >> FRQ.md
+  ! "$CLI" check --deep --json | grep -q FRQ_UNANSWERED ) \
+  && _pass "an old but dispositioned FRQ row does not warn" || _fail "FRQ_UNANSWERED false positive on resolved row"
+rm -rf "$TMP_AK15"
+
+TMP_AK16="$(mktemp -d)"; ( cd "$TMP_AK16" && git init -q -b main 2>/dev/null && "$CLI" init --frq >/dev/null 2>&1
+  awk -v row="| FRQ-001 | old request | sibling/agent | 🕒 open |" '{print} /^\|-----\|/{print row}' FRQ.md > FRQ.md.t && mv FRQ.md.t FRQ.md
+  printf '\n## FRQ-001 -- old unanswered request (%s)\n\n**Requested by:** sibling/agent. **Why:** x. **Ask:** x.\n' "$OLD_DATE" >> FRQ.md
+  ! "$CLI" check --json | grep -q FRQ_UNANSWERED ) \
+  && _pass "FRQ_UNANSWERED is --deep-gated (plain check never fires)" || _fail "FRQ_UNANSWERED fired without --deep"
+rm -rf "$TMP_AK16"
+
 # --- new commands (smoke) ------------------------------------------------
 echo ""
 echo "-- new commands --"

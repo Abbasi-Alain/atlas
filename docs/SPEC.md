@@ -506,6 +506,14 @@ read).
   on a file missing those sections, and `FRQ_NO_AKIGI` when `FRQ.md` exists
   without `AKIGI.md`. Listed in the `llms.txt` export. Reported with
   `"akigi"`/`"frq"` in `check --json`.
+- **Reply-always freshness** (`atlas check --deep`): an Index row still
+  marked `🕒 open` with no `✅`/`⛔` disposition, whose `## FRQ-NNN — <title>
+  (YYYY-MM-DD)` entry date is more than 14 days old, warns `FRQ_UNANSWERED` —
+  demand exists but the owning agent isn't triaging (the cross-repo analogue
+  of `CRITICS_STALE`, and the check-side half of the reply-always acceptance
+  principle). The 14-day cutoff is computed once (portable across BSD/GNU
+  `date`) and every row is then compared against it as a plain lexicographic
+  `YYYY-MM-DD` string — no per-row date parsing.
 
 ### BRD.md — Bugs Responsible Disclosure
 

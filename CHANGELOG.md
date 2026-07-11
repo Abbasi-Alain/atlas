@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **`FRQ_UNANSWERED` — the reply-always freshness check for `FRQ.md` (`atlas check --deep`, idea-ledger item, the check-side half of RM-14b's response-contract).** AKIGI's reply-always acceptance principle ("a request that never hears back breaks the cross-repo loop") is now machine-checkable: warns when the FRQ.md Index has a `🕒 open` row with no `✅`/`⛔` disposition whose entry date is more than 14 days old — the cross-repo analogue of `CRITICS_STALE`. The 14-day cutoff is computed once via a new portable `_days_ago` helper (BSD `date -v` vs GNU `date -d`, a §MACOS-SED-class trap); every row is then compared as a plain lexicographic `YYYY-MM-DD` string, never re-parsed. `--deep`-only; a fresh or dispositioned row never warns.
+
 ### Fixed
 
 - **`SKILL_NO_TOC` now also catches an empty ToC (`SKILL_TOC_EMPTY`, idea-ledger item, same class as RM-42/RM-45).** A `SKILL.md` with a `## Table of contents` heading and zero entries beneath it previously passed `atlas check` — the SessionStart hook and `atlas measure` have nothing real to surface in that case, the same failure mode as a missing ToC entirely (SCARS §SKILL-TOC-LOAD-BEARING). `atlas check` now errors `SKILL_TOC_EMPTY` when the heading is present but no bullet entry follows it before the next heading; a ToC with ≥1 entry is unaffected. SPEC §6 updated to state the requirement.
