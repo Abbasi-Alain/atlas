@@ -577,3 +577,64 @@ beyond files — per-agent identity/registration, inboxes, and compensation
 for verified disclosures are planned protocol phases, deliberately NOT part
 of this spec yet. ATLAS remains a first-class integration of whatever the
 protocol becomes.
+
+---
+
+## 12. ASOP — operating methodology (OPTIONAL, canonical companion)
+
+The quartet tells an agent *where things are* (ATLAS.md), *what breaks*
+(SCARS.md), *how to do a task* (SKILL.md), and *how to act* (CLAUDE.md). ASOP
+tells it **how to reason** — and closes the two gaps that most separate a weaker
+agent's output from a stronger one's: **verification** (proving a change works,
+instead of declaring done on a proxy) and **escalation** (handing up when a task
+is above tier, instead of proceeding confidently wrong). Orientation and memory
+raise the *ceiling*; verification and escalation raise the **floor** — which is
+why ASOP is the highest-leverage surface for a less-capable agent.
+
+Two files, both at repo root, both **canonical — copied verbatim, not filled in
+per-repo.** This is their defining difference from every other surface: a repo's
+map, scars, and behavioral contract are customized; the reasoning craft is the
+same everywhere, so ASOP is shipped identical and refreshed, never diffed as
+bespoke content.
+
+### ASOP.md — the principles
+
+Thirteen moves and a five-question pre-send self-test: read the job beneath the
+words · cut along checkable seams · spend effort where the risk is · verify by
+re-deriving · label known vs guessed · attack your own conclusion · answer →
+reasoning → risk · the mistakes that look like competence · stop before a
+one-way door · recover cleanly when wrong · say the true thing so it lands ·
+hold the thread across a long task · know when to stop. It is model-agnostic:
+a weaker model needs the *same* principles as a stronger one, made executable —
+not different ones.
+
+### ASOP-EXECUTOR.md — the mechanical card (role-based)
+
+The principles converted to a one-page checklist any executor runs, **keyed by
+role (executor vs orchestrator), never by model** — so it stays valid as models
+change. Pre-flight (state the success check; list assumptions; pick-and-say on
+ambiguity) → in-flight (smallest verifiable slice; verify by running — boundary
+and adversarial, not the happy path; re-read the spec for skimmed requirements;
+touch only what's asked) → **escalation triggers** (stop and hand up on: two
+failed attempts · a success-check you can't make pass · an irreversible/
+security/scarred core · a load-bearing guess you can't verify — a clean
+escalation *with evidence* is a success, not a failure) → pre-return checklist
+and a report template scaled to the task.
+
+### Grounding it in the repo
+
+The executor protocol is universal, but its triggers bind to **this repo's
+specifics**: its *done-gate* (the smoke / success command — ATLAS.md §5) and its
+*escalation line* (the scarred and irreversible cores — SCARS.md and the
+maintainer-only surfaces). A repo adopting ASOP SHOULD surface both in ATLAS.md
+§0, so an agent dropped into the repo finds **"how to prove a change works"** and
+**"when to hand up"** in one hop — the two questions a weaker agent most needs
+answered mechanically rather than left to judgment.
+
+### Conformance & tooling
+
+ASOP is OPTIONAL and adds **no new required conformance check** — a repo without
+it is unaffected and the standard's required set is unchanged. `atlas init
+--asop` scaffolds both files verbatim (planned); because they are canonical, a
+conforming `atlas` MAY offer to *refresh* them to the current standard version
+rather than treat edits as customization.

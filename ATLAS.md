@@ -24,7 +24,9 @@
 | Change generated docs | [`templates/`](templates/) (§3) |
 | Add/fix a runtime adapter | [`adapters/`](adapters/) (§4) |
 | Publish to a package channel | [`packaging/`](packaging/) + [`docs/RELEASING.md`](docs/RELEASING.md) (§6) |
-| Run the tests | §5 — `bash tests/bootstrap.test.sh` + `shellcheck` |
+| Prove a change works (done-gate) | §5 — `bash tests/bootstrap.test.sh` + `shellcheck` + `atlas check --deep --strict` |
+| When to hand up / escalate | scarred cores in [`SCARS.md`](SCARS.md); release/publish is maintainer-only (SPEC §12) |
+| Reason / operate well (any agent) | [`ASOP.md`](ASOP.md) principles · [`ASOP-EXECUTOR.md`](ASOP-EXECUTOR.md) the executor card |
 | Debug a known trap | [`SCARS.md`](SCARS.md) |
 | Look up a term (trio/anchor/style/stack) | §G Glossary |
 | The format rules | [`docs/SPEC.md`](docs/SPEC.md) |
@@ -53,6 +55,8 @@
 | [`FRQ.md`](FRQ.md) | **Feature Request Queue** (SPEC §11) — sibling-repo agents file asks here; triaged against AKIGI.md | AKIGI.md |
 | [`BRD.md`](BRD.md) | **Bug disclosure intake** (SPEC §11) — outside agents file defects (evidence+repro); accepted → internal BUGS.md flow | AKIGI.md |
 | [`SRD.md`](SRD.md) | **Security disclosure** (SPEC §11) — minimal public marker; full detail via private channel; maintainer-only triage | AKIGI.md |
+| [`ASOP.md`](ASOP.md) | **Operating methodology** (SPEC §12) — 13 reasoning moves + a 5-question self-test; canonical, copied verbatim | ASOP-EXECUTOR.md |
+| [`ASOP-EXECUTOR.md`](ASOP-EXECUTOR.md) | **Executor card** (SPEC §12) — role-based mechanical protocol (pre-flight · verify · **escalate** · report) any subagent runs | ASOP.md |
 | [`data/leaderboard.csv`](data/leaderboard.csv) | Leaderboard dataset — source of truth for [`docs/LEADERBOARD.md`](docs/LEADERBOARD.md) (`atlas leaderboard --render`) | docs/ |
 
 > **Not applicable** (deleted per spec convention): §3 service layer,
