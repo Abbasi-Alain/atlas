@@ -50,6 +50,8 @@
 #                                     (claude/codex/opencode/--exec) OR single-shot
 #                                     vs any OpenAI-compatible endpoint (--api-base,
 #                                     e.g. local vLLM). Writes JSON + Markdown.
+#   atlas loop log [--json]           render the autonomous-loop ledger from
+#                                     LOOP_HISTORY.md + tracked LOOP_REPORT.md history.
 #   atlas map [--ascii|--mermaid|--html] [--out F]
 #                                     draw the repo graph: Unicode in a terminal,
 #                                     Mermaid when piped (GitHub-native), or an HTML page
@@ -2853,7 +2855,176 @@ cmd_help() {
   echo ""
   printf '  %s\n\n' "${ATLAS_HELP_HEADER:-Usage:}"
   # Pull the documented subcommand block from the file header.
-  sed -n '2,40p' "$0" | sed -E 's/^# \{0,1\}//'
+  awk 'NR >= 2 { if ($0 !~ /^#/) exit; print }' "$0" | sed -E 's/^# \{0,1\}//'
+}
+
+_loop_extract_entries() {
+  local source="$1"
+  awk -v source="$source" '
+    function trim(s) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      return s
+    }
+    function clean(s) {
+      gsub(/\r/, "", s)
+      gsub(/\t/, " ", s)
+      gsub(/\*\*/, "", s)
+      gsub(/`/, "", s)
+      gsub(/[[:space:]]+/, " ", s)
+      return trim(s)
+    }
+    function val(s) {
+      s = clean(s)
+      if (s == "") s = "-"
+      return s
+    }
+    function reset_entry() {
+      iter = ""; ts = ""; model = ""; effort = ""; duration = ""
+      subagents = ""; ticket = ""; impact = ""; in_ticket = 0; in_impact = 0
+    }
+    function flush() {
+      if (ts != "") {
+        print val(ts) "\t" val(source) "\t" val(iter) "\t" val(model) "\t" \
+          val(effort) "\t" val(duration) "\t" val(subagents) "\t" \
+          val(ticket) "\t" val(impact)
+      }
+    }
+    function parse_header(line, parts, n, i, key, val) {
+      flush()
+      reset_entry()
+      n = split(line, parts, /[[:space:]]*·[[:space:]]*/)
+      iter = parts[1]
+      sub(/^iteration[[:space:]]+/, "", iter)
+      ts = parts[2]
+      for (i = 3; i <= n; i++) {
+        key = parts[i]
+        val = parts[i]
+        sub(/=.*/, "", key)
+        sub(/^[^=]*=/, "", val)
+        if (key == "model") model = val
+        else if (key == "effort") effort = val
+        else if (key == "duration") duration = val
+        else if (key == "sub-agents") subagents = val
+      }
+    }
+    BEGIN { reset_entry() }
+    /^iteration[[:space:]][0-9]+[[:space:]]*·/ { parse_header($0); next }
+    /^## Ticket selected/ { in_ticket = 1; in_impact = 0; next }
+    /^## Impact check/ { in_ticket = 0; in_impact = 1; next }
+    /^## / { in_ticket = 0; in_impact = 0; next }
+    /^ticket:/ && ticket == "" {
+      ticket = $0
+      sub(/^ticket:[[:space:]]*/, "", ticket)
+      next
+    }
+    /^CRITIC ITERATION/ && ticket == "" {
+      ticket = $0
+      sub(/^CRITIC ITERATION[[:space:]:]*/, "CRITIC ITERATION: ", ticket)
+      next
+    }
+    /^impact:/ && impact == "" {
+      impact = $0
+      sub(/^impact:[[:space:]]*/, "", impact)
+      next
+    }
+    in_ticket && ticket == "" && trim($0) != "" { ticket = $0; next }
+    in_impact && impact == "" && trim($0) != "" { impact = $0; next }
+    END { flush() }
+  '
+}
+
+_loop_md_cell() {
+  local s="${1:-}"
+  [[ -n "$s" ]] || s="-"
+  s="${s//|/\\|}"
+  printf '%s' "$s"
+}
+
+cmd_loop_log() {
+  local json=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json=1; shift ;;
+      -h|--help)
+        echo "usage: atlas loop log [--json]"
+        return 0
+        ;;
+      *) _die "usage: atlas loop log [--json]" ;;
+    esac
+  done
+
+  local raw sorted
+  raw="$(mktemp "${TMPDIR:-/tmp}/atlas-loop-log.XXXXXX")"
+  sorted="$(mktemp "${TMPDIR:-/tmp}/atlas-loop-log.XXXXXX")"
+
+  if [[ -f "$PWD/LOOP_HISTORY.md" ]]; then
+    _loop_extract_entries "LOOP_HISTORY.md" < "$PWD/LOOP_HISTORY.md" >> "$raw"
+  fi
+
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if git ls-files --error-unmatch LOOP_REPORT.md >/dev/null 2>&1; then
+      local sha
+      while IFS= read -r sha; do
+        [[ -n "$sha" ]] || continue
+        if git show "${sha}:LOOP_REPORT.md" 2>/dev/null | _loop_extract_entries "git:${sha}" >> "$raw"; then
+          :
+        fi
+      done < <(git log --format='%H' -- LOOP_REPORT.md 2>/dev/null || true)
+    fi
+  fi
+
+  if [[ -s "$raw" ]]; then
+    if ! LC_ALL=C sort -r "$raw" > "$sorted"; then
+      rm -f "$raw" "$sorted"
+      _die "could not sort loop log"
+    fi
+    mv "$sorted" "$raw"
+  fi
+
+  if [[ $json -eq 1 ]]; then
+    local first=1 ts source iter model effort duration subagents ticket impact
+    printf '{"iterations":['
+    while IFS=$'\t' read -r ts source iter model effort duration subagents ticket impact; do
+      [[ -n "$ts" ]] || continue
+      if [[ $first -eq 0 ]]; then printf ','; fi
+      first=0
+      printf '{"timestamp":"%s","source":"%s","iteration":"%s","model":"%s","effort":"%s","duration":"%s","sub_agents":"%s","ticket":"%s","impact":"%s"}' \
+        "$(_json_esc "$ts")" "$(_json_esc "$source")" "$(_json_esc "$iter")" \
+        "$(_json_esc "$model")" "$(_json_esc "$effort")" "$(_json_esc "$duration")" \
+        "$(_json_esc "$subagents")" "$(_json_esc "$ticket")" "$(_json_esc "$impact")"
+    done < "$raw"
+    printf ']}\n'
+  else
+    if [[ ! -s "$raw" ]]; then
+      _say "no loop ledger entries found (looked for LOOP_HISTORY.md and tracked LOOP_REPORT.md history)"
+    else
+      printf '| Iteration | Timestamp | Model | Effort | Duration | Sub-agents | Source | Ticket | Impact |\n'
+      printf '|---|---|---|---|---|---|---|---|---|\n'
+      local ts source iter model effort duration subagents ticket impact
+      while IFS=$'\t' read -r ts source iter model effort duration subagents ticket impact; do
+        [[ -n "$ts" ]] || continue
+        printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n' \
+          "$(_loop_md_cell "$iter")" "$(_loop_md_cell "$ts")" "$(_loop_md_cell "$model")" \
+          "$(_loop_md_cell "$effort")" "$(_loop_md_cell "$duration")" \
+          "$(_loop_md_cell "$subagents")" "$(_loop_md_cell "$source")" \
+          "$(_loop_md_cell "$ticket")" "$(_loop_md_cell "$impact")"
+      done < "$raw"
+    fi
+  fi
+
+  rm -f "$raw" "$sorted"
+}
+
+cmd_loop() {
+  local sub="${1:-help}"
+  if [[ $# -gt 0 ]]; then shift; fi
+  case "$sub" in
+    log) cmd_loop_log "$@" ;;
+    help|-h|--help)
+      echo "usage: atlas loop log [--json]"
+      ;;
+    *) _die "usage: atlas loop log [--json]" ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -3949,6 +4120,7 @@ main() {
     fix)      cmd_fix "$@" ;;
     measure)  cmd_measure "$@" ;;
     bench)    cmd_bench "$@" ;;
+    loop)     cmd_loop "$@" ;;
     map)      cmd_map "$@" ;;
     onboard)  cmd_onboard "$@" ;;
     hooks)    cmd_hooks "$@" ;;

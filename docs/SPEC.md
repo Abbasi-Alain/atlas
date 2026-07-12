@@ -285,6 +285,14 @@ on a half-configured loop (one of the pair present without the other). The
 SessionStart hook surfaces a one-line pointer, and the `llms.txt` export lists
 `LOOP.md` in its read-first set, when a repo has a loop.
 
+`atlas loop log [--json]` renders the loop's append-only iteration ledger
+newest-first. It reads both supported storage patterns: a local
+`LOOP_HISTORY.md` append ledger (for repos that git-ignore live loop state) and,
+when tracked, `git log -- LOOP_REPORT.md` history. Each row is derived from an
+iteration provenance header (`timestamp` · `model` · `effort` · `duration` ·
+`sub-agents`) plus the ticket and impact-check text; `--json` emits the same
+fields for dashboards.
+
 ### EXECUTOR PACK — cross-model handoff (optional enrichment of `ROADMAP.md`)
 
 Strong-model planning + weak-model execution is the only affordable way to run

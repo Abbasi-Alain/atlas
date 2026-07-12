@@ -254,6 +254,44 @@ TMP_L9="$(mktemp -d)"; ( cd "$TMP_L9" && git init -q -b main 2>/dev/null && "$CL
   && _pass "check warns on ROADMAP.md without LOOP.md (BUG-9)" || _fail "BUG-9 roadmap-no-loop"
 rm -rf "$TMP_L9"
 
+# RM-20: atlas loop log reads both ledger sources: local LOOP_HISTORY.md and
+# tracked LOOP_REPORT.md history, rendering newest first plus dashboard JSON.
+TMP_LL="$(mktemp -d)"; ( cd "$TMP_LL" && git init -q -b main 2>/dev/null && "$CLI" init --loop >/dev/null 2>&1
+  cat > LOOP_REPORT.md <<'EOF'
+# LOOP_REPORT
+
+iteration 1 · 2026-01-01T00:00:00Z · model=m1 · effort=low · duration=1m · sub-agents=none
+ticket: RM-OLD · first tracked report
+impact: old tracked impact
+EOF
+  git add LOOP_REPORT.md && git -c user.email=t@t -c user.name=t commit -q -m old-report
+  cat > LOOP_REPORT.md <<'EOF'
+# LOOP_REPORT
+
+iteration 2 · 2026-01-02T00:00:00Z · model=m2 · effort=high · duration=2m · sub-agents=none
+ticket: RM-NEW · second tracked report
+impact: new tracked impact
+EOF
+  git add LOOP_REPORT.md && git -c user.email=t@t -c user.name=t commit -q -m new-report
+  cat > LOOP_HISTORY.md <<'EOF'
+# LOOP_HISTORY
+
+iteration 3 · 2026-01-03T00:00:00Z · model=m3 · effort=xhigh · duration=3m · sub-agents=none
+ticket: RM-HISTORY · local ledger entry
+impact: local history impact
+EOF
+  out="$("$CLI" loop log)"
+  json="$("$CLI" loop log --json)"
+  first_iter="$(printf '%s\n' "$out" | awk -F'|' '/^\| [0-9]+ /{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}')"
+  rows="$(printf '%s\n' "$json" | grep -o '"timestamp"' | wc -l | tr -d ' ')"
+  [[ "$first_iter" == "3" && "$rows" == "3" ]] \
+    && echo "$out" | grep -q "RM-HISTORY" \
+    && echo "$out" | grep -q "RM-NEW" \
+    && echo "$out" | grep -q "RM-OLD" \
+    && echo "$json" | grep -q '"source":"LOOP_HISTORY.md"' ) \
+  && _pass "loop log reads LOOP_HISTORY.md + tracked LOOP_REPORT history newest-first (RM-20)" || _fail "loop log"
+rm -rf "$TMP_LL"
+
 # --- RM-3: BUGS.md open-issues register (init --bugs + check awareness) ---
 echo ""
 echo "-- BUGS.md open-issues register (init --bugs / check) --"

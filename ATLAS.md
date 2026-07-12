@@ -106,6 +106,7 @@ a monolith — see SCARS §BASH-MONOLITH for the modularization plan.
 | Advanced | Purpose |
 |---|---|
 | `install --runtime <name>` | Wire ATLAS into a runtime (delegates to `adapters/<name>/install.sh`) |
+| `loop log [--json]` | Render the autonomous-loop ledger from `LOOP_HISTORY.md` + tracked `LOOP_REPORT.md` history |
 | `styles` / `stacks` | List style presets / per-style stack add-ons |
 | `adr` / `research` / `critique` | Decision records, research notes, hostile-review prompts |
 | `mirror` / `auth` / `repo` / `cost` / `gap-to-article` | GitLab→GitHub mirroring, login, repo create, cost audit, article scaffold |
