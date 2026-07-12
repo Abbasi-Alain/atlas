@@ -1394,6 +1394,19 @@ TMP_AS1="$(mktemp -d)"; ( cd "$TMP_AS1" && git init -q -b main 2>/dev/null && "$
   && _pass "init --asop scaffolds ASOP.md + ASOP-EXECUTOR.md, passes --strict" || _fail "init --asop"
 rm -rf "$TMP_AS1"
 
+# ASOP_STALE (--deep only): a hand-edited ASOP.md that drifts from the shipped
+# template warns; an untouched fresh scaffold does not.
+TMP_AS2="$(mktemp -d)"; ( cd "$TMP_AS2" && git init -q -b main 2>/dev/null && "$CLI" init --asop >/dev/null 2>&1
+  echo x >> ASOP.md
+  "$CLI" check --deep --json | grep -q ASOP_STALE ) \
+  && _pass "hand-edited ASOP.md warns ASOP_STALE under --deep" || _fail "ASOP_STALE not detected"
+rm -rf "$TMP_AS2"
+
+TMP_AS3="$(mktemp -d)"; ( cd "$TMP_AS3" && git init -q -b main 2>/dev/null && "$CLI" init --asop >/dev/null 2>&1
+  ! "$CLI" check --deep --json | grep -q ASOP_STALE ) \
+  && _pass "an untouched init --asop scaffold does not warn ASOP_STALE" || _fail "ASOP_STALE false positive on fresh scaffold"
+rm -rf "$TMP_AS3"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

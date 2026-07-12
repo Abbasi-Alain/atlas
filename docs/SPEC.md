@@ -638,5 +638,5 @@ ASOP is OPTIONAL and adds **no new required conformance check** — a repo witho
 it is unaffected and the standard's required set is unchanged. `atlas init
 --asop` scaffolds both files verbatim; because they are canonical, `--force`
 *refreshes* them to the current shipped version rather than treating edits as
-customization. An optional `--deep` `ASOP_STALE` advisory — warning when a
-present ASOP file lags the shipped canonical version — is a planned follow-up.
+customization. `atlas check --deep` warns `ASOP_STALE` when a present ASOP file
+drifts from the shipped canonical version — advisory only, never a required check.

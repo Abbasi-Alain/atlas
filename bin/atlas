@@ -1085,6 +1085,23 @@ cmd_check() {
       || _ck_warn SRD_NO_AKIGI "SRD.md present but no AKIGI.md — disclosures have no purpose contract to be triaged against (SPEC §11); 'atlas init --akigi'" "§11"
   fi
 
+  # --- ASOP.md / ASOP-EXECUTOR.md (SPEC §12): CANONICAL — shipped verbatim,
+  # so any drift from the shipped template means the repo's copy is stale, not
+  # a chosen local variant (unlike AGENTS.md, which may legitimately diverge).
+  # --deep only (a template diff isn't spec-required on every run). A missing
+  # repo file is not scaffolded here (that's 'atlas init --asop'); a missing
+  # template (unusual install) is skipped silently — advisory only, never error.
+  if [[ $deep -eq 1 ]]; then
+    if [[ -f "$PWD/ASOP.md" && -f "$TEMPLATES/ASOP.md.tmpl" ]]; then
+      cmp -s "$PWD/ASOP.md" "$TEMPLATES/ASOP.md.tmpl" \
+        || _ck_warn ASOP_STALE "ASOP.md drifts from the current canonical version — refresh with 'atlas init --asop --force' (SPEC §12; ASOP files are shipped verbatim)" "§12"
+    fi
+    if [[ -f "$PWD/ASOP-EXECUTOR.md" && -f "$TEMPLATES/ASOP-EXECUTOR.md.tmpl" ]]; then
+      cmp -s "$PWD/ASOP-EXECUTOR.md" "$TEMPLATES/ASOP-EXECUTOR.md.tmpl" \
+        || _ck_warn ASOP_STALE "ASOP-EXECUTOR.md drifts from the current canonical version — refresh with 'atlas init --asop --force' (SPEC §12; ASOP files are shipped verbatim)" "§12"
+    fi
+  fi
+
   # --- emit -------------------------------------------------------------------
   if [[ $json -eq 1 ]]; then
     local ok=true strict_bool=false deep_bool=false
