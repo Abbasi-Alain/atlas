@@ -1029,6 +1029,26 @@ echo "-- new commands --"
 "$CLI" export --to all >/dev/null 2>&1 && [[ -f "$TMP/.github/copilot-instructions.md" ]] && _pass "export --to all fans out" || _fail "export all"
 "$CLI" bench --dry-run >/dev/null 2>&1 && _pass "bench --dry-run runs (no agent invoked)" || _fail "bench dry-run"
 "$CLI" bench --runtime openai --api-base http://127.0.0.1:1 --model x --dry-run >/dev/null 2>&1 && _pass "bench openai --dry-run runs" || _fail "bench openai dry-run"
+if command -v python3 >/dev/null 2>&1; then
+  TMP_MATRIX="$(mktemp -d)"
+  if "$CLI" bench --runtime generic --exec "printf '%s\n' matrix-output" --matrix "model-a,model-b" --reps 1 --out "$TMP_MATRIX" >/dev/null 2>&1; then
+    if [[ -f "$TMP_MATRIX/matrix-ledger.jsonl" ]]; then
+      MATRIX_ROWS="$(wc -l < "$TMP_MATRIX/matrix-ledger.jsonl" | tr -d ' ')"
+      if [[ "$MATRIX_ROWS" == "4" ]]; then
+        _pass "bench --matrix writes one raw ledger row per model/condition/rep"
+      else
+        _fail "bench --matrix ledger row count"
+      fi
+    else
+      _fail "bench --matrix ledger missing"
+    fi
+  else
+    _fail "bench --matrix generic run"
+  fi
+  rm -rf "$TMP_MATRIX"
+else
+  _pass "bench --matrix regression skipped (no python3)"
+fi
 ATLAS_HOME=/opt/cellar/atlas "$CLI" uninstall 2>&1 | grep -qi 'package' && _pass "uninstall defers package-managed installs" || _fail "uninstall defer"
 
 # MCP server: registration snippet + a real JSON-RPC handshake

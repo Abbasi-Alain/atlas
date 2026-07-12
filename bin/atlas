@@ -44,7 +44,7 @@
 #   atlas leaderboard --render        regenerate docs/LEADERBOARD.md's table
 #                                     from data/leaderboard.csv (the CSV is
 #                                     what contributors edit in a PR)
-#   atlas bench [--runtime claude|codex|opencode|openai] [--model M] [--effort L]
+#   atlas bench [--runtime claude|codex|opencode|openai] [--model M|--matrix M1,M2] [--effort L]
 #               [--api-base URL] [--exec CMD] [--task "…"] [--reps N] [--dry-run]
 #                                     A/B a task with vs without ATLAS. Agentic
 #                                     (claude/codex/opencode/--exec) OR single-shot
@@ -3491,13 +3491,15 @@ cmd_uninstall() {
 # --dry-run previews without invoking anything. Needs python3 + the runtime CLI.
 # ---------------------------------------------------------------------------
 cmd_bench() {
-  local runtime="claude" model="" effort="" exec_tpl="" task="" task_file="" repo="$PWD" reps=1 out="" dry=0 api_base="" api_key=""
+  local runtime="claude" model="" matrix="" effort="" exec_tpl="" task="" task_file="" repo="$PWD" reps=1 out="" dry=0 api_base="" api_key=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --runtime)    runtime="${2:-}"; shift 2 ;;
       --runtime=*)  runtime="${1#--runtime=}"; shift ;;
       --model)      model="${2:-}"; shift 2 ;;
       --model=*)    model="${1#--model=}"; shift ;;
+      --matrix)     matrix="${2:-}"; shift 2 ;;
+      --matrix=*)   matrix="${1#--matrix=}"; shift ;;
       --effort)     effort="${2:-}"; shift 2 ;;
       --effort=*)   effort="${1#--effort=}"; shift ;;
       --api-base)   api_base="${2:-}"; runtime="openai"; shift 2 ;;
@@ -3520,6 +3522,27 @@ cmd_bench() {
   [[ -n "$task_file" && -f "$task_file" ]] && task="$(cat "$task_file")"
   [[ -z "$task" ]] && task="In as few steps as possible, answer: where is the release pipeline configured, and what are the exact steps to add a new package channel? List every file you opened to find out."
 
+  local -a bench_models raw_models
+  local raw_model clean_model
+  bench_models=()
+  if [[ -n "$matrix" ]]; then
+    if [[ -n "$model" ]]; then
+      _die "--matrix cannot be combined with --model"
+    fi
+    IFS=',' read -r -a raw_models <<< "$matrix"
+    for raw_model in "${raw_models[@]}"; do
+      clean_model="$(printf '%s' "$raw_model" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+      if [[ -n "$clean_model" ]]; then
+        bench_models+=("$clean_model")
+      fi
+    done
+    if [[ ${#bench_models[@]} -eq 0 ]]; then
+      _die "--matrix needs at least one model"
+    fi
+  else
+    bench_models=("$model")
+  fi
+
   local parser rt_check
   case "$runtime" in
     claude)   parser="claude";  rt_check="claude" ;;
@@ -3530,12 +3553,14 @@ cmd_bench() {
     *) _die "unknown --runtime '$runtime' (claude | codex | opencode | openai | generic via --exec)" ;;
   esac
   if [[ "$runtime" == "openai" ]]; then
-    [[ -z "$api_base" ]] && api_base="https://api.openai.com/v1"
-    [[ -z "$api_key"  ]] && api_key="${OPENAI_API_KEY:-none}"
-    [[ -z "$model" ]] && _die "--runtime openai needs --model (e.g. --model qwen3.6-35b)"
+    if [[ -z "$api_base" ]]; then api_base="https://api.openai.com/v1"; fi
+    if [[ -z "$api_key"  ]]; then api_key="${OPENAI_API_KEY:-none}"; fi
+    if [[ -z "$model" && -z "$matrix" ]]; then
+      _die "--runtime openai needs --model or --matrix (e.g. --model qwen3.6-35b)"
+    fi
   fi
-  if [[ "$runtime" == "opencode" && -z "$model" && $dry -ne 1 ]]; then
-    _die "--runtime opencode needs --model provider/model (e.g. --model dgx-spark-prisma/qwen3.6-35b) — without it opencode hangs on selection."
+  if [[ "$runtime" == "opencode" && -z "$model" && -z "$matrix" && $dry -ne 1 ]]; then
+    _die "--runtime opencode needs --model or --matrix provider/model (e.g. --model dgx-spark-prisma/qwen3.6-35b) — without it opencode hangs on selection."
   fi
   if [[ $dry -ne 1 ]]; then
     _have python3 || _die "atlas bench needs python3 for parsing + the report."
@@ -3550,7 +3575,7 @@ cmd_bench() {
     claude)   rt_ver="$(claude --version 2>/dev/null | head -1 || true)" ;;
     codex)    rt_ver="$(codex --version 2>/dev/null | head -1 || true)" ;;
     opencode) rt_ver="$(opencode --version 2>/dev/null | head -1 || true)" ;;
-    openai)   rt_ver="openai-compat: $api_base ($model)" ;;
+    openai)   rt_ver="openai-compat: $api_base (${model:-matrix:$matrix})" ;;
     generic)  rt_ver="exec: $exec_tpl" ;;
   esac
   # codex's `exec --json` stdout never carries the model name — fall back to its
@@ -3559,7 +3584,7 @@ cmd_bench() {
     model="$(grep -m1 -E '^model[[:space:]]*=' "$HOME/.codex/config.toml" 2>/dev/null | sed -E 's/^model[[:space:]]*=[[:space:]]*"?([^"#[:space:]]+).*/\1/' || true)"
   fi
 
-  _banner "📊" "atlas bench  $(_c_dim "(runtime=$runtime · reps=$reps${model:+ · $model}${effort:+ · effort=$effort})")"
+  _banner "📊" "atlas bench  $(_c_dim "(runtime=$runtime · reps=$reps${model:+ · $model}${matrix:+ · matrix=$matrix}${effort:+ · effort=$effort})")"
   _say "task: ${task:0:150}…"
 
   if [[ "$repo" == http*://* || "$repo" == git@* || "$repo" == *.git ]]; then
@@ -3576,7 +3601,7 @@ cmd_bench() {
   local runs; runs="$(mktemp -d)"
   printf '%s' "$task" > "$runs/task.txt"
 
-  local cond rep work f t0 t1
+  local cond rep work f t0 t1 active_model model_slug out_fn run_label
   if [[ "$runtime" == "openai" ]]; then
     # Single-shot: feed the quartet vs the raw repo as context; measure prompt_tokens.
     local ctx_w="$runs/ctx-with.txt" ctx_o="$runs/ctx-without.txt" ctxf sk cnt ff
@@ -3599,43 +3624,56 @@ cmd_bench() {
         echo "--- $ff ---"; head -c 1800 "$base/$ff" 2>/dev/null; echo; cnt=$(( cnt + 1 ))
       done < <( git -C "$base" ls-files 2>/dev/null | grep -Ei '\.(py|js|ts|go|rs|rb|sh|java|c|cc|cpp|h)$' || true )
     } > "$ctx_o"
-    for cond in without with; do
-      if [[ "$cond" == "with" ]]; then ctxf="$ctx_w"; else ctxf="$ctx_o"; fi
-      for (( rep=1; rep<=reps; rep++ )); do
-        if [[ $dry -eq 1 ]]; then
-          printf "  %-8s #%d  →  POST %s/chat/completions  model=%s  ctx=%s bytes\n" "$cond" "$rep" "$api_base" "$model" "$(wc -c < "$ctxf" | tr -d ' ')"
-          continue
-        fi
-        _say "querying $cond #$rep  ($(wc -c < "$ctxf" | tr -d ' ') ctx bytes)…"
-        python3 -c 'import json,sys; ctx=open(sys.argv[1]).read(); print(json.dumps({"model":sys.argv[3],"messages":[{"role":"user","content":ctx+"\n\n# Question\n"+sys.argv[2]+"\n\nAnswer concisely; name the files that hold the answer."}],"max_tokens":400,"temperature":0}))' "$ctxf" "$task" "$model" > "$runs/payload.json"
-        t0=$(date +%s)
-        curl -sS --max-time 180 "$api_base/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d @"$runs/payload.json" > "$runs/${cond}-${rep}.out" 2>/dev/null || true
-        t1=$(date +%s)
-        printf '%s\t%d\t%d\t%s\n' "$cond" "$rep" "$(( t1 - t0 ))" "${cond}-${rep}.out" >> "$runs/index.tsv"
+    for active_model in "${bench_models[@]}"; do
+      model_slug="$(printf '%s' "${active_model:-default}" | sed 's/[^A-Za-z0-9_.-]/_/g')"
+      for cond in without with; do
+        if [[ "$cond" == "with" ]]; then ctxf="$ctx_w"; else ctxf="$ctx_o"; fi
+        for (( rep=1; rep<=reps; rep++ )); do
+          out_fn="${cond}-${rep}.out"
+          if [[ -n "$matrix" ]]; then out_fn="${model_slug}-${cond}-${rep}.out"; fi
+          run_label="$cond"
+          if [[ -n "$matrix" ]]; then run_label="${active_model:-default} $cond"; fi
+          if [[ $dry -eq 1 ]]; then
+            printf "  %-22s #%d  →  POST %s/chat/completions  model=%s  ctx=%s bytes\n" "$run_label" "$rep" "$api_base" "${active_model:-default}" "$(wc -c < "$ctxf" | tr -d ' ')"
+            continue
+          fi
+          _say "querying $run_label #$rep  ($(wc -c < "$ctxf" | tr -d ' ') ctx bytes)…"
+          python3 -c 'import json,sys; ctx=open(sys.argv[1]).read(); print(json.dumps({"model":sys.argv[3],"messages":[{"role":"user","content":ctx+"\n\n# Question\n"+sys.argv[2]+"\n\nAnswer concisely; name the files that hold the answer."}],"max_tokens":400,"temperature":0}))' "$ctxf" "$task" "$active_model" > "$runs/payload.json"
+          t0=$(date +%s)
+          curl -sS --max-time 180 "$api_base/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d @"$runs/payload.json" > "$runs/$out_fn" 2>/dev/null || true
+          t1=$(date +%s)
+          printf '%s\t%d\t%d\t%s\t%s\n' "$cond" "$rep" "$(( t1 - t0 ))" "$out_fn" "${active_model:-default}" >> "$runs/index.tsv"
+        done
       done
     done
   else
-  for cond in without with; do
-    for (( rep=1; rep<=reps; rep++ )); do
+  for active_model in "${bench_models[@]}"; do
+    model_slug="$(printf '%s' "${active_model:-default}" | sed 's/[^A-Za-z0-9_.-]/_/g')"
+    for cond in without with; do
+      for (( rep=1; rep<=reps; rep++ )); do
+        out_fn="${cond}-${rep}.out"
+        if [[ -n "$matrix" ]]; then out_fn="${model_slug}-${cond}-${rep}.out"; fi
+        run_label="$cond"
+        if [[ -n "$matrix" ]]; then run_label="${active_model:-default} $cond"; fi
       local agent=()
       case "$runtime" in
         claude)
           agent=(claude -p "$task" --output-format json)
-          if [[ -n "$model"  ]]; then agent+=(--model "$model"); fi
+          if [[ -n "$active_model" ]]; then agent+=(--model "$active_model"); fi
           if [[ -n "$effort" ]]; then agent+=(--effort "$effort"); fi ;;
         codex)
           # --skip-git-repo-check: the work dir is a `git archive` export with no
           # .git, and `codex exec` otherwise refuses to run there → 0s / no output
           # (SCARS §BENCH-NEEDS-GIT).
           agent=(codex exec --json --skip-git-repo-check "$task")
-          if [[ -n "$model"  ]]; then agent+=(--model "$model"); fi
+          if [[ -n "$active_model" ]]; then agent+=(--model "$active_model"); fi
           if [[ -n "$effort" ]]; then agent+=(-c "model_reasoning_effort=$effort"); fi ;;
         opencode)
           # --pure: skip user plugins that otherwise flood stdout with log lines
           # and corrupt the JSON (SCARS §OPENCODE-PURE-JSON). A model is required
           # or opencode hangs waiting on selection.
           agent=(opencode run --pure --format json "$task")
-          if [[ -n "$model"  ]]; then agent+=(-m "$model"); fi
+          if [[ -n "$active_model" ]]; then agent+=(-m "$active_model"); fi
           if [[ -n "$effort" ]]; then agent+=(--variant "$effort"); fi ;;
       esac
 
@@ -3644,9 +3682,9 @@ cmd_bench() {
       # what broke the `bench dry-run` CI check.)
       if [[ $dry -eq 1 ]]; then
         if [[ "$runtime" == "generic" ]]; then
-          printf "  %-8s #%d  →  (cd <tmp> && ATLAS_BENCH_TASK=… bash -c %q)\n" "$cond" "$rep" "$exec_tpl"
+          printf "  %-22s #%d  →  (cd <tmp> && ATLAS_BENCH_TASK=… bash -c %q)\n" "$run_label" "$rep" "$exec_tpl"
         else
-          printf "  %-8s #%d  →  (cd <tmp> && %s)\n" "$cond" "$rep" "${agent[*]}"
+          printf "  %-22s #%d  →  (cd <tmp> && %s)\n" "$run_label" "$rep" "${agent[*]}"
         fi
         continue
       fi
@@ -3661,19 +3699,20 @@ cmd_bench() {
         for f in "${quartet[@]}"; do rm -rf "${work:?}/$f"; done
       fi
 
-      _say "running $cond #$rep …"
+      _say "running $run_label #$rep …"
       t0=$(date +%s)
       # < /dev/null: headless agents (codex --json) otherwise block "Reading
       # additional input from stdin…" and hang. keep stderr (a silent 2>/dev/null
       # once hid a runtime that bailed at 0s — SCARS §BENCH-NEEDS-GIT).
       if [[ "$runtime" == "generic" ]]; then
-        ( cd "$work" && ATLAS_BENCH_TASK="$task" bash -c "$exec_tpl" < /dev/null ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
+        ( cd "$work" && ATLAS_BENCH_TASK="$task" bash -c "$exec_tpl" < /dev/null ) > "$runs/$out_fn" 2> "$runs/${out_fn%.out}.err" || true
       else
-        ( cd "$work" && "${agent[@]}" < /dev/null ) > "$runs/${cond}-${rep}.out" 2> "$runs/${cond}-${rep}.err" || true
+        ( cd "$work" && "${agent[@]}" < /dev/null ) > "$runs/$out_fn" 2> "$runs/${out_fn%.out}.err" || true
       fi
       t1=$(date +%s)
-      printf '%s\t%d\t%d\t%s\n' "$cond" "$rep" "$(( t1 - t0 ))" "${cond}-${rep}.out" >> "$runs/index.tsv"
+      printf '%s\t%d\t%d\t%s\t%s\n' "$cond" "$rep" "$(( t1 - t0 ))" "$out_fn" "${active_model:-default}" >> "$runs/index.tsv"
       rm -rf "$work"
+      done
     done
   done
   fi
@@ -3685,8 +3724,8 @@ cmd_bench() {
   fi
 
   # Metadata file (python writes it so json escaping is safe).
-  python3 -c 'import json,sys; json.dump(dict(zip(["runtime","runtime_version","model","effort","atlas_version","date_utc","repo","reps","parser"],sys.argv[2:])),open(sys.argv[1],"w"))' \
-    "$runs/meta.json" "$runtime" "$rt_ver" "${model:-default}" "${effort:-default}" "$ATLAS_VERSION" "$date_utc" "$repo_label" "$reps" "$parser"
+  python3 -c 'import json,sys; json.dump(dict(zip(["runtime","runtime_version","model","effort","atlas_version","date_utc","repo","reps","parser","matrix"],sys.argv[2:])),open(sys.argv[1],"w"))' \
+    "$runs/meta.json" "$runtime" "$rt_ver" "${model:-default}" "${effort:-default}" "$ATLAS_VERSION" "$date_utc" "$repo_label" "$reps" "$parser" "$matrix"
 
   mkdir -p "$out"
   local stamp base_path; stamp="$(date +%Y%m%d-%H%M%S)"; base_path="$out/bench-${runtime}-${stamp}"
@@ -3704,9 +3743,13 @@ parser=meta["parser"]
 rows=[]; detected_models=set(); idx=os.path.join(runs_dir,"index.tsv")
 if os.path.exists(idx):
     for line in open(idx):
-        cond,rep,wall,fn=line.rstrip("\n").split("\t")
+        parts=line.rstrip("\n").split("\t")
+        if len(parts)<4:
+            continue
+        cond,rep,wall,fn=parts[:4]
+        row_model=parts[4] if len(parts)>4 else meta.get("model","default")
         raw=open(os.path.join(runs_dir,fn)).read()
-        rec={"condition":cond,"rep":int(rep),"wall_s":int(wall),"output_chars":len(raw)}
+        rec={"condition":cond,"rep":int(rep),"model":row_model,"wall_s":int(wall),"output_chars":len(raw)}
         if not raw.strip():
             ep=os.path.join(runs_dir, fn.rsplit(".",1)[0]+".err")
             errtxt=open(ep).read().strip() if os.path.exists(ep) else ""
@@ -3844,7 +3887,14 @@ def agg(cond,key):
     vals=[r[key] for r in rows if r["condition"]==cond and isinstance(r.get(key),(int,float))]
     return round(statistics.mean(vals),4) if vals else None
 summary={c:{m:agg(c,m) for m in metrics} for c in ("without","with")}
-json.dump({"meta":meta,"task":task,"runs":rows,"summary":summary},open(base_path+".json","w"),indent=2)
+def agg_model(model,cond,key):
+    vals=[r[key] for r in rows if r.get("model")==model and r["condition"]==cond and isinstance(r.get(key),(int,float))]
+    return round(statistics.mean(vals),4) if vals else None
+matrix_summary={}
+if meta.get("matrix"):
+    for mdl in sorted({r.get("model","default") for r in rows}):
+        matrix_summary[mdl]={c:{m:agg_model(mdl,c,m) for m in metrics} for c in ("without","with")}
+json.dump({"meta":meta,"task":task,"runs":rows,"summary":summary,"matrix_summary":matrix_summary},open(base_path+".json","w"),indent=2)
 
 # Headline metric. All are lower-is-better. For agentic runtimes we use *turns*
 # (orientation efficiency) — NOT summed input_tokens, which double-counts cached
@@ -3870,7 +3920,8 @@ def fn(v):
 
 md=[f"# ATLAS benchmark — {meta['runtime']} ({meta['date_utc']})",""]
 md+=["| field | value |","|---|---|"]
-for k in ["date_utc","runtime","runtime_version","model","effort","atlas_version","repo","reps"]:
+for k in ["date_utc","runtime","runtime_version","model","matrix","effort","atlas_version","repo","reps"]:
+    if k=="matrix" and not meta.get(k): continue
     md.append(f"| {k} | {meta[k]} |")
 md.append(f"| task | {task.strip()[:300]} |")
 md+=["","## Results (mean per condition)","",
@@ -3879,6 +3930,14 @@ md+=["","## Results (mean per condition)","",
 for c in ("without","with"):
     md.append("| "+("without ATLAS" if c=="without" else "with ATLAS")+" | "+" | ".join(fn(summary[c][m]) for m in metrics)+" |")
 md.append("")
+if matrix_summary:
+    md+=["## Matrix results","",
+         "| model | condition | "+" | ".join(metrics)+" |",
+         "|---|---|"+"|".join(["---"]*len(metrics))+"|"]
+    for mdl in sorted(matrix_summary):
+        for c in ("without","with"):
+            md.append("| "+mdl+" | "+("without ATLAS" if c=="without" else "with ATLAS")+" | "+" | ".join(fn(matrix_summary[mdl][c][m]) for m in metrics)+" |")
+    md.append("")
 if ratio:
     md.append(f"**→ with ATLAS: {ratio:.1f}× {plabel} ({pct:.0f}% lower).**  _[N={n} per condition — directional; {meta['runtime_version']}, model={meta['model']}, effort={meta['effort']}]_")
 else:
@@ -3892,13 +3951,44 @@ open(base_path+".md","w").write("\n".join(md)+"\n")
 # Longitudinal ledger: append this run + regenerate the master comparison table,
 # so results accumulate and ATLAS's reduction is trackable across versions/dates.
 ledger_path=os.path.join(os.path.dirname(base_path),"ledger.jsonl")
-lrec={"date":meta["date_utc"],"atlas_version":meta["atlas_version"],"runtime":meta["runtime"],
+ledger_records=[]
+if matrix_summary:
+    for mdl in sorted(matrix_summary):
+        msum=matrix_summary[mdl]
+        mwo,mwi=msum["without"].get(prim),msum["with"].get(prim)
+        mratio=mpct=None
+        if mwo and mwi and mwi>0:
+            mratio=mwo/mwi; mpct=(1-mwi/mwo)*100
+        ledger_records.append({"date":meta["date_utc"],"atlas_version":meta["atlas_version"],"runtime":meta["runtime"],
+          "runtime_version":meta["runtime_version"],"model":mdl,"effort":meta["effort"],
+          "repo":meta["repo"],"reps":meta["reps"],"metric":prim,"without":mwo,"with":mwi,
+          "reduction_pct":(round(mpct,1) if mpct is not None else None),
+          "ratio":(round(mratio,2) if mratio is not None else None),
+          "report":os.path.basename(base_path)+".md"})
+else:
+    ledger_records.append({"date":meta["date_utc"],"atlas_version":meta["atlas_version"],"runtime":meta["runtime"],
       "runtime_version":meta["runtime_version"],"model":meta["model"],"effort":meta["effort"],
       "repo":meta["repo"],"reps":meta["reps"],"metric":prim,"without":wo,"with":wi,
       "reduction_pct":(round(pct,1) if pct is not None else None),
       "ratio":(round(ratio,2) if ratio is not None else None),
-      "report":os.path.basename(base_path)+".md"}
-open(ledger_path,"a").write(json.dumps(lrec)+"\n")
+      "report":os.path.basename(base_path)+".md"})
+with open(ledger_path,"a") as fh:
+    for lrec in ledger_records:
+        fh.write(json.dumps(lrec)+"\n")
+matrix_ledger_path=os.path.join(os.path.dirname(base_path),"matrix-ledger.jsonl")
+if matrix_summary:
+    with open(matrix_ledger_path,"a") as fh:
+        for r in rows:
+            mrec={"date":meta["date_utc"],"atlas_version":meta["atlas_version"],"runtime":meta["runtime"],
+                  "runtime_version":meta["runtime_version"],"model":r.get("model","default"),
+                  "effort":meta["effort"],"repo":meta["repo"],"condition":r["condition"],
+                  "rep":r["rep"],"report":os.path.basename(base_path)+".md"}
+            for m in metrics:
+                if r.get(m) is not None:
+                    mrec[m]=r.get(m)
+            if r.get("parse_error"):
+                mrec["parse_error"]=r.get("parse_error")
+            fh.write(json.dumps(mrec)+"\n")
 entries=[json.loads(l) for l in open(ledger_path) if l.strip()]
 entries.sort(key=lambda r: r.get("date",""))
 res_md=os.path.join(os.path.dirname(os.path.dirname(base_path)),"RESULTS.md")
@@ -3925,6 +4015,7 @@ errs=[r for r in rows if r.get("parse_error") or r.get("is_error")]
 if errs: print(f"  ⚠ {len(errs)} run(s) flagged errors — see the JSON")
 print(f"  report: {base_path}.md")
 print(f"  ledger: {res_md}  (all runs, for comparison over time)")
+if matrix_summary: print(f"  matrix ledger: {matrix_ledger_path}  (one row per model × condition × rep)")
 PY
 
   rm -rf "$runs"; [[ -n "$cleanup_base" ]] && rm -rf "$cleanup_base"

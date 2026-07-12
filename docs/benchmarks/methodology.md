@@ -13,7 +13,7 @@ others can cite — not a marketing number.
 
 ## Three measurements (don't conflate them)
 
-| | `atlas measure` (shipped) | `atlas bench --runtime openai` (shipped) | `atlas bench --runtime claude\|codex` (shipped) |
+| | `atlas measure` (shipped) | `atlas bench --runtime openai` (shipped) | `atlas bench --runtime claude\|codex\|opencode` (shipped) |
 |---|---|---|---|
 | What | Static byte/token estimate of the orientation *surface* | **Deterministic single-shot**: tokenize a fixed context (quartet spine vs raw repo) once, locally | Live agentic A/B: same task, full tool-use loop, with vs without the quartet |
 | Metric | bytes → ~tokens | **`input_tokens`** (cl100k, local) | **turns / cost / wall** |
@@ -42,7 +42,7 @@ as the token-reduction headline.
 
 ## The live protocol (`atlas bench`)
 
-> The MVP is shipped: `atlas bench --runtime claude` (or `codex`) runs the
+> The MVP is shipped: `atlas bench --runtime claude` (or `codex` / `opencode`) runs the
 > two conditions below for the **ATLAS vs none** comparison and writes JSON.
 > Extending it to the B/C/D baselines + more tasks is the next step.
 
@@ -55,6 +55,12 @@ Hold everything constant except the presence of ATLAS.
 - **C — CLAUDE.md only**.
 - **D — README only**.
 - **T — ATLAS** (trio + runtime exports).
+
+`--matrix "model-a,model-b"` repeats the same two-condition protocol for each
+listed model. The normal summary ledger keeps one comparison row per model; the
+raw matrix ledger (`results/matrix-ledger.jsonl`) records one row per
+model × condition × repetition so the free local model matrix can be recomputed
+without rerunning agents.
 
 **Inputs**: a fixed repo at a pinned SHA; a fixed task list (e.g. "add an OAuth
 provider", "fix failing test X", "add endpoint Y"); one agent runtime; one

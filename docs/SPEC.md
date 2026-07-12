@@ -293,6 +293,13 @@ iteration provenance header (`timestamp` · `model` · `effort` · `duration` ·
 `sub-agents`) plus the ticket and impact-check text; `--json` emits the same
 fields for dashboards.
 
+`atlas bench --matrix <model-a,model-b>` is the in-repo way to compare a fixed
+benchmark task across multiple runtime models without changing the rest of the
+protocol. It runs the normal `with`/`without` ATLAS conditions for each listed
+model, keeps the existing longitudinal summary ledger, and adds
+`results/matrix-ledger.jsonl` with one raw row per
+`model × condition × repetition`.
+
 ### EXECUTOR PACK — cross-model handoff (optional enrichment of `ROADMAP.md`)
 
 Strong-model planning + weak-model execution is the only affordable way to run
