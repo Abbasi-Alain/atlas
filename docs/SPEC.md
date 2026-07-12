@@ -629,12 +629,14 @@ specifics**: its *done-gate* (the smoke / success command — ATLAS.md §5) and 
 maintainer-only surfaces). A repo adopting ASOP SHOULD surface both in ATLAS.md
 §0, so an agent dropped into the repo finds **"how to prove a change works"** and
 **"when to hand up"** in one hop — the two questions a weaker agent most needs
-answered mechanically rather than left to judgment.
+answered mechanically rather than left to judgment. `atlas init` seeds both rows
+into the default `ATLAS.md` §0 by default.
 
 ### Conformance & tooling
 
 ASOP is OPTIONAL and adds **no new required conformance check** — a repo without
 it is unaffected and the standard's required set is unchanged. `atlas init
---asop` scaffolds both files verbatim (planned); because they are canonical, a
-conforming `atlas` MAY offer to *refresh* them to the current standard version
-rather than treat edits as customization.
+--asop` scaffolds both files verbatim; because they are canonical, `--force`
+*refreshes* them to the current shipped version rather than treating edits as
+customization. An optional `--deep` `ASOP_STALE` advisory — warning when a
+present ASOP file lags the shipped canonical version — is a planned follow-up.

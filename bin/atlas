@@ -3,13 +3,15 @@
 #
 # Subcommands:
 #   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs] [--critics]
-#              [--akigi] [--frq] [--brd] [--srd] [--intake]
+#              [--asop] [--akigi] [--frq] [--brd] [--srd] [--intake]
 #                                     (--loop also scaffolds LOOP.md + ROADMAP.md,
 #                                     the optional autonomous-loop 5th surface)
 #                                     (--bugs scaffolds BUGS.md, the optional
 #                                     INTERNAL open-issues register)
 #                                     (--critics scaffolds CRITICS.md, the optional
 #                                     cross-vendor second-opinion log)
+#                                     (--asop scaffolds ASOP.md + ASOP-EXECUTOR.md,
+#                                     the operating methodology, SPEC §12)
 #                                     (--akigi scaffolds AKIGI.md, the purpose
 #                                     contract; --frq/--brd/--srd scaffold the
 #                                     EXTERNAL intake trio — feature requests /
@@ -448,7 +450,7 @@ ${inv}"
 }
 
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 akigi=0 frq=0 brd=0 srd=0
+  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 asop=0 akigi=0 frq=0 brd=0 srd=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f)  force=1; shift ;;
@@ -456,6 +458,7 @@ cmd_init() {
       --loop)      loop=1; shift ;;
       --bugs)      bugs=1; shift ;;
       --critics)   critics=1; shift ;;
+      --asop)      asop=1; shift ;;
       --akigi)     akigi=1; shift ;;
       --frq)       frq=1; shift ;;
       --brd)       brd=1; shift ;;
@@ -523,6 +526,14 @@ cmd_init() {
   # missing-only like the quartet. `atlas critique` appends rows to it.
   if [[ $critics -eq 1 ]]; then
     _render "$(_src CRITICS.md.tmpl)" "$PWD/CRITICS.md" "$force"
+  fi
+  # Optional operating-methodology surface (SPEC §12): ASOP.md (13 reasoning
+  # moves + a 5-question self-test) + ASOP-EXECUTOR.md (the role-based executor
+  # card). Both CANONICAL — scaffolded verbatim; --force refreshes to the
+  # current shipped version.
+  if [[ $asop -eq 1 ]]; then
+    _render "$(_src ASOP.md.tmpl)"          "$PWD/ASOP.md"          "$force"
+    _render "$(_src ASOP-EXECUTOR.md.tmpl)" "$PWD/ASOP-EXECUTOR.md" "$force"
   fi
   # Optional cross-repo collaboration surfaces (SPEC §11): AKIGI.md (the
   # purpose contract) + the external intake trio FRQ.md (feature requests) /

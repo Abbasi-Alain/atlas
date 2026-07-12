@@ -1381,6 +1381,19 @@ TMP_BIG="$(mktemp -d)"; ( cd "$TMP_BIG" && git init -q && mkdir s && i=0 && whil
   && "$CLI" measure 2>/dev/null | grep -q 'atlas measure' ) && _pass "measure survives a >400-file repo (no SIGPIPE abort)" || _fail "measure big-repo SIGPIPE"
 rm -rf "$TMP_BIG"
 
+# --- RM-48: ASOP operating-methodology surface (init --asop + check awareness) ---
+echo ""
+echo "-- ASOP surface (init --asop / check) --"
+
+# init --asop scaffolds ASOP.md + ASOP-EXECUTOR.md verbatim; repo still passes --strict.
+TMP_AS1="$(mktemp -d)"; ( cd "$TMP_AS1" && git init -q -b main 2>/dev/null && "$CLI" init --asop >/dev/null 2>&1
+  [[ -f ASOP.md ]] && [[ -f ASOP-EXECUTOR.md ]] \
+  && grep -q 'five-question self-test' ASOP.md \
+  && grep -q 'STOP and hand up' ASOP-EXECUTOR.md \
+  && "$CLI" check --strict >/dev/null 2>&1 ) \
+  && _pass "init --asop scaffolds ASOP.md + ASOP-EXECUTOR.md, passes --strict" || _fail "init --asop"
+rm -rf "$TMP_AS1"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1
