@@ -790,3 +790,80 @@ These name the remaining tool-integration seams so implementations converge;
 - **Release evidence manifest** — a release is "ready" only when one
   machine-readable manifest links its build, smoke, security, rollback, and
   deployed-version proofs; a missing proof is a missing release gate.
+
+---
+
+## 15. `atlas context` — the tool-free context bundle
+
+Every other consumption path assumes something: a SessionStart hook, an MCP
+client, a runtime adapter, a tool-using agent. **`atlas context`** assumes
+nothing — it prints the complete orientation payload to stdout, so ANY
+harness (a bare API call, a 7B local model with no function calling, a RAG
+pipeline, a human pasting into a chat) can prepend it verbatim. **This bundle
+is THE canonical consumption form; the hook, MCP server, and runtime adapters
+are conveniences layered over it, not separate sources of truth.**
+
+```
+atlas context [--task "<t>"] [--budget N] [--format md|json] [--hash]
+```
+
+- No flags: the full spine, in priority order — (1) `ATLAS.md` through the
+  end of §1, (2) `SCARS.md`'s `## Table of contents`, (3) `SKILL.md`'s
+  `## Table of contents`, (4) `CLAUDE.md` in full — each clearly delimited
+  by its own `## ` heading.
+- `--task "<t>"` narrows the bundle to the relevance slice `atlas orient`
+  computes (map rows + playbook anchors + the SCARS that bite this task),
+  when `python3` is available. Without it, `atlas context` degrades to the
+  full spine and says so on stderr — it never fails.
+- `--budget N` caps the emitted bundle at N bytes. Sections are dropped in
+  **reverse priority order** — CLAUDE.md first, then the SKILL ToC, then the
+  SCARS ToC — the ATLAS §0-1 slice is never dropped. If the budget is still
+  exceeded after dropping every optional section (or for a `--task` slice,
+  which has no sub-sections to drop), the bundle is hard-truncated as a last
+  resort: emitted output NEVER exceeds N bytes.
+- `--hash` prints a stable `sha256` of exactly the emitted bundle plus a
+  manifest (files included, git commit, byte count) after a `---` separator
+  — **context provenance**: the same tree always produces the same hash
+  (nothing time- or path-dependent is hashed), so an agent run is citable
+  ("ran against spine sha256:…") and reproducible.
+- `--format json` emits one object: `{"bundle", "hash", "manifest": {"files",
+  "commit", "bytes", "task"}}` — `hash` and `manifest` are always populated
+  in this format, independent of `--hash`.
+
+---
+
+## 16. `atlas remember` — the session write-back protocol
+
+`atlas context` (§15) is the READ side: the accumulated map, memory, and
+playbook. **`atlas remember`** is the WRITE side — before a session ends or
+compacts, a durable learning gets distilled back into the repo's surfaces
+instead of dying with the context window, so the next session (or a
+different agent) inherits it instead of re-learning it at full cost.
+
+```
+atlas remember "<note>" --kind scar|skill|bug|faq [--name NAME]
+```
+
+`--kind` is **REQUIRED** — there is no keyword auto-classifier. A heuristic
+guess at which surface a note belongs to would be confidently wrong often
+enough to be worse than asking the caller to say so.
+
+- `scar` → a stub `§ANCHOR` appended to `SCARS.md` (§3) — title/anchor from
+  `--name`, else derived from the note's first words — **plus its ToC
+  entry**. This is stricter than the bare `atlas anchor add`, which leaves
+  the ToC line for a human to add by hand: `atlas remember`'s write is
+  immediately `atlas check --deep`-clean.
+- `skill` → a new recipe section appended to the resolved `SKILL.md` (§3)
+  plus its ToC entry — the ToC is load-bearing (SCARS
+  §SKILL-TOC-LOAD-BEARING), never optional.
+- `bug` → an entry appended under `BUGS.md`'s `## Open` (§9), numbered the
+  next `BUG-N`; dies with the `atlas init --bugs` hint when the file is
+  absent (an opt-in surface `atlas remember` does not scaffold).
+- `faq` → a new `FAQ-NNN` entry (the next permanent id) appended to the FAQ
+  file (§13, root `FAQ.md` or `docs/FAQ.md`, first found); dies with the
+  `atlas init --faq` hint when neither exists.
+
+Each kind writes directly into its target surface's existing schema; the
+graduation conventions already defined for that surface (§9 BUGS→SCARS, §13
+FAQ→SCARS/SKILL/BUGS) govern what happens to the entry next — `atlas
+remember` only handles the initial write.

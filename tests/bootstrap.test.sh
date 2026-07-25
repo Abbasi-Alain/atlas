@@ -1595,6 +1595,184 @@ TMP_TL6="$(mktemp -d)"; ( cd "$TMP_TL6" && git init -q -b main 2>/dev/null && "$
   && _pass "measure --tools without tools.json dies with the init hint" || _fail "measure --tools missing-file handling"
 rm -rf "$TMP_TL6"
 
+# --- Surface-only init mode (idea-ledger: "Surface-only init mode") ---------
+# A surface flag on a repo that already has ATLAS.md must scaffold ONLY the
+# requested surface(s) — never the quartet+seeds block — so a deliberately
+# removed quartet file (e.g. EXAMPLES.md) is not silently re-created (RM-46,
+# and again 2026-07-26).
+echo ""
+echo "-- surface-only init mode (init --<flag> on an existing ATLAS repo) --"
+
+# (a) quartet minus EXAMPLES.md + `init --tools` → EXAMPLES.md stays gone,
+# .atlas/tools.json IS created, and the surface-only notice is printed.
+TMP_SF1="$(mktemp -d)"; ( cd "$TMP_SF1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1 && rm -f EXAMPLES.md
+  out="$("$CLI" init --tools 2>&1)"
+  [[ ! -f EXAMPLES.md ]] \
+  && [[ -f .atlas/tools.json ]] \
+  && echo "$out" | grep -q "scaffolding only the requested surface" ) \
+  && _pass "init --tools on an existing repo leaves a removed EXAMPLES.md gone + writes tools.json" || _fail "surface-only init --tools recreated EXAMPLES.md, missed tools.json, or notice missing"
+rm -rf "$TMP_SF1"
+
+# (b) same starting repo, but plain `atlas init` (no surface flag) DOES fill
+# in the missing EXAMPLES.md — surface-only mode must not affect plain init.
+TMP_SF2="$(mktemp -d)"; ( cd "$TMP_SF2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1 && rm -f EXAMPLES.md
+  "$CLI" init >/dev/null 2>&1
+  [[ -f EXAMPLES.md ]] ) \
+  && _pass "plain init (no surface flag) still fills in a missing EXAMPLES.md" || _fail "plain init did not recreate EXAMPLES.md"
+rm -rf "$TMP_SF2"
+
+# (c) a surface flag in a FRESH directory (no ATLAS.md yet) is unaffected —
+# the documented one-shot scaffold still produces the full conformant repo.
+TMP_SF3="$(mktemp -d)"; ( cd "$TMP_SF3" && git init -q -b main 2>/dev/null && "$CLI" init --faq >/dev/null 2>&1
+  [[ -f ATLAS.md ]] && [[ -f docs/FAQ.md ]] \
+  && "$CLI" check --strict >/dev/null 2>&1 ) \
+  && _pass "init --faq in a fresh dir still scaffolds the full quartet + docs/FAQ.md, passes --strict" || _fail "fresh init --faq regression"
+rm -rf "$TMP_SF3"
+
+# --- atlas context — the tool-free context bundle (RM-25, SPEC §15) --------
+echo ""
+echo "-- atlas context (bundle / --budget / --hash / --format json) --"
+
+# works on a fresh scaffold, emits a non-empty bundle.
+TMP_CX1="$(mktemp -d)"; ( cd "$TMP_CX1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  n="$("$CLI" context | wc -c | tr -d ' ')"
+  [[ "$n" -gt 0 ]] ) \
+  && _pass "context works on a fresh scaffold and emits a non-empty bundle" || _fail "context on fresh scaffold"
+rm -rf "$TMP_CX1"
+
+# --budget N never exceeds N bytes, even for a small N (forces degradation).
+TMP_CX2="$(mktemp -d)"; ( cd "$TMP_CX2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  n="$("$CLI" context --budget 400 | wc -c | tr -d ' ')"
+  [[ "$n" -le 400 ]] ) \
+  && _pass "context --budget N never exceeds N bytes" || _fail "context --budget exceeded"
+rm -rf "$TMP_CX2"
+
+# running twice on a clean, unchanged tree gives identical hashes.
+TMP_CX3="$(mktemp -d)"; ( cd "$TMP_CX3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  h1="$("$CLI" context --hash | grep '^sha256:')"
+  h2="$("$CLI" context --hash | grep '^sha256:')"
+  [[ -n "$h1" && "$h1" == "$h2" ]] ) \
+  && _pass "context --hash is stable on a clean, unchanged tree" || _fail "context --hash unstable"
+rm -rf "$TMP_CX3"
+
+# --format json emits the expected keys.
+TMP_CX4="$(mktemp -d)"; ( cd "$TMP_CX4" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  out="$("$CLI" context --format json)"
+  echo "$out" | grep -q '"bundle":"' \
+  && echo "$out" | grep -q '"hash":"' \
+  && echo "$out" | grep -q '"manifest":{' \
+  && echo "$out" | grep -q '"files":\[' \
+  && echo "$out" | grep -q '"commit":"' \
+  && echo "$out" | grep -q '"bytes":' ) \
+  && _pass "context --format json emits bundle/hash/manifest keys" || _fail "context --format json shape"
+rm -rf "$TMP_CX4"
+
+# the JSON must actually PARSE — an unborn repo used to leak the two-line
+# "HEAD\nunborn" of `git rev-parse HEAD || echo unborn` into the manifest's
+# commit field, a raw newline no shape-grep catches (found by json.loads in
+# verification). Skipped when python3 is unavailable.
+if command -v python3 >/dev/null 2>&1; then
+  TMP_CX5="$(mktemp -d)"; ( cd "$TMP_CX5" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+    "$CLI" context --format json 2>/dev/null \
+      | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["manifest"]["commit"] == "unborn"' 2>/dev/null ) \
+    && _pass "context --format json is VALID json in an unborn repo (commit: unborn, no raw newline)" || _fail "context json invalid in unborn repo"
+  rm -rf "$TMP_CX5"
+fi
+
+# --- atlas remember — the write side (RM-21 core, SPEC §16) ----------------
+# Scope: explicit --kind is REQUIRED (no keyword auto-classifier); the MCP
+# atlas_remember tool and the hook parting-nudge are separate follow-up work.
+echo ""
+echo "-- atlas remember (scar/skill/bug/faq write-back) --"
+
+# --kind is required — no auto-classifier.
+TMP_RM0="$(mktemp -d)"; ( cd "$TMP_RM0" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  ! "$CLI" remember "a note with no kind" >/dev/null 2>&1 ) \
+  && _pass "remember dies without --kind (no auto-classifier)" || _fail "remember accepted a missing --kind"
+rm -rf "$TMP_RM0"
+
+# scar: appends a stub anchor + its ToC entry (unlike bare `anchor add`,
+# which leaves the ToC line for a human); check --deep --strict stays green.
+TMP_RM1="$(mktemp -d)"; ( cd "$TMP_RM1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" remember "the retry loop never terminates on an empty queue" --kind scar --name "retry loop empty queue" >/dev/null
+  grep -q '<a id="retry-loop-empty-queue">' SCARS.md \
+  && grep -q '(#retry-loop-empty-queue)' SCARS.md \
+  && "$CLI" check --deep --strict >/dev/null 2>&1 ) \
+  && _pass "remember --kind scar writes an anchor + ToC entry, check --deep --strict clean" || _fail "remember --kind scar"
+rm -rf "$TMP_RM1"
+
+# skill: appends a recipe section + its ToC entry (SCARS §SKILL-TOC-LOAD-
+# BEARING — never optional); check --deep --strict stays green.
+TMP_RM2="$(mktemp -d)"; ( cd "$TMP_RM2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  sk="$(find .agents/skill -maxdepth 2 -name SKILL.md)"
+  "$CLI" remember "always run the smoke set twice on flaky CI" --kind skill --name "Run the smoke set twice" >/dev/null
+  grep -q '<a id="run-the-smoke-set-twice">' "$sk" \
+  && grep -q '(#run-the-smoke-set-twice)' "$sk" \
+  && "$CLI" check --deep --strict >/dev/null 2>&1 ) \
+  && _pass "remember --kind skill writes a recipe + ToC entry, check --deep --strict clean" || _fail "remember --kind skill"
+rm -rf "$TMP_RM2"
+
+# bug: dies with the init --bugs hint when the surface is absent.
+TMP_RM3="$(mktemp -d)"; ( cd "$TMP_RM3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  out="$("$CLI" remember "a note" --kind bug 2>&1)"; rc=$?
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "atlas init --bugs" ) \
+  && _pass "remember --kind bug dies with the init --bugs hint when BUGS.md is absent" || _fail "remember --kind bug missing-surface handling"
+rm -rf "$TMP_RM3"
+
+# bug: appends under '## Open', numbered BUG-N; check --deep --strict stays green.
+TMP_RM4="$(mktemp -d)"; ( cd "$TMP_RM4" && git init -q -b main 2>/dev/null && "$CLI" init --bugs >/dev/null 2>&1
+  "$CLI" remember "measure --tools double counts telemetry on a second run" --kind bug >/dev/null
+  awk '/^## Open/{f=1} f&&/^## Done/{exit} f' BUGS.md | grep -q '\*\*BUG-1\*\*.*double counts telemetry' \
+  && "$CLI" check --deep --strict >/dev/null 2>&1 ) \
+  && _pass "remember --kind bug appends BUG-1 under '## Open', check --deep --strict clean" || _fail "remember --kind bug write shape"
+rm -rf "$TMP_RM4"
+
+# faq: dies with the init --faq hint when no FAQ file exists.
+TMP_RM5="$(mktemp -d)"; ( cd "$TMP_RM5" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  out="$("$CLI" remember "a question" --kind faq 2>&1)"; rc=$?
+  [[ $rc -ne 0 ]] && echo "$out" | grep -q "atlas init --faq" ) \
+  && _pass "remember --kind faq dies with the init --faq hint when no FAQ file exists" || _fail "remember --kind faq missing-surface handling"
+rm -rf "$TMP_RM5"
+
+# faq: appends the next FAQ-NNN id, numbering PAST a leading-zero id
+# correctly (regression: bash arithmetic reads a "012"-shaped string as
+# OCTAL — FAQ-009 must yield FAQ-010, not an octal-mangled id); asked-by is
+# stamped; check --deep --strict stays green. The scaffolded template's own
+# "## Conventions" section cites a "FAQ-012" example id, which would confound
+# a naive probe, so this replaces the body with a minimal FAQ containing ONLY
+# the leading-zero seed (the ATLAS.md link `init --faq` already wrote stays,
+# so `check` still sees a real link regardless of docs/FAQ.md's body).
+TMP_RM6="$(mktemp -d)"; ( cd "$TMP_RM6" && git init -q -b main 2>/dev/null && "$CLI" init --faq >/dev/null 2>&1
+  cat > docs/FAQ.md <<'FAQEOF'
+# FAQ — test project
+
+## General
+
+### FAQ-009 · Q: a seeded question (2026-01-01)
+- asked-by: human
+
+seeded answer.
+FAQEOF
+  "$CLI" remember "why does init skip the quartet on existing repos" --kind faq >/dev/null
+  grep -q '^### FAQ-010 · Q: why does init skip the quartet on existing repos' docs/FAQ.md \
+  && grep -q '^- asked-by: agent' docs/FAQ.md \
+  && "$CLI" check --deep --strict >/dev/null 2>&1 ) \
+  && _pass "remember --kind faq numbers past a leading-zero id correctly, check --deep --strict clean" || _fail "remember --kind faq write shape / leading-zero id math"
+rm -rf "$TMP_RM6"
+
+# faq numbering counts ENTRY HEADINGS only: on an untouched `init --faq`
+# scaffold the first remembered entry is FAQ-001 — the template's own prose
+# example (`FAQ-012` under Conventions) must not inflate the numbering
+# (caught in verification: it used to start fresh scaffolds at FAQ-013).
+TMP_RM7="$(mktemp -d)"; ( cd "$TMP_RM7" && git init -q -b main 2>/dev/null && "$CLI" init --faq >/dev/null 2>&1
+  "$CLI" remember "first real question" --kind faq >/dev/null 2>&1
+  grep -q '^### FAQ-001 · Q: first real question' docs/FAQ.md || exit 1
+  "$CLI" remember "second real question" --kind faq >/dev/null 2>&1
+  grep -q '^### FAQ-002 · Q: second real question' docs/FAQ.md \
+  && "$CLI" check --deep --strict >/dev/null 2>&1 ) \
+  && _pass "fresh init --faq scaffold numbers FAQ-001/002 (prose mentions don't inflate ids)" || _fail "FAQ id inflated by template prose"
+rm -rf "$TMP_RM7"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

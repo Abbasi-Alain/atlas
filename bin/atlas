@@ -24,6 +24,10 @@
 #                                     each implies --akigi; --intake = all four)
 #                                     bootstrap ATLAS.md + SKILL.md + SCARS.md
 #                                     + CLAUDE.md + AGENTS.md + EXAMPLES.md (+ seeds).
+#                                     if ATLAS.md already exists AND any surface
+#                                     flag above was passed, the quartet+seeds
+#                                     scaffold is skipped — only the requested
+#                                     surface(s) are (re)scaffolded.
 #                                     --analyze scans the repo + pre-fills the map.
 #                                     + stack-specific docs in cwd.
 #                                     --style: default | minimal | strict |
@@ -73,6 +77,17 @@
 #                                     (--auto: auto-refresh §0.5 + stage it)
 #   atlas orient ["task"]             print the map — or just the slice relevant
 #                                     to "task" (what the MCP atlas_orient serves)
+#   atlas context [--task "<t>"] [--budget N] [--format md|json] [--hash]
+#                                     the tool-free context bundle (SPEC §15):
+#                                     ATLAS §0-1 + SCARS/SKILL ToCs + CLAUDE.md,
+#                                     one command any harness can prepend —
+#                                     no hook/MCP/adapter required. --task
+#                                     narrows to the atlas-orient slice (needs
+#                                     python3; degrades to the full bundle
+#                                     otherwise). --budget caps output bytes,
+#                                     dropping CLAUDE.md, then SKILL ToC, then
+#                                     SCARS ToC (never the ATLAS slice).
+#                                     --hash prints a stable sha256 + manifest.
 #   atlas mcp [--config] [--http]     run the MCP server — serve the map to any
 #                                     MCP client (Claude Code/Cursor/OpenClaw/…)
 #   atlas doctor                      diagnose ATLAS_HOME + adapter/hook wiring
@@ -82,6 +97,15 @@
 #                                     codex|copilot|gemini|cursor|llms-txt|all
 #   atlas anchors                     list every SCARS anchor (machine-readable)
 #   atlas anchor add NAME "summary"   append a stub anchor to SCARS.md
+#   atlas remember "<note>" --kind scar|skill|bug|faq [--name NAME]
+#                                     the write side (SPEC §16): distill a
+#                                     durable mid-session learning back into
+#                                     the repo instead of losing it at
+#                                     compaction. --kind is REQUIRED (no
+#                                     auto-classifier). scar/skill also write
+#                                     the ToC entry (--deep-clean on write);
+#                                     bug/faq die with the init hint when
+#                                     their surface is absent.
 #   atlas critique <topic> [--range A..B] [--verify "cmds"]
 #                          [--with-codex|--with-claude|--no-auto]
 #                                     append CRITICS.md row stub + print the
@@ -552,21 +576,22 @@ _write_tools_json() {
 
 cmd_init() {
   local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 faq=0 tools=0 asop=0 akigi=0 frq=0 brd=0 srd=0
+  local surface_requested=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f)  force=1; shift ;;
       --analyze)   analyze=1; shift ;;
-      --loop)      loop=1; shift ;;
-      --bugs)      bugs=1; shift ;;
-      --critics)   critics=1; shift ;;
-      --faq)       faq=1; shift ;;
-      --tools)     tools=1; shift ;;
-      --asop)      asop=1; shift ;;
-      --akigi)     akigi=1; shift ;;
-      --frq)       frq=1; shift ;;
-      --brd)       brd=1; shift ;;
-      --srd)       srd=1; shift ;;
-      --intake)    akigi=1; frq=1; brd=1; srd=1; shift ;;
+      --loop)      loop=1; surface_requested=1; shift ;;
+      --bugs)      bugs=1; surface_requested=1; shift ;;
+      --critics)   critics=1; surface_requested=1; shift ;;
+      --faq)       faq=1; surface_requested=1; shift ;;
+      --tools)     tools=1; surface_requested=1; shift ;;
+      --asop)      asop=1; surface_requested=1; shift ;;
+      --akigi)     akigi=1; surface_requested=1; shift ;;
+      --frq)       frq=1; surface_requested=1; shift ;;
+      --brd)       brd=1; surface_requested=1; shift ;;
+      --srd)       srd=1; surface_requested=1; shift ;;
+      --intake)    akigi=1; frq=1; brd=1; srd=1; surface_requested=1; shift ;;
       --style)     style="${2:-default}"; shift 2 ;;
       --style=*)   style="${1#--style=}"; shift ;;
       --stack)     stacks="${2:-}"; shift 2 ;;
@@ -574,6 +599,15 @@ cmd_init() {
       *) shift ;;
     esac
   done
+  # Surface-only mode: a surface flag (--loop/--bugs/--critics/--faq/--tools/
+  # --asop/--akigi/--frq/--brd/--srd/--intake) on a repo that already has an
+  # ATLAS.md scaffolds ONLY the requested surface(s) — never the quartet+seeds
+  # block. Without this, a repo that deliberately lacks a quartet file (e.g. a
+  # removed EXAMPLES.md) gets it silently re-created by an unrelated surface
+  # flag (RM-46, and again 2026-07-26). Plain `atlas init` (no surface flags)
+  # and a fresh directory (no ATLAS.md yet) are both unaffected.
+  local surface_only=0
+  [[ $surface_requested -eq 1 && -f "$PWD/ATLAS.md" ]] && surface_only=1
   local project; project="$(_project_name)"
   local slug; slug="$(_project_slug)"   # spec-mandated kebab dir name (SPEC §1)
 
@@ -594,18 +628,22 @@ cmd_init() {
   fi
 
   _banner "🚀" "atlas init  $(_c_dim "(style=$style)")"
-  _render "$(_src ATLAS.md.tmpl)"    "$PWD/ATLAS.md"                                   "$force"
-  _render "$(_src SKILL.md.tmpl)"    "$PWD/.agents/skill/${slug}/SKILL.md"             "$force"
-  _render "$(_src SCARS.md.tmpl)"    "$PWD/SCARS.md"                                   "$force"
-  _render "$(_src CLAUDE.md.tmpl)"   "$PWD/CLAUDE.md"                                  "$force"
-  _render "$(_src EXAMPLES.md.tmpl)" "$PWD/EXAMPLES.md"                                "$force"
-  # AGENTS.md is a content mirror of CLAUDE.md so Codex/OpenCode auto-discover.
-  if [[ -f "$PWD/CLAUDE.md" ]]; then
-    if [[ -e "$PWD/AGENTS.md" && "$force" != "1" ]]; then
-      _say "$PWD/AGENTS.md exists — skip (--force to overwrite)"
-    else
-      cp "$PWD/CLAUDE.md" "$PWD/AGENTS.md"
-      _say "wrote $PWD/AGENTS.md (mirror of CLAUDE.md)"
+  if [[ $surface_only -eq 1 ]]; then
+    _say "existing ATLAS repo — scaffolding only the requested surface(s) (plain 'atlas init' scaffolds missing quartet files)"
+  else
+    _render "$(_src ATLAS.md.tmpl)"    "$PWD/ATLAS.md"                                   "$force"
+    _render "$(_src SKILL.md.tmpl)"    "$PWD/.agents/skill/${slug}/SKILL.md"             "$force"
+    _render "$(_src SCARS.md.tmpl)"    "$PWD/SCARS.md"                                   "$force"
+    _render "$(_src CLAUDE.md.tmpl)"   "$PWD/CLAUDE.md"                                  "$force"
+    _render "$(_src EXAMPLES.md.tmpl)" "$PWD/EXAMPLES.md"                                "$force"
+    # AGENTS.md is a content mirror of CLAUDE.md so Codex/OpenCode auto-discover.
+    if [[ -f "$PWD/CLAUDE.md" ]]; then
+      if [[ -e "$PWD/AGENTS.md" && "$force" != "1" ]]; then
+        _say "$PWD/AGENTS.md exists — skip (--force to overwrite)"
+      else
+        cp "$PWD/CLAUDE.md" "$PWD/AGENTS.md"
+        _say "wrote $PWD/AGENTS.md (mirror of CLAUDE.md)"
+      fi
     fi
   fi
   # Optional 5th surface — the autonomous improvement loop (SPEC §8). Opt-in via
@@ -686,7 +724,7 @@ cmd_init() {
   # separate seed that's rendered iff the style provides it AND the file
   # doesn't already exist (or --force was passed).
   local seeds_dir="$TEMPLATES/styles/$style/seeds"
-  if [[ -d "$seeds_dir" ]]; then
+  if [[ -d "$seeds_dir" && $surface_only -eq 0 ]]; then
     while IFS= read -r seed; do
       local rel="${seed#"$seeds_dir"/}"
       _render "$seed" "$PWD/$rel" "$force"
@@ -1441,6 +1479,172 @@ EOF
     *)
       _die "usage: atlas anchor add NAME \"summary\""
       ;;
+  esac
+}
+
+# The next NNN in a `PREFIXNNN` id scheme (e.g. `BUG-` or `FAQ-`), scanning
+# whatever's already in the file — 1 when none exist. $3 = zero-pad width
+# (0 = unpadded, matching BUGS.md's `BUG-N`; 3 matches FAQ.md's `FAQ-NNN`).
+_remember_next_id() {
+  # $4 = ERE a LINE must match to count as a real ENTRY — ids mentioned in
+  # prose (the FAQ template's own "cross-linked (`FAQ-012`)" example, a Done
+  # log narrating "BUG-7") must never inflate the numbering: a fresh scaffold
+  # starts at 001, not at template-example + 1.
+  local file="$1" prefix="$2" pad="$3" line_re="$4" max=0 n
+  while IFS= read -r n; do
+    [[ -z "$n" ]] && continue
+    n=$((10#$n))  # force base-10 — a "012" match is decimal 12, NOT octal 10
+    [[ "$n" -gt "$max" ]] && max="$n"
+  done < <(grep -E "$line_re" "$file" 2>/dev/null | grep -oE "${prefix}[0-9]+" | grep -oE '[0-9]+')
+  local next=$((max + 1))
+  if [[ "$pad" -gt 0 ]]; then printf "%0${pad}d" "$next"; else printf '%d' "$next"; fi
+}
+
+# scar kind: a stub §ANCHOR in SCARS.md, same shape as `atlas anchor add`,
+# PLUS its ToC entry — `atlas anchor add` alone leaves the ToC line for a
+# human to add by hand, which would fail `atlas check --deep --strict`
+# (ANCHOR_NOT_IN_TOC) the moment this note is written. The heading stays the
+# short title; the full note goes under Symptom.
+_remember_scar() {
+  local note="$1" title="$2" slug="$3"
+  local scars="$PWD/SCARS.md"
+  [[ -f "$scars" ]] || _die "no SCARS.md — run 'atlas init' first"
+  local upper; upper="$(printf '%s' "$slug" | tr '[:lower:]' '[:upper:]')"
+  cat >> "$scars" <<EOF
+
+---
+
+<a id="${slug}"></a>
+### §${upper} — ${title}
+
+**Symptom.** ${note}
+
+**Root cause.** _(not yet diagnosed — recorded via 'atlas remember')_
+
+**Do NOT.** _(fill in the anti-pattern)_
+
+**Do.** _(fill in the correct pattern)_
+EOF
+  local toc_line="- [§${upper} — ${title}](#${slug})"
+  awk -v nl="$toc_line" '
+    /^## Table of contents/ && !done { print; print nl; done=1; next }
+    { print }
+  ' "$scars" > "$scars.tmp" && mv "$scars.tmp" "$scars"
+  _say "appended §${upper} to $scars (+ ToC entry)"
+}
+
+# skill kind: a new recipe section in the resolved SKILL.md PLUS its ToC
+# entry — the ToC is load-bearing (SCARS §SKILL-TOC-LOAD-BEARING), never
+# optional.
+_remember_skill() {
+  local note="$1" title="$2" slug="$3"
+  local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+  [[ -n "$skill" && -f "$skill" ]] || _die "no SKILL.md — run 'atlas init' first"
+  cat >> "$skill" <<EOF
+
+---
+
+<a id="${slug}"></a>
+### ${title}
+
+${note}
+EOF
+  local toc_line="- [${title}](#${slug})"
+  awk -v nl="$toc_line" '
+    /^## Table of contents/ && !done { print; print nl; done=1; next }
+    { print }
+  ' "$skill" > "$skill.tmp" && mv "$skill.tmp" "$skill"
+  _say "appended recipe '${title}' to $skill (+ ToC entry)"
+}
+
+# bug kind: an entry under BUGS.md's '## Open' (SPEC §9), numbered the next
+# unpadded BUG-N. Dies with the init hint when BUGS.md is absent (it's an
+# opt-in surface — 'atlas remember' doesn't scaffold it).
+_remember_bug() {
+  local note="$1"
+  local bugs="$PWD/BUGS.md"
+  [[ -f "$bugs" ]] || _die "no BUGS.md — run 'atlas init --bugs' first"
+  local n; n="$(_remember_next_id "$bugs" 'BUG-' 0 '^[[:space:]]*-[[:space:]]+(~~)?\*\*BUG-[0-9]+')"
+  local date; date="$(date +%Y-%m-%d 2>/dev/null || echo unknown)"
+  local entry="- **BUG-${n}** — *(${date})* — ${note}"
+  awk -v nl="$entry" '
+    /^## Open/ { print; inopen=1; next }
+    inopen && /^_\(nothing open yet/ { next }
+    inopen && /^## / { print nl; print ""; inopen=0; print; next }
+    { print }
+    END { if (inopen) print nl }
+  ' "$bugs" > "$bugs.tmp" && mv "$bugs.tmp" "$bugs"
+  _say "appended BUG-${n} to $bugs under '## Open'"
+}
+
+# faq kind: a new FAQ-NNN entry (SPEC §13) in the FAQ file (root FAQ.md or
+# docs/FAQ.md, first found), appended at the end of its first topic section.
+# The entry body is multi-line, so it's streamed in via a temp file + getline
+# (SCARS §AWK-MULTILINE-V — `awk -v` with a multi-line value warns on macOS's
+# default awk), not passed through -v.
+_remember_faq() {
+  local note="$1"
+  local faq; faq="$(_faq_file)"
+  [[ -n "$faq" ]] || _die "no FAQ.md/docs/FAQ.md — run 'atlas init --faq' first"
+  local n; n="$(_remember_next_id "$faq" 'FAQ-' 3 '^#+[[:space:]]+FAQ-[0-9]+')"
+  local date; date="$(date +%Y-%m-%d 2>/dev/null || echo unknown)"
+  local block; block="$(mktemp)"
+  cat > "$block" <<EOF
+### FAQ-${n} · Q: ${note} (${date})
+- asked-by: agent
+
+_(recorded via 'atlas remember' — no answer captured yet)_
+EOF
+  awk -v bf="$block" '
+    /^## / && !seen { print; intopic=1; seen=1; next }
+    intopic && /^_\(no entries yet/ { next }
+    intopic && /^## / {
+      print ""; while ((getline line < bf) > 0) print line; close(bf); print ""
+      intopic=0; print; next
+    }
+    { print }
+    END { if (intopic) { print ""; while ((getline line < bf) > 0) print line; close(bf) } }
+  ' "$faq" > "$faq.tmp" && mv "$faq.tmp" "$faq"
+  rm -f "$block"
+  _say "appended FAQ-${n} to $faq"
+}
+
+# remember — the write side: distill a durable mid-session learning back into
+# the repo's surfaces instead of losing it at compaction/session end (SPEC
+# §16, the session write-back protocol). `--kind` is REQUIRED — no keyword
+# auto-classifier (a heuristic guess would be confidently wrong often enough
+# to be worse than asking).
+#   atlas remember "<note>" --kind scar|skill|bug|faq [--name NAME]
+cmd_remember() {
+  local note="${1:-}"; shift || true
+  [[ -z "$note" || "$note" == --* ]] && _die 'usage: atlas remember "<note>" --kind scar|skill|bug|faq [--name NAME]'
+  note="$(printf '%s' "$note" | tr '\n' ' ')"  # single-line everywhere it lands (ToC/heading/BUG line)
+  local kind="" name=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --kind)   kind="${2:-}"; shift 2 ;;
+      --kind=*) kind="${1#--kind=}"; shift ;;
+      --name)   name="${2:-}"; shift 2 ;;
+      --name=*) name="${1#--name=}"; shift ;;
+      *) shift ;;
+    esac
+  done
+  case "$kind" in
+    scar|skill|bug|faq) ;;
+    *) _die "atlas remember needs --kind scar|skill|bug|faq (explicit — no auto-classifier)" ;;
+  esac
+
+  local derived title slug
+  derived="$(printf '%s' "$note" | tr -s '[:space:]' ' ' | cut -d' ' -f1-6)"
+  title="${name:-$derived}"
+  slug="$(_kebab "$title")"
+  [[ -z "$slug" ]] && _die "atlas remember: could not derive a name/slug from the note — pass --name explicitly"
+
+  case "$kind" in
+    scar)  _remember_scar  "$note" "$title" "$slug" ;;
+    skill) _remember_skill "$note" "$title" "$slug" ;;
+    bug)   _remember_bug   "$note" ;;
+    faq)   _remember_faq   "$note" ;;
   esac
 }
 
@@ -4426,6 +4630,158 @@ cmd_map() {
   fi
 }
 
+# context — the tool-free, zero-dependency context bundle (SPEC §15): the
+# canonical consumption form any harness (a bare API call, a non-function-
+# calling local model, a RAG pipeline, a human pasting into a chat) can
+# prepend verbatim — no hook/MCP/adapter required. In priority order: ATLAS.md
+# through end of §1, SCARS.md ToC, SKILL.md ToC, CLAUDE.md (full). --task
+# delegates to `atlas orient`'s relevance slice when python3 is available;
+# without it, degrades to the full bundle (never fails). --budget caps the
+# emitted bytes, dropping lowest-priority sections first (CLAUDE.md, then
+# SKILL ToC, then SCARS ToC — the ATLAS slice is never dropped), with a final
+# hard truncate as a last resort so output NEVER exceeds N. --hash prints a
+# stable sha256 of exactly the emitted bundle + a manifest (files, commit,
+# bytes) — context provenance, citable as "ran against spine sha256:…".
+cmd_context() {
+  local task="" budget=0 format="md" want_hash=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --task)     task="${2:-}"; shift 2 ;;
+      --task=*)   task="${1#--task=}"; shift ;;
+      --budget)   budget="${2:-0}"; shift 2 ;;
+      --budget=*) budget="${1#--budget=}"; shift ;;
+      --format)   format="${2:-md}"; shift 2 ;;
+      --format=*) format="${1#--format=}"; shift ;;
+      --hash)     want_hash=1; shift ;;
+      *) shift ;;
+    esac
+  done
+  [[ "$format" == "md" || "$format" == "json" ]] || _die "--format must be 'md' or 'json'"
+  [[ "$budget" =~ ^[0-9]+$ ]] || _die "--budget must be a non-negative integer (bytes)"
+
+  local atlas="$PWD/ATLAS.md"
+  [[ -f "$atlas" ]] || _die "no ATLAS.md in $PWD — run 'atlas init' first"
+  local scars="$PWD/SCARS.md"
+  local claude="$PWD/CLAUDE.md"
+  local skill; skill=$(find "$PWD/.agents/skill" -maxdepth 2 -name SKILL.md 2>/dev/null | head -1)
+
+  local bundle="" delegated=0
+
+  # --task: delegate to the atlas-mcp orient slice when python3 is available.
+  # Never fail on its absence — degrade to the full spine + a stderr note.
+  if [[ -n "$task" ]]; then
+    if _have python3; then
+      local server="$ATLAS_HOME/bin/atlas-mcp"
+      if [[ -f "$server" ]]; then
+        export ATLAS_PROJECT="${ATLAS_PROJECT:-$PWD}" ATLAS_BIN="$ATLAS_HOME/bin/atlas" ATLAS_VERSION
+        bundle="$(python3 "$server" --orient "$task" 2>/dev/null)"
+      fi
+    fi
+    if [[ -n "$bundle" ]]; then
+      delegated=1
+    else
+      echo "atlas context: no python3 (or atlas-mcp) available for --task — degrading to the full spine" >&2
+    fi
+  fi
+
+  # The full spine: ATLAS §0-1 (never dropped) + SCARS ToC + SKILL ToC +
+  # CLAUDE.md (full), each toggled off in that order as --budget requires.
+  local use_claude=1 use_skill=1 use_scars=1
+  local atlas_slice scars_toc skill_toc claude_full
+  if [[ $delegated -eq 0 ]]; then
+    atlas_slice="$(awk '/^## 2\./{exit} 1' "$atlas" 2>/dev/null)"
+    scars_toc=""
+    [[ -f "$scars" ]] && scars_toc="$(awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$scars" 2>/dev/null)"
+    skill_toc=""
+    [[ -n "$skill" && -f "$skill" ]] && skill_toc="$(awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$skill" 2>/dev/null)"
+    claude_full=""
+    [[ -f "$claude" ]] && claude_full="$(cat "$claude")"
+
+    _ctx_build() {
+      local out
+      out="# ATLAS CONTEXT — $(_project_name)"$'\n\n'"## ATLAS.md (map §0-1)"$'\n'"$atlas_slice"
+      [[ "$use_scars"  == 1 && -n "$scars_toc"   ]] && out="$out"$'\n\n'"## SCARS.md — Table of contents"$'\n'"$scars_toc"
+      [[ "$use_skill"  == 1 && -n "$skill_toc"   ]] && out="$out"$'\n\n'"## SKILL.md — Table of contents"$'\n'"$skill_toc"
+      [[ "$use_claude" == 1 && -n "$claude_full" ]] && out="$out"$'\n\n'"## CLAUDE.md (behavioral contract)"$'\n'"$claude_full"
+      printf '%s' "$out"
+    }
+
+    bundle="$(_ctx_build)"
+    if [[ "$budget" -gt 0 ]]; then
+      local n; n=$(printf '%s' "$bundle" | wc -c | tr -d ' ')
+      if [[ "$n" -gt "$budget" ]]; then use_claude=0; bundle="$(_ctx_build)"; n=$(printf '%s' "$bundle" | wc -c | tr -d ' '); fi
+      if [[ "$n" -gt "$budget" ]]; then use_skill=0;  bundle="$(_ctx_build)"; n=$(printf '%s' "$bundle" | wc -c | tr -d ' '); fi
+      if [[ "$n" -gt "$budget" ]]; then use_scars=0;  bundle="$(_ctx_build)"; fi
+    fi
+  fi
+
+  # Last-resort invariant: output must NEVER exceed --budget bytes, even for
+  # a --task slice (no named sub-sections to drop from) or an ATLAS-only
+  # spine that alone exceeds a very small budget.
+  if [[ "$budget" -gt 0 ]]; then
+    local final_n; final_n=$(printf '%s' "$bundle" | wc -c | tr -d ' ')
+    [[ "$final_n" -gt "$budget" ]] && bundle="$(printf '%s' "$bundle" | head -c "$budget")"
+  fi
+
+  local files_included=("ATLAS.md")
+  if [[ $delegated -eq 1 ]]; then
+    files_included=("ATLAS.md" "SCARS.md" "SKILL.md")
+  else
+    [[ "$use_scars"  == 1 && -n "$scars_toc"   ]] && files_included+=("SCARS.md")
+    [[ "$use_skill"  == 1 && -n "$skill_toc"   ]] && files_included+=("SKILL.md")
+    [[ "$use_claude" == 1 && -n "$claude_full" ]] && files_included+=("CLAUDE.md")
+  fi
+
+  local bytes commit hash=""
+  bytes=$(printf '%s' "$bundle" | wc -c | tr -d ' ')
+  # --verify -q prints NOTHING on failure — a plain `rev-parse HEAD || echo
+  # unborn` emits the literal two-line "HEAD\nunborn" in an unborn repo (the
+  # error goes to stderr but "HEAD" still lands on stdout), and that raw
+  # newline reaches the JSON manifest as an invalid control character.
+  commit="$(git rev-parse --verify -q HEAD 2>/dev/null)" || commit=""
+  [[ -z "$commit" ]] && commit="unborn"
+  if [[ $want_hash -eq 1 || "$format" == "json" ]]; then
+    if _have shasum; then
+      hash="$(printf '%s' "$bundle" | shasum -a 256 | awk '{print $1}')"
+    elif _have sha256sum; then
+      hash="$(printf '%s' "$bundle" | sha256sum | awk '{print $1}')"
+    fi
+  fi
+
+  if [[ "$format" == "json" ]]; then
+    # JSON needs control characters escaped too (a multi-line bundle isn't
+    # covered by the single-line-message _json_esc used by `check --json`).
+    _ctx_json_esc() {
+      local s="$1"
+      s="${s//\\/\\\\}"
+      s="${s//\"/\\\"}"
+      s="${s//$'\r'/}"
+      s="${s//$'\n'/\\n}"
+      s="${s//$'\t'/\\t}"
+      printf '%s' "$s"
+    }
+    local files_arr="" f
+    for f in "${files_included[@]}"; do
+      [[ -n "$files_arr" ]] && files_arr="$files_arr,"
+      files_arr="$files_arr\"$(_json_esc "$f")\""
+    done
+    local task_json="null"
+    [[ $delegated -eq 1 ]] && task_json="\"$(_json_esc "$task")\""
+    printf '{"bundle":"%s","hash":"%s","manifest":{"files":[%s],"commit":"%s","bytes":%s,"task":%s}}\n' \
+      "$(_ctx_json_esc "$bundle")" "$hash" "$files_arr" "$commit" "$bytes" "$task_json"
+  else
+    # No added trailing newline: stdout bytes must equal exactly $bytes (the
+    # --budget invariant and the hashed/manifest byte count both count $bundle
+    # as-is — an appended newline here would silently exceed --budget by 1).
+    printf '%s' "$bundle"
+    if [[ $want_hash -eq 1 ]]; then
+      echo ""
+      echo "---"
+      printf 'sha256: %s\nfiles:  %s\ncommit: %s\nbytes:  %s\n' "$hash" "${files_included[*]}" "$commit" "$bytes"
+    fi
+  fi
+}
+
 # orient — print the project map, or (with a task) just the relevant slice.
 #   atlas orient                       full §0 map + SKILL/SCARS ToCs
 #   atlas orient "add a CLI command"   only the relevant map rows + playbook + SCARS
@@ -4496,6 +4852,7 @@ main() {
     onboard)  cmd_onboard "$@" ;;
     hooks)    cmd_hooks "$@" ;;
     orient)   cmd_orient "$@" ;;
+    context)  cmd_context "$@" ;;
     mcp)      cmd_mcp "$@" ;;
     doctor)   cmd_doctor "$@" ;;
     badge)    cmd_badge "$@" ;;
@@ -4503,6 +4860,7 @@ main() {
     export)   cmd_export "$@" ;;
     anchors)  cmd_anchors "$@" ;;
     anchor)   cmd_anchor "$@" ;;
+    remember) cmd_remember "$@" ;;
     install)  cmd_install "$@" ;;
     uninstall) cmd_uninstall "$@" ;;
     styles)   cmd_styles "$@" ;;
