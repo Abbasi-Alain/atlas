@@ -655,3 +655,138 @@ it is unaffected and the standard's required set is unchanged. `atlas init
 *refreshes* them to the current shipped version rather than treating edits as
 customization. `atlas check --deep` warns `ASOP_STALE` when a present ASOP file
 drifts from the shipped canonical version — advisory only, never a required check.
+
+---
+
+## 13. FAQ.md — the Q&A knowledge ledger (OPTIONAL surface)
+
+Projects accumulate a third kind of knowledge the quartet doesn't hold:
+**answered questions**. A human asks *"why does it do that?"*, *"why not X?"*,
+*"is it possible to…?"* — an agent answers (or surfaces a surprising finding
+mid-task), and the answer dies with the session. The next session re-derives
+it at full investigation cost. `FAQ.md` is the **ask-once file**: every
+question worth keeping is answered once, with pointers, and looked up forever
+after. Over time the entries ARE the project's Q&A knowledge.
+
+- `FAQ.md` is OPTIONAL. A repo without it is fully conformant and unaffected.
+- It lives at the repo root (`FAQ.md`) **or** at `docs/FAQ.md` — the first
+  found wins; tooling treats both identically.
+- If present and **not git-ignored** (public), it **SHOULD** be linked from
+  `ATLAS.md` so agents find it during orientation (same lenient "not
+  git-ignored" reading as §9; a git-ignored FAQ is a valid private choice and
+  is skipped).
+- **Entry shape** (recommended, not validated): a heading
+  `### FAQ-NNN · Q: <the question as asked> (YYYY-MM-DD)` followed by
+  `asked-by:` (human, or an agent/session id — sub-agents' findings count),
+  optional `tags:`, and a short answer whose claims **point** at evidence
+  (`file:line`, a `SCARS.md §ANCHOR`, a commit) rather than restating it.
+- **Stable keys, append-only** — the multi-agent + knowledge-graph rules:
+  `FAQ-NNN` ids are permanent (never renumbered or reused) so entries can be
+  cited from commits and later extracted into a knowledge graph; new entries
+  are appended at the end of a `##` topic section, and an existing entry is
+  corrected by appending a dated `**Update:**` line, never by rewriting —
+  which keeps concurrent agents merge-safe.
+- **Graduation convention.** An answer that is really a *failure lesson*
+  becomes a `SCARS.md` `§ANCHOR`; one that is really a *procedure* becomes a
+  `SKILL.md` recipe; one that turns out to be an *open unknown* moves to
+  `BUGS.md` (§9). The FAQ keeps a one-line pointer to where it graduated —
+  knowledge lives in exactly one canonical place.
+
+`atlas check` validates `FAQ.md` **only when present**: a public (not
+git-ignored) FAQ not referenced from `ATLAS.md` by a real Markdown link warns
+(`FAQ_MD_UNLINKED`). The link must target the FAQ's **actual location** — a
+plain-text mention is not a link (SCARS §BUGS-LINK-NOT-SUBSTRING), and a
+leftover `docs/FAQ.md` link row does not cover a root `FAQ.md` (a dead link
+is not orientation). `atlas init --faq` scaffolds `docs/FAQ.md` (keeping an
+existing root `FAQ.md`) already linked from `ATLAS.md`. Reported as `"faq"`
+in `--json`; listed in the `llms.txt` export's read-first set; the
+SessionStart hook surfaces a one-line pointer ("check the FAQ before asking
+or re-deriving") when a repo has one.
+
+---
+
+## 14. Tool context contract — `.atlas/tools.json` (OPTIONAL surface)
+
+ATLAS tells an agent *what to read*; it says nothing about how the external
+**graph/index/context tools** working alongside the agent identify the repo,
+prove their results are fresh, or keep their session plumbing out of the
+repo's subprocesses. Observed failure modes this section closes: a code-graph
+tool that rejects the human project name and invents a path-derived id; a
+context tool that leaks a session-temporary `NODE_OPTIONS` preload into child
+test processes after the preload file vanished — making product tests fail on
+a ghost; and agents silently trusting graph results indexed many commits ago.
+
+### 14.1 The contract file
+
+`.atlas/tools.json` is a **generated, LOCAL, machine-readable** snapshot
+written by `atlas init --tools` (and safe to regenerate at any time — an
+indexer's freshness stamp is carried over). It is machine-specific and
+HEAD-stamped, so it **SHOULD be git-ignored** (`init --tools` adds the
+`.gitignore` entries). One top-level key per line, by contract, so zero-dep
+consumers can read it without a JSON parser. Keys:
+
+- `schema` (1) · `project` · **`project_id`** (the kebab-cased §1 slug — the
+  canonical id every external tool MUST accept/advertise instead of inventing
+  a path-derived one) · `root` (`"."` — the file's own directory is the
+  canonical repo root)
+- `generated` · `atlas_version` · `head` (HEAD at generation; `null` when
+  unborn) · `dirty` (worktree had uncommitted changes)
+- **`indexed_head`** / `indexed_at` — `null` until an indexing tool stamps
+  the commit it actually indexed; this is the freshness protocol: an indexer
+  MUST update these after (re)indexing, and a consumer MUST treat results as
+  **advisory** whenever `indexed_head != HEAD` or the worktree is dirty —
+  warn, never silently trust. Repos MAY re-index on structural commits (a
+  post-commit hook); ATLAS only reports staleness, it never blocks on it.
+- `telemetry` — path of the telemetry ledger (§14.2)
+- `recipes` — approved query entry-points (e.g. `atlas orient "<task>"`),
+  so a tool starts from the curated surface instead of raw grepping.
+
+`atlas check` validates it **only when present**: `TOOLS_JSON_INVALID`
+(warning) when `project_id` is missing; `--json` always reports
+`"tools": {present, project_id, indexed_head, head, fresh, dirty}`;
+`atlas check --deep` warns `TOOLS_INDEX_STALE` when `indexed_head` is set and
+differs from the live HEAD. A repo without the file is fully unaffected.
+
+### 14.2 Telemetry — `.atlas/tools-telemetry.jsonl`
+
+Tools append one JSON line per operation:
+`{"ts": "...", "tool": "...", "op": "...", "bytes_in": N, "bytes_out": N,
+"retries": N, "stale": bool, "ok": bool}` — `bytes_in` is what the tool
+read/indexed, `bytes_out` what it returned into the agent's context.
+`atlas measure --tools [--json]` aggregates the ledger (events · bytes
+indexed→returned · retries · stale hits · failures · estimated context tokens
+kept out of the conversation) and reports it alongside identity, freshness,
+worktree drift, and the env check below — one command answers "what are my
+tools doing, and can I trust them right now?".
+
+### 14.3 The subprocess-environment contract
+
+A tool that mutates the session environment (preloads, wrappers, interposed
+PATH entries) MUST restore the caller's environment for subprocesses it
+spawns, and MUST NOT leave session-temporary state pointing at files that can
+vanish mid-session. Consumers SHOULD strip tool-owned temporary variables
+before running product tests. `atlas measure --tools` mechanizes the known
+failure class: it flags any `NODE_OPTIONS` `--require`/`-r` preload whose
+file no longer exists.
+
+### 14.4 Companion contracts (normative definitions; not yet CLI-enforced)
+
+These name the remaining tool-integration seams so implementations converge;
+`atlas` does not yet validate them:
+
+- **Evidence separation** — postcondition verifiers keep *reachability*
+  (HTTP 200, process alive) and *business success* (the actual postcondition)
+  as separate, individually-reported evidence; one never stands in for the
+  other.
+- **Privileged job broker** — UI/agent-requested installs run only **signed,
+  allowlisted catalog actions** through a broker; never an exposed container
+  socket or arbitrary shell.
+- **Graph-RAG provenance** — every derived/extracted record carries
+  `source_hash`, `extractor_version`, `signature`, and `promotion_state`, so
+  a consumer can tell verified knowledge from raw extraction.
+- **Capability probe** — a machine-readable host report (OS · arch · RAM ·
+  disk · GPU · runtimes · supported model formats) so orchestrators route
+  work to machines that can run it.
+- **Release evidence manifest** — a release is "ready" only when one
+  machine-readable manifest links its build, smoke, security, rollback, and
+  deployed-version proofs; a missing proof is a missing release gate.

@@ -2,7 +2,7 @@
 # atlas-skill-loader — SessionStart-equivalent hook.
 #
 # Detects ATLAS.md, SCARS.md, .agents/skill/<project>/SKILL.md (and, if present,
-# the optional LOOP.md / BUGS.md / CRITICS.md) in the cwd and prints their
+# the optional LOOP.md / BUGS.md / CRITICS.md / FAQ.md) in the cwd and prints their
 # navigational spine to stdout. Whichever agent
 # runtime invokes this hook will see that output and feed it into
 # the conversation as context — so the main agent automatically
@@ -21,6 +21,8 @@
 #   - PACK:    a one-line pointer (only if ROADMAP.md has an EXECUTOR PACK block)
 #   - BUGS:    a one-line pointer (only if the repo has an open-issues register)
 #   - CRITICS: a one-line pointer (only if the repo has a second-opinion log)
+#   - FAQ:     a one-line pointer (only if the repo has a Q&A knowledge ledger,
+#              at FAQ.md or docs/FAQ.md)
 #   - AKIGI:   a one-line pointer (only if the repo has a purpose contract;
 #              mentions FRQ.md when the feature-request queue is present too)
 #
@@ -128,6 +130,19 @@ if [[ -f "$CRITICS" ]]; then
   echo "before a non-trivial decision ships, run 'atlas critique \"<topic>\"'"
   echo "for a cross-vendor adversarial pass — check CRITICS.md for prior"
   echo "objections first so you don't repeat one already raised."
+  echo ""
+fi
+
+FAQ="$CWD/FAQ.md"
+[[ -f "$FAQ" ]] || FAQ="$CWD/docs/FAQ.md"
+if [[ -f "$FAQ" ]]; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "FAQ.md (Q&A knowledge ledger) detected at $FAQ"
+  echo "================================================================"
+  echo "check the FAQ before asking or re-deriving — questions a human already"
+  echo "asked are answered there once, with pointers. Append new answered"
+  echo "questions (stable FAQ-NNN ids) as they come up."
   echo ""
 fi
 

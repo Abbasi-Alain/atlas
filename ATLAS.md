@@ -28,6 +28,7 @@
 | When to hand up / escalate | scarred cores in [`SCARS.md`](SCARS.md); release/publish is maintainer-only (SPEC §12) |
 | Reason / operate well (any agent) | [`ASOP.md`](ASOP.md) principles · [`ASOP-EXECUTOR.md`](ASOP-EXECUTOR.md) the executor card |
 | Debug a known trap | [`SCARS.md`](SCARS.md) |
+| Look up an answered question (*"why does it do that?"*) | [`docs/FAQ.md`](docs/FAQ.md) (SPEC §13) |
 | Look up a term (trio/anchor/style/stack) | §G Glossary |
 | The format rules | [`docs/SPEC.md`](docs/SPEC.md) |
 
@@ -57,6 +58,7 @@
 | [`SRD.md`](SRD.md) | **Security disclosure** (SPEC §11) — minimal public marker; full detail via private channel; maintainer-only triage | AKIGI.md |
 | [`ASOP.md`](ASOP.md) | **Operating methodology** (SPEC §12) — 13 reasoning moves + a 5-question self-test; canonical, copied verbatim | ASOP-EXECUTOR.md |
 | [`ASOP-EXECUTOR.md`](ASOP-EXECUTOR.md) | **Executor card** (SPEC §12) — role-based mechanical protocol (pre-flight · verify · **escalate** · report) any subagent runs | ASOP.md |
+| [`docs/FAQ.md`](docs/FAQ.md) | **Q&A knowledge ledger** (SPEC §13) — questions answered once, with pointers; check before asking/re-deriving; stable `FAQ-NNN` ids | ATLAS.md |
 | [`data/leaderboard.csv`](data/leaderboard.csv) | Leaderboard dataset — source of truth for [`docs/LEADERBOARD.md`](docs/LEADERBOARD.md) (`atlas leaderboard --render`) | docs/ |
 
 > **Not applicable** (deleted per spec convention): §3 service layer,

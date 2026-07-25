@@ -3,13 +3,18 @@
 #
 # Subcommands:
 #   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs] [--critics]
-#              [--asop] [--akigi] [--frq] [--brd] [--srd] [--intake]
+#              [--faq] [--tools] [--asop] [--akigi] [--frq] [--brd] [--srd] [--intake]
 #                                     (--loop also scaffolds LOOP.md + ROADMAP.md,
 #                                     the optional autonomous-loop 5th surface)
 #                                     (--bugs scaffolds BUGS.md, the optional
 #                                     INTERNAL open-issues register)
 #                                     (--critics scaffolds CRITICS.md, the optional
 #                                     cross-vendor second-opinion log)
+#                                     (--faq scaffolds docs/FAQ.md, the optional
+#                                     Q&A knowledge ledger, SPEC §13)
+#                                     (--tools writes .atlas/tools.json, the
+#                                     machine-readable tool context contract,
+#                                     SPEC §14 — regenerated on every run)
 #                                     (--asop scaffolds ASOP.md + ASOP-EXECUTOR.md,
 #                                     the operating methodology, SPEC §12)
 #                                     (--akigi scaffolds AKIGI.md, the purpose
@@ -41,6 +46,13 @@
 #                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
 #   atlas measure [--badge]           estimate orientation-token savings (with
 #                                     vs without ATLAS); --badge prints a shield
+#   atlas measure --tools [--json]    report the tool context contract (SPEC §14):
+#                                     canonical project id, indexed commit vs
+#                                     HEAD, worktree drift, dead-preload env
+#                                     vars, and the .atlas/tools-telemetry.jsonl
+#                                     aggregates (bytes indexed/returned,
+#                                     retries, stale hits, failures, estimated
+#                                     context savings)
 #   atlas leaderboard --render        regenerate docs/LEADERBOARD.md's table
 #                                     from data/leaderboard.csv (the CSV is
 #                                     what contributors edit in a PR)
@@ -244,18 +256,35 @@ _kebab() {
 # (validate) so the expectation is derived, never hardcoded per repo.
 _project_slug() { _kebab "$(_project_name)"; }
 
-# A REAL Markdown link to BUGS.md — not merely the substring "BUGS.md"
-# appearing in prose. Matches `[BUGS.md](BUGS.md)`, `` [`BUGS.md`](./BUGS.md) ``,
-# etc.; only the link target (inside the parens) is significant, so any label
-# text (backticked or not) passes. Used identically by `init --bugs`
-# (auto-link) and `check` (BUGS_MD_UNLINKED) so a plain-text mention still
+# A REAL Markdown link to a surface file — not merely its name appearing in
+# prose. `$2` is the link-target path as an ERE fragment (e.g. `BUGS` or
+# `(docs/)?FAQ`); only the link target (inside the parens) is significant, so
+# any label text (backticked or not) passes. Used identically by `init`
+# (auto-link) and `check` (*_MD_UNLINKED) so a plain-text mention still
 # warns while a real link passes (SCARS §BUGS-LINK-NOT-SUBSTRING).
-_bugs_md_linked() {
+_surface_linked() {
   # Accept the common real Markdown link forms (RM-42, critic-stage finding
   # #8): a bare path, an optional `./` prefix, an optional `#fragment`, an
   # optional quoted title, and angle-bracket targets — not just the two exact
   # forms this originally matched.
-  grep -qE '\]\(<?(\./)?BUGS\.md>?(#[^) "]*)?([[:space:]]+"[^"]*")?\)' "$1" 2>/dev/null
+  grep -qE '\]\(<?(\./)?'"$2"'\.md>?(#[^) "]*)?([[:space:]]+"[^"]*")?\)' "$1" 2>/dev/null
+}
+_bugs_md_linked() { _surface_linked "$1" 'BUGS'; }
+# FAQ.md may live at root or under docs/ (SPEC §13) — resolve once, same rule
+# for init/check/hook/export.
+_faq_file() {
+  if [[ -f "$PWD/FAQ.md" ]]; then echo "$PWD/FAQ.md"
+  elif [[ -f "$PWD/docs/FAQ.md" ]]; then echo "$PWD/docs/FAQ.md"
+  fi
+}
+# The FAQ link must target where the FAQ ACTUALLY lives — the default
+# ATLAS.md template ships a docs/FAQ.md §1.2 row ("delete rows for absent
+# files"), so accepting any FAQ-shaped link would blind the check to a root
+# FAQ.md that is only dead-linked. $2 = the FAQ path relative to repo root.
+_faq_linked() {
+  local pat='FAQ'
+  [[ "$2" == docs/* ]] && pat='docs/FAQ'
+  _surface_linked "$1" "$pat"
 }
 
 # _replace_marker_block <file> <start-marker> <end-marker> <block-file>
@@ -451,8 +480,78 @@ ${inv}"
   fi
 }
 
+# --- tool context contract (SPEC §14) --------------------------------------
+# .atlas/tools.json is a GENERATED, LOCAL, machine-readable identity+freshness
+# snapshot for external graph/index/context tools: the canonical project id
+# (so a tool never has to invent a path-derived one), the HEAD it was written
+# at, and the indexed_head an indexer stamps after indexing — which `check`
+# and `measure --tools` compare against the live HEAD. One key per line by
+# contract, so the zero-dep reader below stays reliable (no jq; §BASH-MONOLITH).
+
+# _tools_json_get <file> <key> — value of a top-level key ('' when absent;
+# null stays the literal string "null"; strings come back unquoted).
+_tools_json_get() {
+  sed -n 's/^[[:space:]]*"'"$2"'":[[:space:]]*//p' "$1" 2>/dev/null \
+    | head -1 | sed -E 's/,[[:space:]]*$//; s/^"//; s/"$//'
+}
+
+_write_tools_json() {
+  local dir="$PWD/.atlas" out head="null" dirty=false gen prev_ih="null" prev_ia="null"
+  out="$dir/tools.json"
+  mkdir -p "$dir"
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    head="\"$(git rev-parse HEAD 2>/dev/null || echo unborn)\""
+    [[ "$head" == '"unborn"' ]] && head="null"
+    # no `| head` on the producer — §PIPE-HEAD-SIGPIPE
+    [[ -n "$(git status --porcelain 2>/dev/null || true)" ]] && dirty=true
+  fi
+  # Regeneration must not erase an indexer's freshness stamp — carry it over.
+  if [[ -f "$out" ]]; then
+    prev_ih="$(_tools_json_get "$out" indexed_head)"; prev_ih="${prev_ih:-null}"
+    prev_ia="$(_tools_json_get "$out" indexed_at)";   prev_ia="${prev_ia:-null}"
+    [[ "$prev_ih" != "null" ]] && prev_ih="\"$prev_ih\""
+    [[ "$prev_ia" != "null" ]] && prev_ia="\"$prev_ia\""
+  fi
+  gen="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  {
+    printf '{\n'
+    printf '  "schema": 1,\n'
+    printf '  "project": "%s",\n' "$(_json_esc "$(_project_name)")"
+    printf '  "project_id": "%s",\n' "$(_json_esc "$(_project_slug)")"
+    printf '  "root": ".",\n'
+    printf '  "atlas_version": "%s",\n' "$ATLAS_VERSION"
+    printf '  "generated": "%s",\n' "$gen"
+    printf '  "head": %s,\n' "$head"
+    printf '  "dirty": %s,\n' "$dirty"
+    printf '  "indexed_head": %s,\n' "$prev_ih"
+    printf '  "indexed_at": %s,\n' "$prev_ia"
+    printf '  "telemetry": ".atlas/tools-telemetry.jsonl",\n'
+    printf '  "recipes": [\n'
+    printf '    {"name": "orient", "cmd": "atlas orient \\"<task>\\""},\n'
+    printf '    {"name": "anchors", "cmd": "atlas anchors"},\n'
+    printf '    {"name": "conformance", "cmd": "atlas check --json"}\n'
+    printf '  ],\n'
+    printf '  "env_contract": "restore-caller-env; never leak session-temporary preloads into subprocesses (SPEC 14)"\n'
+    printf '}\n'
+  } > "$out"
+  _say "wrote .atlas/tools.json (identity + freshness snapshot — local, regenerate anytime)"
+  # Local artifacts stay out of git: HEAD-stamped files would be stale in
+  # every commit and machine-specific across clones. Skip the append when a
+  # broader pattern (e.g. `.atlas/`) already covers the path.
+  local gi="$PWD/.gitignore" entry
+  for entry in ".atlas/tools.json" ".atlas/tools-telemetry.jsonl"; do
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+      && git check-ignore -q "$entry" 2>/dev/null; then
+      continue
+    fi
+    if ! grep -qxF "$entry" "$gi" 2>/dev/null; then
+      printf '%s\n' "$entry" >> "$gi"
+    fi
+  done
+}
+
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 asop=0 akigi=0 frq=0 brd=0 srd=0
+  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 faq=0 tools=0 asop=0 akigi=0 frq=0 brd=0 srd=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force|-f)  force=1; shift ;;
@@ -460,6 +559,8 @@ cmd_init() {
       --loop)      loop=1; shift ;;
       --bugs)      bugs=1; shift ;;
       --critics)   critics=1; shift ;;
+      --faq)       faq=1; shift ;;
+      --tools)     tools=1; shift ;;
       --asop)      asop=1; shift ;;
       --akigi)     akigi=1; shift ;;
       --frq)       frq=1; shift ;;
@@ -528,6 +629,30 @@ cmd_init() {
   # missing-only like the quartet. `atlas critique` appends rows to it.
   if [[ $critics -eq 1 ]]; then
     _render "$(_src CRITICS.md.tmpl)" "$PWD/CRITICS.md" "$force"
+  fi
+  # Optional Q&A knowledge ledger (SPEC §13). Opt-in via --faq; scaffolds
+  # docs/FAQ.md (the location the default ATLAS.md §1.2 row already links),
+  # keeping an existing root FAQ.md. Auto-link from ATLAS.md when the actual
+  # location isn't linked yet, so a fresh scaffold stays warning-free.
+  if [[ $faq -eq 1 ]]; then
+    if [[ -f "$PWD/FAQ.md" ]]; then
+      _say "FAQ.md exists at root — keeping it (SPEC §13 accepts either location)"
+    else
+      _render "$(_src FAQ.md.tmpl)" "$PWD/docs/FAQ.md" "$force"
+    fi
+    local faq_rel; faq_rel="$(_faq_file)"; faq_rel="${faq_rel#"$PWD"/}"
+    if [[ -f "$PWD/ATLAS.md" ]] && ! _faq_linked "$PWD/ATLAS.md" "$faq_rel"; then
+      # shellcheck disable=SC2016  # literal backticks (Markdown), no expansion intended
+      printf '\n> Project Q&A: [`%s`](%s) — questions answered once, with pointers (SPEC §13).\n' "$faq_rel" "$faq_rel" >> "$PWD/ATLAS.md"
+      _say "linked $faq_rel from ATLAS.md"
+    fi
+  fi
+  # Optional machine-readable tool context contract (SPEC §14). The file is a
+  # generated LOCAL snapshot (records HEAD at generation time; graph/index
+  # tools update indexed_head as they index), so --tools always (re)writes it
+  # and keeps it out of git.
+  if [[ $tools -eq 1 ]]; then
+    _write_tools_json
   fi
   # Optional operating-methodology surface (SPEC §12): ASOP.md (13 reasoning
   # moves + a 5-question self-test) + ASOP-EXECUTOR.md (the role-based executor
@@ -734,7 +859,7 @@ cmd_check() {
   local errs_json=() warns_json=()
   local q_atlas=false q_scars=false q_skill=false q_claude=false q_agents="missing"
   local q_loop_md=false q_roadmap=false
-  local q_critics=false
+  local q_critics=false q_faq=false
   local q_akigi=false q_frq=false q_brd=false q_srd=false
 
   # --- ATLAS.md (SPEC §1/§2): MUST exist at root with a §0 quick-orientation.
@@ -948,6 +1073,22 @@ cmd_check() {
     fi
   fi
 
+  # --- FAQ.md (SPEC §13): OPTIONAL Q&A knowledge ledger — root FAQ.md or
+  # docs/FAQ.md. Validated only when present. Same public-link rule as
+  # BUGS.md: a git-ignored FAQ is a valid private choice and is skipped.
+  local faq_file; faq_file="$(_faq_file)"
+  if [[ -n "$faq_file" ]]; then
+    q_faq=true; _ck_ok "${faq_file#"$PWD"/} present (Q&A knowledge ledger)"
+    local faq_ignored=0
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git check-ignore -q "$faq_file" 2>/dev/null; then
+      faq_ignored=1
+    fi
+    if [[ $faq_ignored -eq 0 ]]; then
+      _faq_linked "$atlas" "${faq_file#"$PWD"/}" \
+        || _ck_warn FAQ_MD_UNLINKED "${faq_file#"$PWD"/} present but not linked from ATLAS.md (a link must target its actual location) — link it so agents look answered questions up instead of re-deriving them (SPEC §13); 'atlas init --faq' scaffolds a linked one" "§13"
+    fi
+  fi
+
   # --- CRITICS.md (SPEC §10): OPTIONAL cross-vendor second-opinion log.
   # Validated only when present. A git-ignored CRITICS.md (a repo's own
   # private convention, SCARS §PRIVATE-STYLE-OVERLAY) is a valid choice and is
@@ -1104,18 +1245,47 @@ cmd_check() {
     fi
   fi
 
+  # --- .atlas/tools.json (SPEC §14): OPTIONAL machine-readable tool context
+  # contract. Validated only when present. Freshness (indexed_head vs the live
+  # HEAD) is drift-class advisory, so the stale warning is --deep-only — but
+  # the state is always reported under "tools" in --json so any agent/CI can
+  # act on it without --deep.
+  local tools_file="$PWD/.atlas/tools.json" q_tools_json='{"present":false}'
+  if [[ -f "$tools_file" ]]; then
+    _ck_ok ".atlas/tools.json present (tool context contract)"
+    local t_pid t_ih t_head="null" t_dirty=false t_fresh=null t_ih_json=null t_head_json=null
+    t_pid="$(_tools_json_get "$tools_file" project_id)"
+    t_ih="$(_tools_json_get "$tools_file" indexed_head)"
+    [[ -z "$t_pid" ]] \
+      && _ck_warn TOOLS_JSON_INVALID ".atlas/tools.json has no project_id — external tools can't resolve the canonical repo identity (SPEC §14); regenerate with 'atlas init --tools'" "§14"
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      t_head="$(git rev-parse HEAD 2>/dev/null || echo null)"
+      # no `| head` on the producer — §PIPE-HEAD-SIGPIPE
+      [[ -n "$(git status --porcelain 2>/dev/null || true)" ]] && t_dirty=true
+    fi
+    if [[ -n "$t_ih" && "$t_ih" != "null" && "$t_head" != "null" ]]; then
+      if [[ "$t_ih" == "$t_head" ]]; then t_fresh=true; else t_fresh=false; fi
+    fi
+    if [[ $deep -eq 1 && "$t_fresh" == "false" ]]; then
+      _ck_warn TOOLS_INDEX_STALE "graph/index tools last indexed ${t_ih} but HEAD is ${t_head} — tool results may describe old code; re-index, and treat them as advisory until fresh (SPEC §14)" "§14"
+    fi
+    [[ -n "$t_ih" && "$t_ih" != "null" ]] && t_ih_json="\"$(_json_esc "$t_ih")\""
+    [[ "$t_head" != "null" ]] && t_head_json="\"$(_json_esc "$t_head")\""
+    q_tools_json="{\"present\":true,\"project_id\":\"$(_json_esc "$t_pid")\",\"indexed_head\":${t_ih_json},\"head\":${t_head_json},\"fresh\":${t_fresh},\"dirty\":${t_dirty}}"
+  fi
+
   # --- emit -------------------------------------------------------------------
   if [[ $json -eq 1 ]]; then
     local ok=true strict_bool=false deep_bool=false
     if [[ $errs -gt 0 ]]; then ok=false; fi
     if [[ $strict -eq 1 ]]; then strict_bool=true; if [[ $warns -gt 0 ]]; then ok=false; fi; fi
     if [[ $deep -eq 1 ]]; then deep_bool=true; fi
-    printf '{"ok":%s,"version":"%s","strict":%s,"deep":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s},"critics":%s,"akigi":%s,"frq":%s,"brd":%s,"srd":%s}\n' \
+    printf '{"ok":%s,"version":"%s","strict":%s,"deep":%s,"counts":{"errors":%d,"warnings":%d},"errors":[%s],"warnings":[%s],"quartet":{"atlas":%s,"scars":%s,"skill":%s,"claude":%s,"agents":"%s"},"loop":{"loop_md":%s,"roadmap_md":%s},"critics":%s,"faq":%s,"akigi":%s,"frq":%s,"brd":%s,"srd":%s,"tools":%s}\n' \
       "$ok" "$ATLAS_VERSION" "$strict_bool" "$deep_bool" "$errs" "$warns" \
       "$(_json_join ${errs_json[@]+"${errs_json[@]}"})" \
       "$(_json_join ${warns_json[@]+"${warns_json[@]}"})" \
       "$q_atlas" "$q_scars" "$q_skill" "$q_claude" "$q_agents" \
-      "$q_loop_md" "$q_roadmap" "$q_critics" "$q_akigi" "$q_frq" "$q_brd" "$q_srd"
+      "$q_loop_md" "$q_roadmap" "$q_critics" "$q_faq" "$q_akigi" "$q_frq" "$q_brd" "$q_srd" "$q_tools_json"
     [[ "$ok" == true ]] && exit 0
     exit 1
   fi
@@ -1202,9 +1372,10 @@ cmd_fix() {
     local llms_stale=0
     if [[ -f "$PWD/SCARS.md" ]] && ! grep -q "SCARS.md" "$PWD/llms.txt"; then llms_stale=1; fi
     if [[ -f "$PWD/LOOP.md"  ]] && ! grep -q "LOOP.md"  "$PWD/llms.txt"; then llms_stale=1; fi
+    if [[ -n "$(_faq_file)" ]] && ! grep -q "FAQ.md" "$PWD/llms.txt"; then llms_stale=1; fi
     if [[ $llms_stale -eq 1 ]]; then
       cmd_export --to llms-txt >/dev/null 2>&1
-      _ok "regenerated llms.txt (read-first set now lists SCARS.md / LOOP.md)"
+      _ok "regenerated llms.txt (read-first set now lists SCARS.md / LOOP.md / FAQ.md)"
       fixes=$((fixes+1))
     fi
   fi
@@ -3037,16 +3208,123 @@ cmd_loop() {
 #
 # --badge prints a shields.io badge with the savings %, for the README.
 # ---------------------------------------------------------------------------
+# measure --tools — report the tool context contract's state (SPEC §14): the
+# canonical identity externals should use, index freshness vs the live HEAD,
+# worktree drift, dead session-temporary preloads in the caller env, and the
+# .atlas/tools-telemetry.jsonl aggregates (one JSON line per tool operation:
+# ts · tool · op · bytes_in · bytes_out · retries · stale · ok — appended by
+# the tools themselves; ATLAS only aggregates).
+_measure_tools() {
+  local json="$1"
+  local tf="$PWD/.atlas/tools.json"
+  [[ -f "$tf" ]] || _die "no .atlas/tools.json — run 'atlas init --tools' first (SPEC §14)"
+  local pid ih gen head="null" dirty=false fresh=null
+  pid="$(_tools_json_get "$tf" project_id)"
+  ih="$(_tools_json_get "$tf" indexed_head)"; [[ -z "$ih" ]] && ih=null
+  gen="$(_tools_json_get "$tf" generated)"
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    head="$(git rev-parse HEAD 2>/dev/null || echo null)"
+    # no `| head` on the producer — §PIPE-HEAD-SIGPIPE
+    [[ -n "$(git status --porcelain 2>/dev/null || true)" ]] && dirty=true
+  fi
+  if [[ "$ih" != "null" && "$head" != "null" ]]; then
+    if [[ "$ih" == "$head" ]]; then fresh=true; else fresh=false; fi
+  fi
+  # Dead session-temporary preloads — the env half of the §14 subprocess
+  # contract: a NODE_OPTIONS --require/-r pointing at a file that no longer
+  # exists hard-fails every child node process (observed in the wild with a
+  # context tool's vanished cm-fs-preload-*.js).
+  local dead="" tok expect=0
+  for tok in ${NODE_OPTIONS:-}; do
+    if [[ $expect -eq 1 ]]; then
+      [[ -e "$tok" ]] || dead="${dead}${dead:+ }${tok}"
+      expect=0; continue
+    fi
+    case "$tok" in
+      --require|-r) expect=1 ;;
+      --require=*)  [[ -e "${tok#--require=}" ]] || dead="${dead}${dead:+ }${tok#--require=}" ;;
+    esac
+  done
+  # Telemetry ledger aggregation (zero-dep awk; unknown lines are skipped).
+  local ledger="$PWD/.atlas/tools-telemetry.jsonl" agg="0 0 0 0 0 0"
+  if [[ -f "$ledger" ]]; then
+    agg="$(awk '
+      function num(k,   re, s) {
+        re = "\"" k "\":[ ]*[0-9]+"
+        if (match($0, re)) { s = substr($0, RSTART, RLENGTH); sub(/.*:[ ]*/, "", s); return s + 0 }
+        return 0
+      }
+      /"tool"/ {
+        n++; bi += num("bytes_in"); bo += num("bytes_out"); r += num("retries")
+        if ($0 ~ /"stale":[ ]*true/) st++
+        if ($0 ~ /"ok":[ ]*false/) f++
+      }
+      END { printf "%d %d %d %d %d %d", n+0, bi+0, bo+0, r+0, st+0, f+0 }
+    ' "$ledger" 2>/dev/null)" || agg="0 0 0 0 0 0"
+  fi
+  local ev bi bo rt st fl saved
+  read -r ev bi bo rt st fl <<< "$agg"
+  saved=$(( (bi - bo) / 4 )); [[ $saved -lt 0 ]] && saved=0
+
+  if [[ "$json" -eq 1 ]]; then
+    local ih_json=null head_json=null dead_json=""
+    [[ "$ih" != "null" ]] && ih_json="\"$(_json_esc "$ih")\""
+    [[ "$head" != "null" ]] && head_json="\"$(_json_esc "$head")\""
+    for tok in $dead; do dead_json="${dead_json}${dead_json:+,}\"$(_json_esc "$tok")\""; done
+    printf '{"project_id":"%s","generated":"%s","head":%s,"indexed_head":%s,"fresh":%s,"dirty":%s,"dead_preloads":[%s],"telemetry":{"events":%d,"bytes_indexed":%d,"bytes_returned":%d,"retries":%d,"stale_hits":%d,"failures":%d,"est_context_tokens_saved":%d}}\n' \
+      "$(_json_esc "$pid")" "$(_json_esc "$gen")" "$head_json" "$ih_json" "$fresh" "$dirty" \
+      "$dead_json" "$ev" "$bi" "$bo" "$rt" "$st" "$fl" "$saved"
+    return 0
+  fi
+
+  _banner "🔌" "atlas measure --tools  $(_c_dim '(SPEC §14 tool context contract)')"
+  printf "  %-24s %s\n" "canonical project id:" "$(_c_bold "$pid")"
+  printf "  %-24s %s\n" "HEAD:" "$head"
+  printf "  %-24s %s\n" "indexed at:" "$ih"
+  if [[ "$fresh" == "false" ]]; then
+    printf "  %-24s %s\n" "index freshness:" "$(_c_yellow 'STALE — re-index; treat graph/search results as advisory')"
+  elif [[ "$fresh" == "true" ]]; then
+    printf "  %-24s %s\n" "index freshness:" "$(_c_green 'fresh (indexed_head == HEAD)')"
+  else
+    printf "  %-24s %s\n" "index freshness:" "$(_c_dim 'unknown (no indexer has stamped indexed_head yet)')"
+  fi
+  local wt_state; wt_state="$(_c_green 'clean')"
+  [[ "$dirty" == true ]] && wt_state="$(_c_yellow 'dirty (uncommitted changes not in any index)')"
+  printf "  %-24s %s\n" "worktree:" "$wt_state"
+  if [[ -n "$dead" ]]; then
+    printf "  %-24s %s\n" "env contract:" "$(_c_red "VIOLATED — dead preload(s) in NODE_OPTIONS: $dead")"
+    _say "strip them before running child processes, or tests will fail on a ghost"
+  else
+    printf "  %-24s %s\n" "env contract:" "$(_c_green 'clean (no dead preloads detected)')"
+  fi
+  echo ""
+  if [[ "$ev" -gt 0 ]]; then
+    printf "  %-24s %s\n" "telemetry events:" "$ev"
+    printf "  %-24s %s\n" "bytes indexed → returned:" "$bi → $bo  $(_c_dim "(≈${saved} tok kept out of context)")"
+    printf "  %-24s %s\n" "retries / stale / failed:" "$rt / $st / $fl"
+  else
+    _say "no telemetry yet — tools append JSON lines to .atlas/tools-telemetry.jsonl (SPEC §14)"
+  fi
+}
+
 cmd_measure() {
-  local want_badge=0 want_share=0 want_log=0
+  local want_badge=0 want_share=0 want_log=0 want_tools=0 want_json=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --badge) want_badge=1; shift ;;
       --share) want_share=1; shift ;;
       --log)   want_log=1; shift ;;
+      --tools) want_tools=1; shift ;;
+      --json)  want_json=1; shift ;;
       *)       shift ;;
     esac
   done
+
+  # --tools is its own report (SPEC §14) and doesn't need an ATLAS.md.
+  if [[ $want_tools -eq 1 ]]; then
+    _measure_tools "$want_json"
+    return $?
+  fi
 
   local atlas="$PWD/ATLAS.md"
   [[ -f "$atlas" ]] || _die "no ATLAS.md in $PWD — run 'atlas init' first"
@@ -3397,6 +3675,8 @@ cmd_export() {
           [[ -f "$PWD/SCARS.md" ]] && echo "- [SCARS.md](SCARS.md): failure memory — read before fixing a bug; stable §anchors (symptom → root cause → do NOT → do)."
           [[ -n "$skill" ]] && echo "- ${skill#"$PWD"/}: procedural playbook — how to run, test, and do common tasks here."
           echo "- [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md): behavioral contract for coding agents."
+          local faqf; faqf="$(_faq_file)"
+          [[ -n "$faqf" ]] && echo "- [${faqf#"$PWD"/}](${faqf#"$PWD"/}): project Q&A knowledge — questions answered once, with pointers; check it before asking or re-deriving."
           [[ -f "$PWD/LOOP.md" ]] && echo "- [LOOP.md](LOOP.md): autonomous improvement loop — one iteration = pick the top [ROADMAP.md](ROADMAP.md) item by EV → implement → 'atlas check' → commit."
           [[ -f "$PWD/AKIGI.md" ]] && echo "- [AKIGI.md](AKIGI.md): purpose contract — why this repo exists, scope/non-goals, how incoming requests are triaged."
           [[ -f "$PWD/FRQ.md" ]] && echo "- [FRQ.md](FRQ.md): cross-agent feature-request queue — outside agents: read AKIGI.md first, then file your ask here."

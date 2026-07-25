@@ -1,0 +1,46 @@
+# FAQ — {{PROJECT_NAME}} project knowledge (Q&A ledger)
+
+> The **ask-once file**: questions a human asked and the answers (or surprising
+> findings) an agent surfaced — *"why does it do that?"*, *"why not X?"*,
+> *"is it possible to…?"* — answered **once, with pointers**, so the next
+> session (or the next agent) looks it up instead of re-deriving it at full
+> cost. Together the entries ARE the project's accumulated Q&A knowledge.
+>
+> **Check here before asking or investigating** — the question may already be
+> answered. Append an entry whenever a question worth keeping gets answered
+> (during a task or after it; sub-agents' findings count too).
+>
+> **Graduation convention.** An answer that is really a *failure lesson* becomes
+> a `SCARS.md` `§ANCHOR`; one that is really a *procedure* becomes a `SKILL.md`
+> recipe; an answer that turns out to be an *open unknown* moves to `BUGS.md`.
+> The FAQ keeps a one-line pointer to wherever the entry graduated.
+
+## General
+
+_(no entries yet — append the first answered question in the shape below)_
+
+---
+
+## Conventions (multi-agent + graph-ready)
+
+Not real entries — the rules that keep this file scalable:
+
+- **Stable keys.** Every entry gets the next `FAQ-NNN` id. Ids are permanent —
+  never renumbered, never reused — so entries can be cited from commits,
+  cross-linked (`FAQ-012`), and later extracted into a knowledge graph.
+- **Append-only.** Add new entries at the END of the matching `##` topic
+  section (create a new topic section when none fits). Never rewrite another
+  entry's text — correct one by appending a dated `**Update (YYYY-MM-DD):**`
+  line to it. This keeps concurrent agents merge-safe.
+- **Entry shape** (copy into a topic section):
+
+      ### FAQ-NNN · Q: <the question as asked> (YYYY-MM-DD)
+      - asked-by: <human | agent/session id>
+      - tags: <comma, separated, topics>
+
+      <the answer — short, factual, with pointers to `file:line`,
+      `SCARS.md §ANCHOR`, docs, or commits so it stays verifiable.>
+
+- **Answers point, prose doesn't duplicate.** Cite the file/anchor that proves
+  the answer instead of restating its content — pointers stay true when the
+  code moves; prose copies rot.

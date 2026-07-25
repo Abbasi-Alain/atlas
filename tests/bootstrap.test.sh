@@ -1465,6 +1465,136 @@ TMP_AS3="$(mktemp -d)"; ( cd "$TMP_AS3" && git init -q -b main 2>/dev/null && "$
   && _pass "an untouched init --asop scaffold does not warn ASOP_STALE" || _fail "ASOP_STALE false positive on fresh scaffold"
 rm -rf "$TMP_AS3"
 
+# --- SPEC §13: FAQ.md Q&A knowledge ledger (init --faq + check awareness) ---
+echo ""
+echo "-- FAQ.md Q&A knowledge ledger (init --faq / check) --"
+
+# init --faq scaffolds a REAL-linked docs/FAQ.md; repo passes --strict; --json reports it.
+TMP_FQ1="$(mktemp -d)"; ( cd "$TMP_FQ1" && git init -q -b main 2>/dev/null && "$CLI" init --faq >/dev/null 2>&1
+  [[ -f docs/FAQ.md ]] && grep -qE '\]\((\./)?docs/FAQ\.md\)' ATLAS.md \
+  && "$CLI" check --strict >/dev/null 2>&1 \
+  && "$CLI" check --json | grep -q '"faq":true' ) \
+  && _pass "init --faq scaffolds a REAL-linked docs/FAQ.md, passes --strict, --json reports faq:true" || _fail "init --faq"
+rm -rf "$TMP_FQ1"
+
+# a repo without --faq is unaffected (no FAQ.md, no warning, faq:false).
+TMP_FQ2="$(mktemp -d)"; ( cd "$TMP_FQ2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  [[ ! -f FAQ.md ]] && ! "$CLI" check --json | grep -q FAQ_MD_UNLINKED \
+  && "$CLI" check --json | grep -q '"faq":false' ) \
+  && _pass "no-faq repo unaffected (no FAQ.md, no warning, faq:false)" || _fail "faq opt-in leak"
+rm -rf "$TMP_FQ2"
+
+# a hand-added ROOT FAQ.md warns even though the scaffolded ATLAS.md carries
+# the template's docs/FAQ.md row — the link must target the ACTUAL location,
+# and a plain-text mention is not a link (SCARS §BUGS-LINK-NOT-SUBSTRING).
+TMP_FQ3="$(mktemp -d)"; ( cd "$TMP_FQ3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# FAQ\n' > FAQ.md
+  printf '\nSee FAQ.md for answered questions.\n' >> ATLAS.md
+  "$CLI" check --json | grep -q FAQ_MD_UNLINKED || exit 1
+  printf '\nQ&A: [FAQ.md](FAQ.md)\n' >> ATLAS.md
+  ! "$CLI" check --json | grep -q FAQ_MD_UNLINKED ) \
+  && _pass "root FAQ.md: dead docs-link/plain mention warns, real root link passes" || _fail "FAQ_MD_UNLINKED not detected"
+rm -rf "$TMP_FQ3"
+
+# docs/FAQ.md variant on a CURATED ATLAS.md (the template's absent-file row
+# deleted per SPEC §1.2): unlinked warns, a real link to docs/FAQ.md passes.
+TMP_FQ4="$(mktemp -d)"; ( cd "$TMP_FQ4" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  grep -v 'docs/FAQ.md' ATLAS.md > A.tmp && mv A.tmp ATLAS.md
+  mkdir -p docs && printf '# FAQ\n' > docs/FAQ.md
+  "$CLI" check --json | grep -q FAQ_MD_UNLINKED || exit 1
+  printf '\nQ&A: [docs/FAQ.md](docs/FAQ.md)\n' >> ATLAS.md
+  ! "$CLI" check --json | grep -q FAQ_MD_UNLINKED ) \
+  && _pass "docs/FAQ.md variant: unlinked warns, real link passes" || _fail "docs/FAQ.md handling"
+rm -rf "$TMP_FQ4"
+
+# a git-ignored FAQ.md does NOT warn even though unlinked (private ledger).
+TMP_FQ5="$(mktemp -d)"; ( cd "$TMP_FQ5" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '# FAQ\n' > FAQ.md && printf 'FAQ.md\n' >> .gitignore
+  ! "$CLI" check --json | grep -q FAQ_MD_UNLINKED ) \
+  && _pass "git-ignored FAQ.md doesn't warn (SCARS §PRIVATE-STYLE-OVERLAY)" || _fail "gitignored FAQ.md still warns"
+rm -rf "$TMP_FQ5"
+
+# the llms.txt export lists FAQ.md in the read-first set when present (the
+# BUG-7 orientation-artifact-consistency rule).
+TMP_FQ6="$(mktemp -d)"; ( cd "$TMP_FQ6" && git init -q -b main 2>/dev/null && "$CLI" init --faq >/dev/null 2>&1
+  "$CLI" export --to llms-txt >/dev/null 2>&1
+  grep -q '\[docs/FAQ.md\](docs/FAQ.md)' llms.txt ) \
+  && _pass "llms.txt export lists the FAQ when present" || _fail "llms.txt missing FAQ.md"
+rm -rf "$TMP_FQ6"
+
+# --- SPEC §14: tool context contract (.atlas/tools.json + measure --tools) ---
+echo ""
+echo "-- tool context contract (init --tools / check / measure --tools) --"
+
+# init --tools writes a valid tools.json (project_id, head, null indexed_head),
+# git-ignores it, and check reports it under "tools" while still passing --strict.
+TMP_TL1="$(mktemp -d)"; ( cd "$TMP_TL1" && git init -q -b main 2>/dev/null && "$CLI" init --tools >/dev/null 2>&1
+  [[ -f .atlas/tools.json ]] \
+  && grep -q '"project_id"' .atlas/tools.json \
+  && grep -qxF '.atlas/tools.json' .gitignore \
+  && "$CLI" check --strict >/dev/null 2>&1 \
+  && "$CLI" check --json | grep -q '"tools":{"present":true' ) \
+  && _pass "init --tools writes tools.json, git-ignores it, check reports tools:present" || _fail "init --tools"
+rm -rf "$TMP_TL1"
+
+# a repo without tools.json is unaffected (tools:{present:false}, no warnings).
+TMP_TL2="$(mktemp -d)"; ( cd "$TMP_TL2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" check --json | grep -q '"tools":{"present":false}' \
+  && ! "$CLI" check --deep --json | grep -q 'TOOLS_' ) \
+  && _pass "no-tools repo unaffected (tools:present:false, no TOOLS_* warnings)" || _fail "tools opt-in leak"
+rm -rf "$TMP_TL2"
+
+# TOOLS_INDEX_STALE (--deep only): an indexed_head that isn't HEAD warns under
+# --deep, is silent on a plain check, and reports fresh:false in --json;
+# stamping indexed_head = HEAD reports fresh:true and doesn't warn.
+TMP_TL3="$(mktemp -d)"; ( cd "$TMP_TL3" && git init -q -b main 2>/dev/null && "$CLI" init --tools >/dev/null 2>&1
+  git add -A >/dev/null 2>&1 && git -c user.email=t@t -c user.name=t commit -qm init >/dev/null 2>&1
+  awk '{ sub(/"indexed_head": null/, "\"indexed_head\": \"0000000000000000000000000000000000000000\""); print }' \
+    .atlas/tools.json > t.tmp && mv t.tmp .atlas/tools.json
+  "$CLI" check --deep --json | grep -q TOOLS_INDEX_STALE || exit 1
+  "$CLI" check --json | grep -q TOOLS_INDEX_STALE && exit 1
+  "$CLI" check --json | grep -q '"fresh":false' || exit 1
+  head_sha="$(git rev-parse HEAD)"
+  awk -v h="$head_sha" '{ sub(/"indexed_head": "0+"/, "\"indexed_head\": \"" h "\""); print }' \
+    .atlas/tools.json > t.tmp && mv t.tmp .atlas/tools.json
+  ! "$CLI" check --deep --json | grep -q TOOLS_INDEX_STALE \
+  && "$CLI" check --json | grep -q '"fresh":true' ) \
+  && _pass "TOOLS_INDEX_STALE fires on drift under --deep only; fresh tracks indexed_head==HEAD" || _fail "TOOLS_INDEX_STALE behavior"
+rm -rf "$TMP_TL3"
+
+# regenerating tools.json carries an indexer's freshness stamp over.
+TMP_TL4="$(mktemp -d)"; ( cd "$TMP_TL4" && git init -q -b main 2>/dev/null && "$CLI" init --tools >/dev/null 2>&1
+  awk '{ sub(/"indexed_head": null/, "\"indexed_head\": \"cafe0000000000000000000000000000000000ca\""); print }' \
+    .atlas/tools.json > t.tmp && mv t.tmp .atlas/tools.json
+  "$CLI" init --tools >/dev/null 2>&1
+  grep -q '"indexed_head": "cafe0000000000000000000000000000000000ca"' .atlas/tools.json ) \
+  && _pass "init --tools regeneration preserves indexed_head" || _fail "regeneration wiped indexed_head"
+rm -rf "$TMP_TL4"
+
+# measure --tools --json aggregates the telemetry ledger and flags a dead
+# NODE_OPTIONS preload (the SPEC §14.3 env contract).
+TMP_TL5="$(mktemp -d)"; ( cd "$TMP_TL5" && git init -q -b main 2>/dev/null && "$CLI" init --tools >/dev/null 2>&1
+  printf '{"ts":"2026-07-25T00:00:00Z","tool":"graph","op":"index","bytes_in":8000,"bytes_out":400,"retries":1,"stale":false,"ok":true}\n' >  .atlas/tools-telemetry.jsonl
+  printf '{"ts":"2026-07-25T00:01:00Z","tool":"graph","op":"query","bytes_in":2000,"bytes_out":600,"retries":0,"stale":true,"ok":false}\n' >> .atlas/tools-telemetry.jsonl
+  out="$(NODE_OPTIONS='--require /nonexistent/cm-fs-preload-ghost.js' "$CLI" measure --tools --json)"
+  echo "$out" | grep -q '"events":2' \
+  && echo "$out" | grep -q '"bytes_indexed":10000' \
+  && echo "$out" | grep -q '"bytes_returned":1000' \
+  && echo "$out" | grep -q '"retries":1' \
+  && echo "$out" | grep -q '"stale_hits":1' \
+  && echo "$out" | grep -q '"failures":1' \
+  && echo "$out" | grep -q '"est_context_tokens_saved":2250' \
+  && echo "$out" | grep -q 'cm-fs-preload-ghost.js' ) \
+  && _pass "measure --tools --json aggregates telemetry + flags a dead preload" || _fail "measure --tools"
+rm -rf "$TMP_TL5"
+
+# measure --tools without the contract file dies with the init hint.
+TMP_TL6="$(mktemp -d)"; ( cd "$TMP_TL6" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  ! "$CLI" measure --tools >/dev/null 2>&1 \
+  && "$CLI" measure --tools 2>&1 | grep -q 'atlas init --tools' ) \
+  && _pass "measure --tools without tools.json dies with the init hint" || _fail "measure --tools missing-file handling"
+rm -rf "$TMP_TL6"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1
