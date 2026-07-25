@@ -6,7 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [Unreleased]
+## [0.7.0] — 2026-07-26
+
+> **The knowledge-loop release** — the repo becomes a read-write memory for
+> its agents: `atlas context` (the tool-free read side any harness can
+> prepend, SPEC §15) and `atlas remember` (the session write-back, SPEC §16)
+> close the loop; `FAQ.md` adds the ask-once Q&A ledger (SPEC §13); the tool
+> context contract makes graph/index companions identifiable, freshness-
+> checked, and measurable (SPEC §14); ASOP ships as the canonical operating
+> methodology (SPEC §12 wiring); plus surface-only init, the free cross-model
+> bench matrix, and loop observability.
 
 ### Added
 
