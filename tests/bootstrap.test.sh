@@ -2044,6 +2044,16 @@ TMP_FS2="$(mktemp -d)"; ( cd "$TMP_FS2" && git init -q -b main 2>/dev/null
   || _fail "FAQ_STALE_VS_CODE false positive without declaration"
 rm -rf "$TMP_FS2"
 
+# --- BUG-19 + BUG-20: supervisor + evidence-report doctrine in the SPEC ---
+( grep -q '^### 17.4 The supervisor' "$ATLAS_HOME/docs/SPEC.md" \
+  && grep -q 'NEVER deploy' "$ATLAS_HOME/docs/SPEC.md" \
+  && grep -qi 'to the supervisor, never.*around' "$ATLAS_HOME/docs/SPEC.md" ) \
+  && _pass "SPEC §17.4 supervisor doctrine (builders never deploy; blocked actions route to, not around)" || _fail "SPEC §17.4"
+( grep -q '^### 18.3 Reports carry evidence' "$ATLAS_HOME/docs/SPEC.md" \
+  && grep -qi 'names its evidence' "$ATLAS_HOME/docs/SPEC.md" \
+  && grep -qi 'COST line' "$ATLAS_HOME/docs/SPEC.md" ) \
+  && _pass "SPEC §18.3 report contract (evidence per claim + COST line)" || _fail "SPEC §18.3"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

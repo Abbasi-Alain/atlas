@@ -973,6 +973,29 @@ refuses a glob already claimed), `atlas claim --release "<glob>"` removes,
 7+ days — a dead agent still holding files is the multi-agent equivalent of
 a stale lock.
 
+### 17.4 The supervisor — one deployer, many builders
+
+What makes N concurrent agents *shippable* is a strict role split, not
+coordination cleverness:
+
+- **Builders** build in slices (§18.2) and **NEVER deploy**. A builder whose
+  action is permission-blocked routes the request **to the supervisor, never
+  around them** — an agent working around a permission wall is a security
+  incident, not initiative.
+- **One supervisor** deploys every commit, verifies each deploy live with
+  evidence (§18.3), owns rollbacks, routes messages between agents, and is
+  the **only** role that talks to the owner.
+- **The message protocol:** builder reports its commit hash → supervisor
+  deploys it → supervisor verifies live → owner sees the evidence. The owner
+  never has to trust a builder's self-report; the supervisor never has to
+  guess what to deploy.
+
+Field evidence: this split produced zero deploy collisions across ~35
+production deploys with up to 6 concurrent builders. The supervisor role is
+runtime-agnostic — any model tier that can run a deploy command and compare
+a screenshot can hold it (§22's certification applies to the supervisor's
+own procedures like any other skill).
+
 ---
 
 ## 18. Operational doctrine (OPTIONAL modules)
@@ -1019,6 +1042,29 @@ The biggest owner-satisfaction lever of the campaign was procedural:
   works" is a claim; a screenshot is a fact (§18.3).
 - **Safe concurrent builds:** build from a worktree of HEAD, never the
   working tree — immune to other agents' uncommitted edits.
+
+### 18.3 Reports carry evidence — and cost
+
+The reports that are instantly trustworthy carry their evidence inline; the
+ones that cause rework assert ("verified", "renders correctly") without
+showing how. The report contract:
+
+1. **Every "verified" claim names its evidence** — the exact command run,
+   the test count, the decoded values, the screenshot path, the URL checked.
+   A claim without evidence is a *hypothesis*, and the reader must treat it
+   as one. (This is the report-side twin of `CRITICS.md`'s
+   `verified-no-issue` rule: what you checked is as reportable as what you
+   found.)
+2. **Every report ends with a COST line** — agent tokens where the runtime
+   exposes them, compute minutes for runners — so ROI per mission is
+   measurable instead of guessed, and spend limits are managed on data.
+   Handoff files (§17.2) carry the running cost for the same reason: an
+   interrupted mission's spend must be knowable without forensics.
+3. **Boundaries are part of the report** — what was deliberately NOT
+   changed, so the next agent doesn't undo a scope decision.
+
+These lines are what the knowledge loop (§23) later mines: evidence makes a
+report distillable into skills; cost lines make skill ROI (§22) computable.
 
 ---
 
