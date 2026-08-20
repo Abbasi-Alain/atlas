@@ -3,7 +3,7 @@
 #
 # Subcommands:
 #   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs] [--critics]
-#              [--faq] [--tools] [--asop] [--akigi] [--frq] [--brd] [--srd] [--intake]
+#              [--faq] [--tools] [--data-ladder] [--asop] [--akigi] [--frq] [--brd] [--srd] [--intake]
 #                                     (--loop also scaffolds LOOP.md + ROADMAP.md,
 #                                     the optional autonomous-loop 5th surface)
 #                                     (--bugs scaffolds BUGS.md, the optional
@@ -15,6 +15,9 @@
 #                                     (--tools writes .atlas/tools.json, the
 #                                     machine-readable tool context contract,
 #                                     SPEC §14 — regenerated on every run)
+#                                     (--data-ladder scaffolds docs/
+#                                     DATA_SOURCE_LADDER.md + appends the
+#                                     abbreviated law to the contract, SPEC §19)
 #                                     (--asop scaffolds ASOP.md + ASOP-EXECUTOR.md,
 #                                     the operating methodology, SPEC §12)
 #                                     (--akigi scaffolds AKIGI.md, the purpose
@@ -588,7 +591,7 @@ _write_tools_json() {
 }
 
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 faq=0 tools=0 asop=0 akigi=0 frq=0 brd=0 srd=0
+  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 faq=0 tools=0 ladder=0 asop=0 akigi=0 frq=0 brd=0 srd=0
   local surface_requested=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -599,6 +602,7 @@ cmd_init() {
       --critics)   critics=1; surface_requested=1; shift ;;
       --faq)       faq=1; surface_requested=1; shift ;;
       --tools)     tools=1; surface_requested=1; shift ;;
+      --data-ladder) ladder=1; surface_requested=1; shift ;;
       --asop)      asop=1; surface_requested=1; shift ;;
       --akigi)     akigi=1; surface_requested=1; shift ;;
       --frq)       frq=1; surface_requested=1; shift ;;
@@ -696,6 +700,34 @@ cmd_init() {
       # shellcheck disable=SC2016  # literal backticks (Markdown), no expansion intended
       printf '\n> Project Q&A: [`%s`](%s) — questions answered once, with pointers (SPEC §13).\n' "$faq_rel" "$faq_rel" >> "$PWD/ATLAS.md"
       _say "linked $faq_rel from ATLAS.md"
+    fi
+  fi
+  # Optional data-source ladder (SPEC §19) — for data-product repos: the
+  # four-rung licence law + catalog shape + minting checklist. The abbreviated
+  # law is appended to the CONTRACT (where every agent reads it), and the
+  # AGENTS.md mirror is refreshed iff it was in sync before the append (a
+  # pre-existing drift must keep failing loudly, not be silently absorbed).
+  if [[ $ladder -eq 1 ]]; then
+    _render "$(_src DATA_SOURCE_LADDER.md.tmpl)" "$PWD/docs/DATA_SOURCE_LADDER.md" "$force"
+    if [[ -f "$PWD/CLAUDE.md" ]] && ! _surface_linked "$PWD/CLAUDE.md" '(docs/)?DATA_SOURCE_LADDER'; then
+      local agents_was_mirror=0
+      if [[ -f "$PWD/AGENTS.md" ]] && cmp -s "$PWD/CLAUDE.md" "$PWD/AGENTS.md"; then agents_was_mirror=1; fi
+      cat >> "$PWD/CLAUDE.md" <<'EOF'
+
+## Data-source ladder (law)
+
+Every data source climbs the four rungs in order — free/open first →
+commercial/NC alternatives CATALOGued, never silently ingested → unclear
+licences get a tracked NEGOTIATION state → NC-blocked datasets are REBUILT
+from open inputs as branded first-party datasets. No agent skips a rung;
+exceptions are owner decisions. Full law, catalog shape, and the minting
+checklist: [docs/DATA_SOURCE_LADDER.md](docs/DATA_SOURCE_LADDER.md).
+EOF
+      _say "appended the abbreviated ladder law to CLAUDE.md"
+      if [[ $agents_was_mirror -eq 1 ]]; then
+        cp "$PWD/CLAUDE.md" "$PWD/AGENTS.md"
+        _say "re-mirrored AGENTS.md (was in sync before the append)"
+      fi
     fi
   fi
   # Optional machine-readable tool context contract (SPEC §14). The file is a
@@ -1323,6 +1355,15 @@ cmd_check() {
     [[ -n "$t_ih" && "$t_ih" != "null" ]] && t_ih_json="\"$(_json_esc "$t_ih")\""
     [[ "$t_head" != "null" ]] && t_head_json="\"$(_json_esc "$t_head")\""
     q_tools_json="{\"present\":true,\"project_id\":\"$(_json_esc "$t_pid")\",\"indexed_head\":${t_ih_json},\"head\":${t_head_json},\"fresh\":${t_fresh},\"dirty\":${t_dirty}}"
+  fi
+
+  # --- Data-source ladder (SPEC §19): only-when-present. The law must live in
+  # the CONTRACT (what every agent reads), not only in a doc nobody points at.
+  if [[ -f "$PWD/docs/DATA_SOURCE_LADDER.md" ]]; then
+    _ck_ok "docs/DATA_SOURCE_LADDER.md present (data-source ladder)"
+    if [[ -f "$claude" ]] && ! _surface_linked "$claude" '(docs/)?DATA_SOURCE_LADDER'; then
+      _ck_warn DATA_LADDER_NO_LAW "docs/DATA_SOURCE_LADDER.md present but CLAUDE.md doesn't carry/link the law — append the abbreviated four-rung law with a link ('atlas init --data-ladder' does it) so every runtime reads it (SPEC §19)" "§19"
+    fi
   fi
 
   # --- Multi-agent operations (SPEC §17): capsules + handoff. Validated only

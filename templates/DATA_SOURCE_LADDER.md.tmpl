@@ -1,0 +1,124 @@
+# DATA_SOURCE_LADDER — {{PROJECT_NAME}}
+
+> Optional ATLAS module for data-product repos. Pairs with `ATLAS.md` (where
+> things live), `SCARS.md` (what breaks), and the project contract
+> (`CLAUDE.md`/`AGENTS.md`), which should carry the one-paragraph law and link
+> here. Reference implementation: OrbiVigil (CLAUDE.md §9 + docs/DATA_LADDER.md
+> + services/api_edge/src/data_catalog.ts), production-tested 2026-08.
+>
+> Purpose: every data source climbs the same four rungs, licence compliance
+> becomes a product surface (the catalog IS the upsell page), and any agent —
+> any runtime — can mint a sellable first-party dataset by following a
+> checklist instead of interpreting doctrine.
+
+---
+
+## 1. The law (put this, abbreviated, in the project contract)
+
+Every data source, present or future, climbs this ladder in order. No agent
+skips a rung; exceptions are owner decisions recorded in `DECISIONS.md`.
+
+1. **Free and open first.** A zero-cost, commercially-compatible public source
+   is always preferred, even at lower resolution/cadence. Licence verified
+   BEFORE ingestion — name, verification date, evidence URL — in the project's
+   data-source registry.
+2. **Commercial/NC alternatives are CATALOGued, never silently ingested.**
+   A better source with a blocking licence becomes a catalog entry
+   (tier: upgrade) with its licence, cost note, and an honest one-line
+   "unlocks". Activation is a per-customer flag; a flag with no built
+   ingestion must say so ("flag only — ingestion not yet built").
+3. **Unclear licences get a NEGOTIATION state, not a guess.** Write to the
+   provider; track `contacted → agreed → contracted` with dates in the
+   catalog. Unclear = unusable until answered.
+4. **NC-blocked can be REBUILT.** Where a blocking licence stops a feature,
+   the preferred answer is a reproducible build of an equivalent-or-better
+   dataset from licence-clean open inputs — a branded first-party dataset,
+   registered, priceable, optionally exposed via API.
+
+**The test:** *"Could a paying customer, an auditor, and the data provider all
+read our catalog entry for this source and find it exactly true?"* If not, the
+entry — or the ingestion — is wrong.
+
+---
+
+## 2. The catalog (machine-readable, admin-visible)
+
+One entry per source that is in use, upgradable, under negotiation, or ours.
+Suggested shape (adapt to your stack; keep every field honest):
+
+```
+{ id, category, name,
+  tier: "in-use-free" | "upgrade-commercial" | "upgrade-nc-blocked"
+      | "negotiation" | "proprietary",
+  licence, licence_verified, evidence_url,
+  replaces,            // the in-use source this would upgrade
+  unlocks,             // ONE honest line: what feature/quality it enables
+  cost_note,           // verified price or "UNVERIFIED — no quote"
+  negotiation: { status, contacted, note },        // tier=negotiation
+  build_script,        // tier=proprietary: pointer to the reproducible runner
+  output_licence,      // tier=proprietary: OUR choice, or inherited (e.g. ODbL share-alike)
+  api_exposed, pricing_note,
+  activation: { per-customer flags }               // flags only where ingestion exists
+}
+```
+
+Surface it in the admin console as three sections: **Upgrades** (with
+activation toggles), **Negotiations** (editable status/date/note), and
+**First-party datasets** (build script, output licence, cost, price, API).
+
+---
+
+## 3. Minting a first-party dataset — the checklist
+
+Each step has a verification; skipping one is a defect, not a shortcut.
+
+1. **OPPORTUNITY** — name the gap: which feature is blocked or what a paying
+   customer gains. One honest ROI sentence (who pays, what it enables).
+   *Verify: the catalog entry's `unlocks` line is concrete, not vapour.*
+2. **INPUTS** — list every input; each must already be green in the registry
+   (licence verified, commercial-compatible, attribution known). One
+   amber/unverified input → stop; run the ladder on it first.
+   *Verify: registry rows cited by id.*
+3. **BUILD** — a reproducible, staged, checkpointed, detached runner, loud on
+   failure, idempotent; a stranger can rebuild from the README alone. Record
+   build cost (compute, storage, upload).
+   *Verify: a re-run skips completed stages; kill/resume documented.*
+4. **GATES** — at least one quantitative acceptance gate that refuses
+   publication on failure (orientation/summit/nodata gates are models).
+   *Verify: the gate has refused at least one bad build, or has a test doing so.*
+5. **NAME** — named for the inputs it consumes; geography/accuracy suffixes
+   only after validation. A name is a claim.
+   *Verify: the name states the input, not the ambition.*
+6. **REGISTER** — catalog entry (tier: proprietary) with build-script pointer,
+   explicit OUTPUT licence (derived-from-open usually means we choose it;
+   share-alike inputs impose theirs — say so), inherited attribution
+   obligations, cost note, candidate price.
+   *Verify: the §1 truth test, read aloud.*
+7. **EXPOSE (optional)** — API-key-gated, metered, priced endpoint. Until
+   built, the catalog says "not yet exposed".
+   *Verify: the flag matches reality.*
+8. **RE-VERIFY on every republish** — stamps bump, caches cannot pin a bad
+   publish, the registry state mirrors the build's own status (a dead build
+   shows failed, never "running" forever).
+
+---
+
+## 4. Worked example (fill in your first one)
+
+| Step | {{PROJECT_NAME}}'s first minted dataset |
+|---|---|
+| Opportunity | *(e.g. NC-blocked buildings source → customers need 3D exposure views)* |
+| Inputs | *(e.g. Overture Maps ODbL + own terrain — both registry-green)* |
+| Build | *(runner path)* |
+| Gates | *(what refuses publication)* |
+| Name | *(input-derived name)* |
+| Output licence | *(chosen or inherited)* |
+| Price / API | *(honest state)* |
+
+---
+
+## 5. Candidate queue
+
+List the next datasets worth minting, each with its one-line ROI. Keep it
+honest — a candidate with no named buyer or blocked feature is a wish, not a
+candidate.

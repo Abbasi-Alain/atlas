@@ -932,3 +932,75 @@ refuses a glob already claimed), `atlas claim --release "<glob>"` removes,
 ("check before editing"). `atlas check` warns `CLAIM_STALE` on a claim held
 7+ days — a dead agent still holding files is the multi-agent equivalent of
 a stale lock.
+
+---
+
+## 18. Operational doctrine (OPTIONAL modules)
+
+Doctrine that survived a production multi-agent campaign, stated as spec
+modules a repo's contract can adopt by reference. These are conventions, not
+tooling — `atlas` validates nothing here; the value is that every runtime
+reads the same rules.
+
+### 18.1 Long-job runners
+
+A job that outlives one agent session MUST be built as a **runner**:
+
+1. **Staged + checkpointed** — progress lands in a manifest; a rerun skips
+   completed stages (idempotent by construction).
+2. **Detached** — survives the agent that started it (token/spend-limit
+   deaths, crashes, network switches are normal, not exceptional).
+3. **Heartbeating through an existing channel** — status is observable
+   without attaching to the process.
+4. **Loud on failure** — a runner never fails silently; in particular, guard
+   the SIGPIPE class (SCARS §PIPE-HEAD-SIGPIPE: `find | head` under
+   `pipefail` killed a runner mid-`verify` with status stuck at "running").
+5. **Dead-pid watcher** — a monitor translates "pid gone while
+   status=running" into an honest FAILED; a status field must never outlive
+   the process it describes.
+6. **Documented start / check / kill / resume** — one block, in the runner's
+   own README or header.
+
+Field evidence: every job built this way survived agent death, spend-limit
+kills, an internet outage, and a mid-flight egress switch, resuming from
+manifests each time; every job that wasn't died silently or double-ran.
+
+### 18.2 Shipping discipline — slice-commit, deploy-per-commit, evidence
+
+The biggest owner-satisfaction lever of the campaign was procedural:
+
+- **Slice-commit:** an agent commits the FIRST green slice immediately and
+  keeps slicing — held work ("one big finish") reads as "nothing is
+  happening" and loses the owner's trust.
+- **Deploy-per-commit:** the supervisor (§17.4) deploys on every commit
+  notification; builders never deploy.
+- **Verification is evidence, not assertion:** a deploy is verified with a
+  live screenshot (or equivalent artifact) delivered to the owner — "it
+  works" is a claim; a screenshot is a fact (§18.3).
+- **Safe concurrent builds:** build from a worktree of HEAD, never the
+  working tree — immune to other agents' uncommitted edits.
+
+---
+
+## 19. Data-source ladder (OPTIONAL module, for data-product repos)
+
+Data-heavy agent projects repeatedly face the same licence ladder; the
+module makes it doctrine + checklist instead of per-repo interpretation.
+The canonical body lives in the scaffolded file — the four-rung law
+(free/open first → commercial/NC alternatives CATALOGued as activatable
+paid upgrades, never silently ingested → unclear licences get a tracked
+NEGOTIATION state → NC-blocked datasets REBUILT from open inputs as
+branded, priceable first-party datasets), the machine-readable catalog
+shape, the 8-step Dataset Minting Checklist (each step with its
+verification), and the truth test: *"could a paying customer, an auditor,
+and the data provider all read our catalog entry and find it exactly
+true?"* Licence compliance becomes a product surface — the catalog IS the
+upsell page. (Reference implementation: OrbiVigil, production-tested
+2026-08.)
+
+`atlas init --data-ladder` renders `docs/DATA_SOURCE_LADDER.md` and appends
+the abbreviated law (with a link to the full file) to the contract
+(`CLAUDE.md`, re-mirroring `AGENTS.md` when it was in sync). `atlas check`
+validates only-when-present: a repo carrying the ladder file whose contract
+does not link it warns `DATA_LADDER_NO_LAW` — the law must live where every
+agent reads it, not only in a doc nobody is pointed at.

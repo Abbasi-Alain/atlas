@@ -1853,6 +1853,43 @@ TMP_CL2="$(mktemp -d)"; ( cd "$TMP_CL2" && git init -q -b main 2>/dev/null && "$
   && _pass "CLAIM_STALE fires on a claim held since 2026-01-01" || _fail "CLAIM_STALE"
 rm -rf "$TMP_CL2"
 
+# --- BUG-14: data-source ladder (init --data-ladder / DATA_LADDER_NO_LAW) ---
+echo ""
+echo "-- data-source ladder (SPEC §19) --"
+
+# init --data-ladder scaffolds the doc, appends the law to CLAUDE.md,
+# re-mirrors AGENTS.md, and stays --strict clean.
+TMP_DL1="$(mktemp -d)"; ( cd "$TMP_DL1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" init --data-ladder >/dev/null 2>&1
+  [[ -f docs/DATA_SOURCE_LADDER.md ]] || exit 1
+  grep -q 'Minting a first-party dataset' docs/DATA_SOURCE_LADDER.md || exit 1
+  grep -q 'Data-source ladder (law)' CLAUDE.md || exit 1
+  cmp -s CLAUDE.md AGENTS.md || exit 1
+  "$CLI" check --strict >/dev/null 2>&1 ) \
+  && _pass "init --data-ladder scaffolds + laws the contract + re-mirrors, --strict clean" || _fail "init --data-ladder"
+rm -rf "$TMP_DL1"
+
+# a hand-added ladder file with no law in the contract warns; linking clears it.
+TMP_DL2="$(mktemp -d)"; ( cd "$TMP_DL2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  mkdir -p docs && printf '# ladder\n' > docs/DATA_SOURCE_LADDER.md
+  "$CLI" check --json | grep -q DATA_LADDER_NO_LAW || exit 1
+  printf '\nLadder law: [docs/DATA_SOURCE_LADDER.md](docs/DATA_SOURCE_LADDER.md)\n' >> CLAUDE.md
+  cp CLAUDE.md AGENTS.md
+  ! "$CLI" check --json | grep -q DATA_LADDER_NO_LAW ) \
+  && _pass "DATA_LADDER_NO_LAW fires on an un-lawed contract, clears on a real link" || _fail "DATA_LADDER_NO_LAW"
+rm -rf "$TMP_DL2"
+
+# --- BUG-11 + BUG-12: doctrine modules exist in the SPEC with their load-bearing content ---
+TMP_SPEC="$ATLAS_HOME/docs/SPEC.md"
+( grep -q '^### 18.1 Long-job runners' "$TMP_SPEC" \
+  && grep -qi 'dead-pid' "$TMP_SPEC" \
+  && grep -qi 'Staged + checkpointed' "$TMP_SPEC" ) \
+  && _pass "SPEC §18.1 runner doctrine present (staged/checkpointed + dead-pid watcher)" || _fail "SPEC §18.1"
+( grep -q '^### 18.2 Shipping discipline' "$TMP_SPEC" \
+  && grep -qi 'Slice-commit' "$TMP_SPEC" \
+  && grep -qi 'worktree of HEAD' "$TMP_SPEC" ) \
+  && _pass "SPEC §18.2 shipping doctrine present (slice-commit + worktree builds)" || _fail "SPEC §18.2"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1
