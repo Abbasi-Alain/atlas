@@ -62,7 +62,11 @@
 #                                     row older than 14 days (SPEC §20);
 #                                     --strict also warns BOOT_BUDGET_EXCEEDED
 #                                     when ATLAS.md/CLAUDE.md exceed their
-#                                     boot-context token budget (SPEC §6)
+#                                     boot-context token budget (SPEC §6);
+#                                     --strict warns FAQ_STALE_VS_CODE when
+#                                     ATLAS.md declares '<!-- atlas:user-facing:
+#                                     <glob> -->' and 10+ commits touched it
+#                                     since the FAQ last moved (SPEC §6/BUG-21)
 #   atlas fix                         auto-resolve conformance warnings: kebab the
 #                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
 #   atlas measure [--badge]           estimate orientation-token savings (with
@@ -1255,6 +1259,28 @@ $(grep -oE '<a id="[a-z0-9-]+">' "$skill" 2>/dev/null | sed -E 's/.*"([a-z0-9-]+
     if [[ $faq_ignored -eq 0 ]]; then
       _faq_linked "$atlas" "${faq_file#"$PWD"/}" \
         || _ck_warn FAQ_MD_UNLINKED "${faq_file#"$PWD"/} present but not linked from ATLAS.md (a link must target its actual location) — link it so agents look answered questions up instead of re-deriving them (SPEC §13); 'atlas init --faq' scaffolds a linked one" "§13"
+    fi
+    # --- FAQ freshness gate (SPEC §6 update triggers, BUG-21): --strict only.
+    # Only fires when ATLAS.md declares a user-facing glob to watch — a repo
+    # without the declaration never warns. Counts commits touching that glob
+    # since the FAQ's last commit (or all of them if the FAQ was never
+    # committed); 10+ untouched-FAQ commits is the "36h dark-window" class.
+    if [[ $strict -eq 1 && $faq_ignored -eq 0 ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      local uf_glob
+      uf_glob="$(grep -m1 -oE '<!-- atlas:user-facing:[^>]*-->' "$atlas" 2>/dev/null \
+        | sed -E 's/.*atlas:user-facing:[[:space:]]*//; s/[[:space:]]*-->.*//')" || uf_glob=""
+      if [[ -n "$uf_glob" ]]; then
+        local faq_rel faq_last commits_since
+        faq_rel="${faq_file#"$PWD"/}"
+        faq_last="$(git log -1 --format=%H -- "$faq_rel" 2>/dev/null || true)"
+        if [[ -n "$faq_last" ]]; then
+          commits_since="$(git log --oneline "${faq_last}..HEAD" -- "$uf_glob" 2>/dev/null | grep -c . || true)"
+        else
+          commits_since="$(git log --oneline -- "$uf_glob" 2>/dev/null | grep -c . || true)"
+        fi
+        [[ "${commits_since:-0}" -ge 10 ]] \
+          && _ck_warn FAQ_STALE_VS_CODE "$commits_since commit(s) touched user-facing paths ('$uf_glob') since the FAQ last moved — SPEC §6 update triggers; the 36h dark-window class" "§6"
+      fi
     fi
   fi
 

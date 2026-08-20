@@ -256,6 +256,33 @@ prints the same estimate as a "boot set" breakdown (`CLAUDE.md`,
 total) so the budget is visible on every run, not only when `--strict`
 trips it.
 
+### Update triggers (BUG-21)
+
+Each knowledge file states its own duty at read time, in its own header,
+so no runtime has to consult a separate policy doc to know when to
+touch it:
+
+| Change | File | Trigger |
+|---|---|---|
+| Structural (new module/dep/service, files moved across §-boundaries) | `ATLAS.md` | same commit (SCARS §ATLAS-IS-INDEX) |
+| A paid lesson | `SCARS.md` | same commit as the fix |
+| User-visible (anything a human sees or interacts with differently) | `FAQ.md` (+ affected page captions) | same slice — a feature the FAQ cannot explain is not finished |
+| An owner/irreversible decision | `DECISION_GRAPH.md` | same commit as the work it gates |
+
+`CLAUDE.md`'s commit-hygiene rules restate the FAQ trigger as a law (not
+just a doc header) so it survives even when an agent skips straight to
+coding without reading FAQ.md first.
+
+**Freshness gate.** A trigger stated in a header is advisory until
+something checks it. `atlas check --strict` can verify the FAQ trigger
+mechanically: declare the user-facing surface once in `ATLAS.md` with
+`<!-- atlas:user-facing: <glob> -->`, and `check` counts commits
+touching that glob since `FAQ.md`'s (or `docs/FAQ.md`'s) last commit —
+warning `FAQ_STALE_VS_CODE` at 10+ untouched-FAQ commits (the "36h
+dark-window" class: user-visible behavior shipped repeatedly while the
+ask-once ledger sat unread). No declaration means no check — a repo
+that hasn't opted in is fully unaffected.
+
 ---
 
 ## 7. Versioning

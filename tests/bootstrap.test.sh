@@ -2000,6 +2000,50 @@ TMP_BB3="$(mktemp -d)"; ( cd "$TMP_BB3" && git init -q -b main 2>/dev/null && "$
   && _pass "'atlas measure' output contains a boot set breakdown" || _fail "measure boot set"
 rm -rf "$TMP_BB3"
 
+# --- update triggers + FAQ freshness gate (BUG-21, SPEC §6) ---
+echo ""
+echo "-- FAQ freshness gate (BUG-21) --"
+
+TMP_FS1="$(mktemp -d)"; ( cd "$TMP_FS1" && git init -q -b main 2>/dev/null
+  git config user.email t@example.com; git config user.name test
+  "$CLI" init >/dev/null 2>&1
+  "$CLI" init --faq >/dev/null 2>&1
+  printf '\n<!-- atlas:user-facing: src/* -->\n' >> ATLAS.md
+  mkdir -p src
+  git add -A >/dev/null 2>&1; git commit -q -m "chore: init + faq + declaration" >/dev/null 2>&1
+  i=1
+  while [[ $i -le 11 ]]; do
+    echo "v$i" > src/f.txt
+    git add -A >/dev/null 2>&1
+    git commit -q -m "feat: user-visible change $i" >/dev/null 2>&1
+    i=$((i+1))
+  done
+  "$CLI" check --strict --json | grep -q FAQ_STALE_VS_CODE || exit 1
+  echo "touched" >> docs/FAQ.md
+  git add -A >/dev/null 2>&1; git commit -q -m "docs: update FAQ" >/dev/null 2>&1
+  ! "$CLI" check --strict --json | grep -q FAQ_STALE_VS_CODE ) \
+  && _pass "FAQ_STALE_VS_CODE fires after 11 untouched-FAQ user-facing commits, clears once the FAQ moves" \
+  || _fail "FAQ_STALE_VS_CODE"
+rm -rf "$TMP_FS1"
+
+TMP_FS2="$(mktemp -d)"; ( cd "$TMP_FS2" && git init -q -b main 2>/dev/null
+  git config user.email t@example.com; git config user.name test
+  "$CLI" init >/dev/null 2>&1
+  "$CLI" init --faq >/dev/null 2>&1
+  mkdir -p src
+  git add -A >/dev/null 2>&1; git commit -q -m "chore: init + faq (no declaration)" >/dev/null 2>&1
+  i=1
+  while [[ $i -le 11 ]]; do
+    echo "v$i" > src/f.txt
+    git add -A >/dev/null 2>&1
+    git commit -q -m "feat: user-visible change $i" >/dev/null 2>&1
+    i=$((i+1))
+  done
+  ! "$CLI" check --strict --json | grep -q FAQ_STALE_VS_CODE ) \
+  && _pass "no atlas:user-facing declaration means FAQ_STALE_VS_CODE never fires" \
+  || _fail "FAQ_STALE_VS_CODE false positive without declaration"
+rm -rf "$TMP_FS2"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1
