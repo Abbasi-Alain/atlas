@@ -108,12 +108,20 @@ TMP_B2="$(mktemp -d)"; ( cd "$TMP_B2" && git init -q -b main 2>/dev/null && "$CL
   && _pass "check warns (not fails) on missing CLAUDE.md (BUG-2)" || _fail "BUG-2 CLAUDE.md unchecked"
 rm -rf "$TMP_B2"
 
-# BUG-2: AGENTS.md drifted from CLAUDE.md is flagged.
+# BUG-2 (escalated by 2026-08 BUG-7): AGENTS.md drift is an ERROR (exit 1) —
+# a drifted mirror shipped the wrong contract to non-Claude runtimes in
+# production; 'atlas fix' repairs it and the check message says so.
 TMP_B2D="$(mktemp -d)"; ( cd "$TMP_B2D" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
   echo "drift" >> AGENTS.md
   out=$("$CLI" check 2>&1); rc=$?
-  [[ $rc -eq 0 ]] && echo "$out" | grep -qi "AGENTS.md drifted" ) \
-  && _pass "check warns on AGENTS.md drift (BUG-2)" || _fail "BUG-2 drift undetected"
+  [[ $rc -ne 0 ]] || exit 1
+  echo "$out" | grep -qi "AGENTS.md drifted" || exit 1
+  echo "$out" | grep -q "atlas fix" || exit 1
+  "$CLI" check --json | grep -q '"errors":\[.*AGENTS_DRIFT' || exit 1
+  bash "$ATLAS_HOME/hooks/atlas-skill-loader.sh" | grep -q 'AGENTS.md HAS DRIFTED' || exit 1
+  "$CLI" fix >/dev/null 2>&1
+  "$CLI" check >/dev/null 2>&1 ) \
+  && _pass "AGENTS.md drift is an ERROR advertising 'atlas fix'; hook guards it; fix repairs (BUG-7)" || _fail "BUG-7 drift-as-error"
 rm -rf "$TMP_B2D"
 
 # BUG-3: init derives the kebab dir from the remote; check warns on a non-kebab dir.
@@ -1820,6 +1828,30 @@ TMP_HF2="$(mktemp -d)"; ( cd "$TMP_HF2" && git init -q -b main 2>/dev/null && "$
   bash "$ATLAS_HOME/hooks/atlas-skill-loader.sh" | grep -q 'ACTIVE MISSION HANDOFFS' ) \
   && _pass "HANDOFF_STALE fires on an old handoff; hook surfaces active handoffs" || _fail "HANDOFF_STALE / hook"
 rm -rf "$TMP_HF2"
+
+# --- BUG-9: file-ownership claims (atlas claim + CLAIM_STALE + hook) ---
+echo ""
+echo "-- claims (SPEC §17.3) --"
+
+# claim/list/duplicate-refuse/release cycle; fresh claim doesn't warn.
+TMP_CL1="$(mktemp -d)"; ( cd "$TMP_CL1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" claim "src/map/*" --by mission-map >/dev/null 2>&1
+  "$CLI" claim --list | grep -qF 'src/map/* · mission-map ·' || exit 1
+  ! "$CLI" claim "src/map/*" --by other-agent >/dev/null 2>&1 || exit 1
+  ! "$CLI" check --json | grep -q CLAIM_STALE || exit 1
+  bash "$ATLAS_HOME/hooks/atlas-skill-loader.sh" | grep -q 'ACTIVE FILE CLAIMS' || exit 1
+  "$CLI" claim --release "src/map/*" >/dev/null 2>&1
+  ! "$CLI" claim --list | grep -qF 'src/map/*' ) \
+  && _pass "claim add/list/duplicate-refuse/release; hook surfaces; fresh claim quiet" || _fail "atlas claim"
+rm -rf "$TMP_CL1"
+
+# CLAIM_STALE fires on a 7+-day-old claim date.
+TMP_CL2="$(mktemp -d)"; ( cd "$TMP_CL2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" claim "src/old/*" --by dead-agent >/dev/null 2>&1
+  sed 's/· [0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}$/· 2026-01-01/' .agents/claims.md > c.tmp && mv c.tmp .agents/claims.md
+  "$CLI" check --json | grep -q CLAIM_STALE ) \
+  && _pass "CLAIM_STALE fires on a claim held since 2026-01-01" || _fail "CLAIM_STALE"
+rm -rf "$TMP_CL2"
 
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="

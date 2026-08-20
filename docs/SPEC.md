@@ -207,10 +207,17 @@ MUST) are advisory and still pass (exit 0).
 - `ATLAS.md` exists at repo root and has a §0 quick-orientation.
 - `SKILL.md` exists at `.agents/skill/<project-name>/SKILL.md` and has a `## Table of contents` with at least one entry (`SKILL_TOC_EMPTY` — a heading with nothing listed beneath it is the same failure as no ToC at all).
 - `SCARS.md` exists at repo root, has a `## Table of contents`, and all its `§ANCHOR` IDs are unique.
+- When both exist, `AGENTS.md` is **byte-identical** to `CLAUDE.md`
+  (`AGENTS_DRIFT`, `cmp -s`). *Escalated from a warning after a real
+  production drift: an `AGENTS.md` carrying the wrong content shipped zero
+  behavioral laws to every non-Claude runtime for days, and nothing failed
+  loudly. Drift is silent between manual check runs, so the SessionStart
+  hook also runs the `cmp` guard every session and `atlas fix` re-mirrors
+  in one command.*
 
 **Warnings — should fix:**
 - `CLAUDE.md` is present (the behavioral contract; a MUST if the repo targets Claude).
-- `AGENTS.md` is present and **byte-identical** to `CLAUDE.md` (`cmp -s`).
+- `AGENTS.md` is present (its absence warns; its *drift* errors — above).
 - The `SKILL.md` directory equals the kebab-cased project name (`.agents/skill/<kebab>/`), so every runtime resolves the same path.
 
 `atlas init` is **non-destructive**: it scaffolds only the missing quartet files
@@ -910,3 +917,18 @@ known — §18.3). Any runtime resumes by reading ONE file. The file is
 active ones; the SessionStart hook surfaces them ("resume, don't
 rediscover"). `atlas check` warns `HANDOFF_STALE` on a handoff untouched
 for 7+ days — a stale handoff is a dead mission nobody resumed.
+
+### 17.3 Claims — file ownership for concurrent agents
+
+Concurrent agents collide in shared files, and hand-written "FORBIDDEN:
+files X,Y" lists in each mission brief are repeated, error-prone, and
+invisible to agents from other runtimes. The convention: one shared
+`.agents/claims.md`, one line per active claim —
+`- <glob> · <agent/mission> · <since-date>`. The contract rule every
+runtime can follow: **check claims before editing · claim before touching ·
+release on completion.** `atlas claim "<glob>" --by <agent>` appends (and
+refuses a glob already claimed), `atlas claim --release "<glob>"` removes,
+`atlas claim --list` prints. The SessionStart hook surfaces active claims
+("check before editing"). `atlas check` warns `CLAIM_STALE` on a claim held
+7+ days — a dead agent still holding files is the multi-agent equivalent of
+a stale lock.

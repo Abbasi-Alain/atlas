@@ -35,6 +35,17 @@ CWD="$(pwd 2>/dev/null || echo "$HOME")"
 ATLAS="$CWD/ATLAS.md"
 HAS_OUTPUT=0
 
+# Mirror guard (SPEC §5, BUG-7): a drifted AGENTS.md means every non-Claude
+# runtime reads the wrong contract, and nothing fails loudly between manual
+# 'atlas check' runs. cmp is cheap; run it every session start.
+if [[ -f "$CWD/CLAUDE.md" && -f "$CWD/AGENTS.md" ]] && ! cmp -s "$CWD/CLAUDE.md" "$CWD/AGENTS.md"; then
+  HAS_OUTPUT=1
+  echo "!!! AGENTS.md HAS DRIFTED from CLAUDE.md — non-Claude runtimes are"
+  echo "!!! reading the wrong behavioral contract RIGHT NOW."
+  echo "!!! One-line fix:  atlas fix   (re-mirrors AGENTS.md from CLAUDE.md)"
+  echo ""
+fi
+
 if [[ -f "$ATLAS" ]]; then
   HAS_OUTPUT=1
   echo "================================================================"
@@ -162,6 +173,18 @@ if [[ -d "$HANDOFF_DIR" ]]; then
     done <<< "$HANDOFFS"
     echo ""
   fi
+fi
+
+CLAIMS="$CWD/.agents/claims.md"
+if [[ -f "$CLAIMS" ]] && grep -q '^- ' "$CLAIMS"; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "ACTIVE FILE CLAIMS (.agents/claims.md) — check before editing"
+  echo "================================================================"
+  echo "Another agent owns these paths. Claim before touching; release on"
+  echo "completion ('atlas claim')."
+  grep '^- ' "$CLAIMS"
+  echo ""
 fi
 
 AKIGI="$CWD/AKIGI.md"

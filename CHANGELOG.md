@@ -8,7 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- **`AGENTS.md` drift is now an ERROR, guarded every session (BUG-7 🔴, SPEC §5/§6).** A real production drift shipped an `AGENTS.md` carrying the wrong content for days — every non-Claude runtime read file locations and ZERO behavioral laws, and nothing failed loudly because byte-equality was a warning and `atlas check` only runs when someone runs it. Now: (a) `AGENTS_DRIFT` is an **error** (exit 1) whose message advertises the one-command repair (`atlas fix` re-mirrors); (b) the SessionStart hook runs the cheap `cmp -s` guard at every session start and prints a loud drift banner with the fix line — the check no longer depends on being run.
+
 ### Added
+
+- **File-ownership claims for concurrent agents (SPEC §17.3, BUGS.md BUG-9).** Up to 6 concurrent agents avoided collisions only via hand-written FORBIDDEN lists repeated in every mission brief — invisible to other runtimes. Now one shared `.agents/claims.md` (one line per claim: `- <glob> · <agent/mission> · <since>`) with the runtime-agnostic contract rule *check before editing · claim before touching · release on completion*. `atlas claim "<glob>" --by <agent>` (refuses an already-claimed glob), `--release`, `--list`; the SessionStart hook surfaces active claims; `atlas check` warns `CLAIM_STALE` on a claim held 7+ days (a dead agent still holding files). Only-when-present.
 
 - **Multi-agent operations module — capsules + handoff (SPEC §17, BUGS.md BUG-10/BUG-8, from the OrbiVigil 24 h multi-agent campaign).** *Capsules (§17.1):* an optional `## Capsules` section in `ATLAS.md` — one `### <domain>` block per domain, ≤ ~200 tokens each (files · gates · `SCARS §ANCHORS` · deploy command); `atlas capsule <domain>` prints one so a supervisor (any runtime) prepends it to a subagent brief instead of hand-authoring 400-700 tokens of re-derivable context per agent; `atlas capsule --list` names them; `atlas check` warns `CAPSULE_OVERSIZED` (> ~1000 bytes) — an oversized capsule is a doc every mission pays for, not a brief. *Handoff (§17.2):* agents die mid-mission at token/spend limits and state that lived only in context dies with them; `atlas handoff <mission-slug>` scaffolds `.agents/handoff/<slug>.md` (MISSION · STATE-with-commit-hashes · NEXT · VERIFY · FORBIDDEN · COST) which any runtime resumes from by reading one file; deleted on completion (the report replaces it); the SessionStart hook surfaces active handoffs ("resume, don't rediscover"); `atlas check` warns `HANDOFF_STALE` on a handoff untouched 7+ days (a dead mission nobody resumed). Both only-when-present — a single-agent repo is fully unaffected.
 

@@ -108,6 +108,8 @@
 #                                     (SPEC §17.2: MISSION/STATE/NEXT/VERIFY/
 #                                     FORBIDDEN/COST). --list shows active
 #                                     handoffs; delete the file on completion.
+#   atlas claim ["<glob>" --by <agent> | --release "<glob>" | --list]
+#                                     file-ownership claims (SPEC §17.3).
 #   atlas remember "<note>" --kind scar|skill|bug|faq [--name NAME]
 #                                     the write side (SPEC §16): distill a
 #                                     durable mid-session learning back into
@@ -982,7 +984,7 @@ cmd_check() {
       _ck_warn AGENTS_MISSING "no AGENTS.md — it SHOULD mirror CLAUDE.md so Codex/OpenCode auto-discover (SPEC §5); 'atlas export --to codex'" "§5"
     elif ! cmp -s "$claude" "$agents"; then
       q_agents="drift"
-      _ck_warn AGENTS_DRIFT "AGENTS.md drifted from CLAUDE.md — they SHOULD be byte-identical (SPEC §5); run 'atlas fix' or 'atlas export --to codex'" "§5"
+      _ck_err AGENTS_DRIFT "AGENTS.md drifted from CLAUDE.md — non-Claude runtimes are reading the WRONG contract (a real production drift shipped zero laws for days, BUG-7); 'atlas fix' re-mirrors it (SPEC §5: byte-identical is a MUST)" "§5"
     else
       q_agents="mirror"; _ck_ok "AGENTS.md mirrors CLAUDE.md"
     fi
@@ -1339,6 +1341,21 @@ cmd_check() {
     ' "$atlas" 2>/dev/null)" || fat_capsules=""
     [[ -n "$fat_capsules" ]] \
       && _ck_warn CAPSULE_OVERSIZED "ATLAS.md capsule(s) exceed the ~200-token budget: ${fat_capsules} — a capsule is a brief, not a doc; move detail into linked files (SPEC §17.1)" "§17"
+  fi
+  # A claim older than 7 days is almost certainly a dead agent still holding
+  # files — the multi-agent equivalent of a stale lock.
+  if [[ -f "$PWD/.agents/claims.md" ]]; then
+    local claim_cutoff
+    if claim_cutoff="$(_days_ago 7)"; then
+      local stale_claims
+      stale_claims="$(awk -F' · ' -v cut="$claim_cutoff" '
+        /^- / { d=$3; gsub(/^[[:space:]]+|[[:space:]]+$/,"",d)
+                if (d ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/ && d < cut)
+                  printf "%s%s (%s)", (n++ ? ", " : ""), $1, d }
+      ' "$PWD/.agents/claims.md" 2>/dev/null)" || stale_claims=""
+      [[ -n "$stale_claims" ]] \
+        && _ck_warn CLAIM_STALE "claim(s) held 7+ days: ${stale_claims#- } — a dead agent is still holding files; release with 'atlas claim --release' (SPEC §17.3)" "§17"
+    fi
   fi
   # A handoff file that hasn't moved in 7+ days is a dead mission nobody
   # resumed — exactly the state loss the convention exists to prevent.
@@ -3475,6 +3492,53 @@ cmd_capsule() {
   printf '%s\n' "$out"
 }
 
+# claim — file-ownership claims for concurrent agents (SPEC §17.3). Two
+# agents editing the same file collide; hand-written FORBIDDEN lists in every
+# mission brief are repeated, error-prone, and invisible to other runtimes.
+# One shared .agents/claims.md line per active claim, runtime-agnostic:
+# check before editing · claim before touching · release on completion.
+cmd_claim() {
+  local file="$PWD/.agents/claims.md"
+  case "${1:-}" in
+    ""|--list)
+      if [[ ! -f "$file" ]] || ! grep -q '^- ' "$file"; then
+        _say "no active claims — 'atlas claim \"<glob>\" --by <agent>' makes one"
+        return 0
+      fi
+      grep '^- ' "$file"
+      return 0 ;;
+    --release)
+      local g="${2:-}"
+      [[ -n "$g" ]] || _die "usage: atlas claim --release \"<glob>\""
+      [[ -f "$file" ]] || _die "no .agents/claims.md — nothing to release"
+      grep -qF -- "- ${g} ·" "$file" || _die "no active claim on '${g}' — 'atlas claim --list' shows what's held"
+      grep -vF -- "- ${g} ·" "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+      _say "released ${g}"
+      return 0 ;;
+    *)
+      local g="$1" by=""; shift
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --by)   by="${2:-}"; shift 2 ;;
+          --by=*) by="${1#--by=}"; shift ;;
+          *) shift ;;
+        esac
+      done
+      [[ -n "$by" ]] || _die 'usage: atlas claim "<glob>" --by <agent-or-mission>'
+      if [[ -f "$file" ]] && grep -qF -- "- ${g} ·" "$file"; then
+        _die "already claimed: $(grep -F -- "- ${g} ·" "$file" | head -1 || true) — coordinate or work other files"
+      fi
+      mkdir -p "$(dirname "$file")"
+      if [[ ! -f "$file" ]]; then
+        # shellcheck disable=SC2016  # literal backticks (Markdown), no expansion intended
+        printf '# CLAIMS — active file ownership (SPEC §17.3)\n\n> Check before editing · claim before touching · release on completion.\n> One line per claim: `- <glob> · <agent/mission> · <since>`.\n\n' > "$file"
+      fi
+      printf -- '- %s · %s · %s\n' "$g" "$by" "$(date +%Y-%m-%d)" >> "$file"
+      _say "claimed ${g} for ${by} — release with: atlas claim --release \"${g}\""
+      return 0 ;;
+  esac
+}
+
 # handoff — mission-state files for multi-agent continuity (SPEC §17.2).
 # Agents die mid-mission (token/spend limits, crashes); state that lived only
 # in context dies with them. A handoff file is what the NEXT agent — any
@@ -4970,6 +5034,7 @@ main() {
     context)  cmd_context "$@" ;;
     capsule)  cmd_capsule "$@" ;;
     handoff)  cmd_handoff "$@" ;;
+    claim)    cmd_claim "$@" ;;
     mcp)      cmd_mcp "$@" ;;
     doctor)   cmd_doctor "$@" ;;
     badge)    cmd_badge "$@" ;;
