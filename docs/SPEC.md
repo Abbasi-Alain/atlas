@@ -243,6 +243,19 @@ warnings, so it never breaks an existing repo unless paired with `--strict`):
 Schema examples inside code blocks (fenced or indented) are ignored, so a SCARS
 file may document how to write a scar without tripping its own deep check.
 
+**Boot-context budget (BUG-18).** `ATLAS.md` and `CLAUDE.md` are read on
+every session — their cost is invisible until an agent gets measurably
+dumber, because nothing forces anyone to notice a file growing 40 lines a
+quarter. `atlas check --strict` warns `BOOT_BUDGET_EXCEEDED` when
+`ATLAS.md` exceeds ~2500 tokens or `CLAUDE.md` exceeds ~3000 tokens
+(estimated as bytes ÷ 4). The fix is never "write shorter sentences" —
+it's the §0 table pattern: move detail into a linked doc and keep the
+orientation file's job as a one-line pointer + citation. `atlas measure`
+prints the same estimate as a "boot set" breakdown (`CLAUDE.md`,
+`ATLAS.md`, the `SCARS.md`/`SKILL.md` Table-of-contents slices, and a
+total) so the budget is visible on every run, not only when `--strict`
+trips it.
+
 ---
 
 ## 7. Versioning

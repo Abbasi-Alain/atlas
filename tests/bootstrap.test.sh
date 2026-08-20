@@ -1977,6 +1977,29 @@ TMP_PR1="$(mktemp -d)"; TMP_OV1="$(mktemp -d)"
   || _fail "atlas promote"
 rm -rf "$TMP_PR1" "$TMP_OV1"
 
+# --- boot-context token budget (BUG-18, SPEC §6) ---
+echo ""
+echo "-- boot-context budget (BUG-18) --"
+
+TMP_BB1="$(mktemp -d)"; ( cd "$TMP_BB1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" check --strict >/dev/null 2>&1 || exit 1
+  python3 -c "print('x'*12100)" >> CLAUDE.md 2>/dev/null || yes 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' | head -130 >> CLAUDE.md
+  cp CLAUDE.md AGENTS.md
+  "$CLI" check --strict --json | grep -q BOOT_BUDGET_EXCEEDED || exit 1
+  ! "$CLI" check --json | grep -q BOOT_BUDGET_EXCEEDED ) \
+  && _pass "BOOT_BUDGET_EXCEEDED fires under --strict on a padded CLAUDE.md, not on plain check" || _fail "BOOT_BUDGET_EXCEEDED"
+rm -rf "$TMP_BB1"
+
+TMP_BB2="$(mktemp -d)"; ( cd "$TMP_BB2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" check --strict >/dev/null 2>&1 ) \
+  && _pass "a normal scaffold stays under the boot budget (--strict clean)" || _fail "boot budget false positive on fresh scaffold"
+rm -rf "$TMP_BB2"
+
+TMP_BB3="$(mktemp -d)"; ( cd "$TMP_BB3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" measure | grep -qi "boot set" ) \
+  && _pass "'atlas measure' output contains a boot set breakdown" || _fail "measure boot set"
+rm -rf "$TMP_BB3"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

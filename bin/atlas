@@ -59,11 +59,17 @@
 #                                     a top-level dir isn't linked from ATLAS.md;
 #                                     warns DECISION_PENDING_STALE when
 #                                     DECISION_GRAPH.md's Pending table has a
-#                                     row older than 14 days (SPEC §20)
+#                                     row older than 14 days (SPEC §20);
+#                                     --strict also warns BOOT_BUDGET_EXCEEDED
+#                                     when ATLAS.md/CLAUDE.md exceed their
+#                                     boot-context token budget (SPEC §6)
 #   atlas fix                         auto-resolve conformance warnings: kebab the
 #                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
 #   atlas measure [--badge]           estimate orientation-token savings (with
-#                                     vs without ATLAS); --badge prints a shield
+#                                     vs without ATLAS); prints a "boot set"
+#                                     breakdown (CLAUDE.md/ATLAS.md/SCARS ToC/
+#                                     SKILL ToC + total, SPEC §6); --badge
+#                                     prints a shield
 #   atlas measure --tools [--json]    report the tool context contract (SPEC §14):
 #                                     canonical project id, indexed commit vs
 #                                     HEAD, worktree drift, dead-preload env
@@ -1083,6 +1089,22 @@ $(grep -oE '<a id="[a-z0-9-]+">' "$skill" 2>/dev/null | sed -E 's/.*"([a-z0-9-]+
       _ck_err AGENTS_DRIFT "AGENTS.md drifted from CLAUDE.md — non-Claude runtimes are reading the WRONG contract (a real production drift shipped zero laws for days, BUG-7); 'atlas fix' re-mirrors it (SPEC §5: byte-identical is a MUST)" "§5"
     else
       q_agents="mirror"; _ck_ok "AGENTS.md mirrors CLAUDE.md"
+    fi
+  fi
+
+  # --- Boot-context token budget (SPEC §6, BUG-18): --strict only. ATLAS.md
+  # and CLAUDE.md are read on every session; a file that grows unbounded eats
+  # the context budget invisibly. bytes/4 estimate, integer.
+  if [[ $strict -eq 1 ]]; then
+    if [[ -f "$atlas" ]]; then
+      local atlas_est=$(( $(wc -c < "$atlas" | tr -d ' ') / 4 ))
+      [[ $atlas_est -gt 2500 ]] \
+        && _ck_warn BOOT_BUDGET_EXCEEDED "ATLAS.md is ~${atlas_est} tok (budget: 2500) — move detail into linked docs (the §0 table pattern); keep laws as one-liners citing the doc (SPEC §6)" "§6"
+    fi
+    if [[ -f "$claude" ]]; then
+      local claude_est=$(( $(wc -c < "$claude" | tr -d ' ') / 4 ))
+      [[ $claude_est -gt 3000 ]] \
+        && _ck_warn BOOT_BUDGET_EXCEEDED "CLAUDE.md is ~${claude_est} tok (budget: 3000) — move detail into linked docs (the §0 table pattern); keep laws as one-liners citing the doc (SPEC §6)" "§6"
     fi
   fi
 
@@ -3973,6 +3995,30 @@ cmd_measure() {
   fi
 
   _banner "📊" "atlas measure  $(_c_dim "(estimate · bytes ÷ 4)")"
+
+  # Boot set — the files loaded on every session, whole-file for CLAUDE.md/
+  # ATLAS.md (what BOOT_BUDGET_EXCEEDED checks against), ToC-slice for SCARS/
+  # SKILL (the same slices the hook injects and the "with ATLAS" spine above
+  # uses) — BUG-18.
+  local claude="$PWD/CLAUDE.md"
+  local boot_claude_b boot_atlas_b boot_scars_b=0 boot_skill_b=0
+  boot_claude_b=$(_bytes "$claude")
+  boot_atlas_b=$(_bytes "$atlas")
+  if [[ -f "$scars" ]]; then
+    boot_scars_b=$(awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$scars" 2>/dev/null | wc -c | tr -d ' ')
+  fi
+  if [[ -n "$skill" ]]; then
+    boot_skill_b=$(awk '/^## Table of contents/{x=1} x&&/^## /&&!/Table of contents/{exit} x' "$skill" 2>/dev/null | wc -c | tr -d ' ')
+  fi
+  local boot_total_b=$(( boot_claude_b + boot_atlas_b + boot_scars_b + boot_skill_b ))
+  printf "  %s\n" "$(_c_bold "boot set (loaded every session):")"
+  printf "    %-28s %s\n" "CLAUDE.md:"       "~$(( boot_claude_b / 4 )) tok"
+  printf "    %-28s %s\n" "ATLAS.md:"        "~$(( boot_atlas_b / 4 )) tok"
+  printf "    %-28s %s\n" "SCARS.md (ToC):"  "~$(( boot_scars_b / 4 )) tok"
+  printf "    %-28s %s\n" "SKILL.md (ToC):"  "~$(( boot_skill_b / 4 )) tok"
+  printf "    %-28s %s\n" "total:"           "~$(( boot_total_b / 4 )) tok"
+  echo ""
+
   printf "  %-30s %s\n" "with ATLAS (quartet spine):" "$(_c_green  "~${with_t} tok")"
   if [[ $tiny -eq 1 ]]; then
     printf "  %-30s %s\n" "this whole repo:" "$(_c_yellow "~${full_t} tok")"
