@@ -27,6 +27,8 @@
 #              mentions FRQ.md when the feature-request queue is present too)
 #   - DECISION_GRAPH: the two agent laws + a pending-count pointer (only if
 #              the repo has DECISION_GRAPH.md, SPEC §20)
+#   - ORG-WIDE SCARS: the global overlay's ToC (only if
+#              ${ATLAS_GLOBAL_SCARS:-~/.atlas/SCARS.md} exists, SPEC §21)
 #
 # Sub-agents do NOT inherit this hook; their parent must include a
 # "read ATLAS.md, SCARS.md, and SKILL.md first" instruction in the prompt.
@@ -76,6 +78,21 @@ if [[ -f "$SCARS" ]]; then
     in_toc && /^## / && !/^## Table of contents/ { exit }
     in_toc { print }
   ' "$SCARS"
+  echo ""
+fi
+
+GLOBAL_SCARS="${ATLAS_GLOBAL_SCARS:-$HOME/.atlas/SCARS.md}"
+if [[ -f "$GLOBAL_SCARS" ]]; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "ORG-WIDE SCARS (global overlay: $GLOBAL_SCARS)"
+  echo "================================================================"
+  awk '
+    /^## Table of contents/ { in_toc = 1; print; next }
+    in_toc && /^## / && !/^## Table of contents/ { exit }
+    in_toc { print }
+  ' "$GLOBAL_SCARS"
+  echo "org-wide lessons apply here too — do not repeat them."
   echo ""
 fi
 

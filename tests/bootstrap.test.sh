@@ -1956,6 +1956,27 @@ TMP_DG3="$(mktemp -d)"; ( cd "$TMP_DG3" && git init -q -b main 2>/dev/null && "$
   && _pass "a fresh-dated pending row does not fire DECISION_PENDING_STALE" || _fail "DECISION_PENDING_STALE (fresh)"
 rm -rf "$TMP_DG3"
 
+# --- org-wide SCARS overlay + atlas promote (SPEC §21, BUG-17) ---
+echo ""
+echo "-- org-wide overlay + atlas promote (SPEC §21) --"
+
+TMP_PR1="$(mktemp -d)"; TMP_OV1="$(mktemp -d)"
+( cd "$TMP_PR1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  export ATLAS_GLOBAL_SCARS="$TMP_OV1/SCARS.md"
+  "$CLI" promote NO-COAUTHOR >/dev/null 2>&1 || exit 1
+  grep -q '<a id="no-coauthor">' "$ATLAS_GLOBAL_SCARS" || exit 1
+  grep -q 'promoted from' "$ATLAS_GLOBAL_SCARS" || exit 1
+  grep -q '<a id="no-coauthor">' SCARS.md || exit 1
+  grep -q 'promoted to the org-wide overlay' SCARS.md || exit 1
+  "$CLI" check --deep --strict >/dev/null 2>&1 || exit 1
+  HOOK_OUT="$("$ATLAS_HOME/hooks/atlas-skill-loader.sh")"
+  echo "$HOOK_OUT" | grep -q "ORG-WIDE SCARS" || exit 1
+  "$CLI" promote NO-COAUTHOR >/dev/null 2>&1 && exit 1
+  exit 0 ) \
+  && _pass "promote moves body to overlay, leaves a redirect stub, stays --deep --strict clean, hook shows overlay, re-promote dies" \
+  || _fail "atlas promote"
+rm -rf "$TMP_PR1" "$TMP_OV1"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

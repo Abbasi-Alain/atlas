@@ -111,6 +111,9 @@
 #                                     codex|copilot|gemini|cursor|llms-txt|all
 #   atlas anchors                     list every SCARS anchor (machine-readable)
 #   atlas anchor add NAME "summary"   append a stub anchor to SCARS.md
+#   atlas promote <ANCHOR-NAME>       move a SCARS anchor's body to the org-wide
+#                                     overlay (${ATLAS_GLOBAL_SCARS:-~/.atlas/SCARS.md},
+#                                     SPEC §21), leaving a redirect stub in place
 #   atlas capsule [<domain>|--list]   emit one ≤200-token DOMAIN capsule from
 #                                     ATLAS.md's optional '## Capsules' section
 #                                     (SPEC §17.1) — a supervisor prepends it
@@ -1620,6 +1623,73 @@ cmd_anchors() {
       id = "";
     }
   ' "$scars"
+}
+
+# atlas promote <ANCHOR-NAME> (SPEC §21): move a repo SCARS anchor's full
+# section body to the org-wide overlay (${ATLAS_GLOBAL_SCARS:-$HOME/.atlas/SCARS.md}),
+# leaving a §3.4-style redirect stub in the repo file. Anchor ids are
+# immutable (SPEC §3.4) — the id + ToC entry never move, only the body.
+cmd_promote() {
+  local raw="${1:-}"
+  [[ -z "$raw" ]] && _die "usage: atlas promote <ANCHOR-NAME>"
+  local scars="$PWD/SCARS.md"
+  [[ -f "$scars" ]] || _die "no SCARS.md (run 'atlas init')"
+  local id name
+  id="$(printf '%s' "${raw#§}" | tr '[:upper:]' '[:lower:]')"
+  name="$(printf '%s' "$id" | tr '[:lower:]' '[:upper:]')"
+
+  grep -q "<a id=\"$id\"></a>" "$scars" || {
+    local near
+    near="$(grep -oE '<a id="[a-z0-9-]+">' "$scars" 2>/dev/null \
+      | sed -E 's/.*"([a-z0-9-]+)".*/\1/' \
+      | grep -F "${id:0:4}" | tr '\n' ' ')"
+    _die "no anchor '§$name' in SCARS.md${near:+ — near matches: $near}"
+  }
+
+  local section
+  section="$(awk -v id="$id" '
+    $0 ~ ("<a id=\"" id "\">") { found=1 }
+    found && !done && $0 ~ /<a id="/ && $0 !~ ("<a id=\"" id "\">") { done=1 }
+    found && !done { print }
+  ' "$scars")"
+  printf '%s\n' "$section" | grep -q "promoted to the org-wide overlay" \
+    && _die "§$name is already a redirect stub — it was promoted earlier"
+
+  local overlay="${ATLAS_GLOBAL_SCARS:-$HOME/.atlas/SCARS.md}"
+  mkdir -p "$(dirname "$overlay")"
+  if [[ ! -f "$overlay" ]]; then
+    printf '# SCARS — org-wide overlay (global)\n\n## Table of contents\n' > "$overlay"
+  fi
+  local repo_base; repo_base="$(basename "$PWD")"
+  local toc_line="- [§${name} — promoted from ${repo_base}](#${id})"
+
+  # insert the ToC bullet right after the ToC heading
+  awk -v line="$toc_line" '
+    { print }
+    /^## Table of contents/ && !done { print line; done=1 }
+  ' "$overlay" > "$overlay.tmp" && mv "$overlay.tmp" "$overlay"
+
+  # append the full promoted section body
+  { echo ""; echo "---"; echo ""; printf '%s\n' "$section"; } >> "$overlay"
+
+  # replace the repo section with a redirect stub, keeping the anchor id
+  awk -v id="$id" -v title="### §${name} — promoted to the org-wide overlay" -v ov="$overlay" '
+    {
+      if ($0 ~ ("<a id=\"" id "\">")) {
+        print $0; print title; print ""
+        print "See the org-wide overlay: `" ov "`."
+        print ""; print "---"; print ""
+        skip = 1
+        next
+      }
+      if (skip == 1) {
+        if ($0 ~ /<a id="/) { skip = 0 } else { next }
+      }
+      print
+    }
+  ' "$scars" > "$scars.tmp" && mv "$scars.tmp" "$scars"
+
+  _ok "promoted §$name → $overlay (repo section replaced with a redirect stub)"
 }
 
 cmd_anchor() {
@@ -5168,6 +5238,7 @@ main() {
     export)   cmd_export "$@" ;;
     anchors)  cmd_anchors "$@" ;;
     anchor)   cmd_anchor "$@" ;;
+    promote)  cmd_promote "$@" ;;
     remember) cmd_remember "$@" ;;
     install)  cmd_install "$@" ;;
     uninstall) cmd_uninstall "$@" ;;

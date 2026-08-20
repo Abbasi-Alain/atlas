@@ -1068,3 +1068,47 @@ fully unaffected — and warns `DECISION_PENDING_STALE` on stale pending
 rows. The SessionStart hook prints the two agent laws plus a pending-count
 line whenever `DECISION_GRAPH.md` exists, so the laws are read at the top
 of every session, not discovered by re-deriving them from a bug report.
+
+## 21. The org-wide overlay — cross-repo failure memory (OPTIONAL)
+
+SCARS.md is per-repo by design (§3) — a scar is paid for in *this*
+codebase's real breakage. But some lessons are not repo-specific: a
+`set -e && chain` trap, a `sed -i` portability gotcha, a CI secret
+placeholder that silently no-ops — the same mistake, re-paid in every
+sibling repo that hasn't hit it yet. The org-wide overlay is where a
+lesson that has already been paid for **twice** stops being re-paid a
+third time.
+
+**Location.** `${ATLAS_GLOBAL_SCARS:-$HOME/.atlas/SCARS.md}` — one file,
+read by every repo on the machine (or, with the env var set, by every
+repo an organization's runners share). Both `bin/atlas` and the
+SessionStart hook read the same env var, so a maintainer can point it
+anywhere (a synced dir, a mounted volume) without touching either.
+
+**Hook concatenation.** When the overlay file exists, the SessionStart
+hook appends a clearly-labelled section after the repo's own SCARS
+block — `"ORG-WIDE SCARS (global overlay: <path>)"` — showing the
+overlay's own Table of contents, with a one-line reminder that org-wide
+lessons apply here too. It is never merged silently into the repo
+block: an agent must always be able to tell which anchors are local and
+which are shared.
+
+**`atlas promote <ANCHOR-NAME>`.** Moves one anchor's full body
+(Symptom/Root cause/Do/Do NOT/Where — everything between its `<a id>`
+line and the next anchor) out of the repo's `SCARS.md` and into the
+overlay, adding a Table-of-contents bullet there (`promoted from
+<repo>`). The repo keeps the anchor's id and Table-of-contents entry —
+anchors are immutable (§3.4), so anything that cited `§ANCHOR` before
+promotion still resolves — but the body is replaced with a redirect
+stub (`<a id>` + a one-line "promoted to the org-wide overlay" pointer
+at the overlay path). Promoting an anchor that is already a redirect
+stub refuses (it was promoted once; promoting again would duplicate the
+overlay entry). The overlay file is created on first promotion with a
+bare H1 + Table-of-contents heading if it doesn't exist yet.
+
+**Read-only context, written by curation.** Agents treat the overlay as
+context to read, not a file to edit mid-mission — a scar is still
+authored in the *repo* SCARS.md first, where the breakage actually
+happened. Promotion is a deliberate curation act (typically a
+maintainer, after the same anchor shows up in a second or third repo),
+not something an agent does reflexively while fixing a bug.
