@@ -176,6 +176,20 @@ if [[ -f "$FAQ" ]]; then
   echo ""
 fi
 
+SKILLGRAPH="$CWD/SKILL_GRAPH.md"
+if [[ -f "$SKILLGRAPH" ]]; then
+  HAS_OUTPUT=1
+  echo "================================================================"
+  echo "SKILL_GRAPH.md (distilled skills) detected at $SKILLGRAPH"
+  echo "================================================================"
+  echo "Before BUILDING: search the registry — if a skill exists, follow it"
+  echo "and run its VERIFYs; do not rediscover. Before DEBUGGING: grep the"
+  echo "graph by symptom first:  atlas skill find --symptom \"<paste error>\""
+  echo "When you learn a reusable procedure, distill it + register it in the"
+  echo "same commit (the 1B bar: every step concrete, every branch IF/THEN)."
+  echo ""
+fi
+
 DECISIONS="$CWD/DECISION_GRAPH.md"
 if [[ -f "$DECISIONS" ]]; then
   HAS_OUTPUT=1

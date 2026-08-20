@@ -1198,3 +1198,101 @@ authored in the *repo* SCARS.md first, where the breakage actually
 happened. Promotion is a deliberate curation act (typically a
 maintainer, after the same anchor shows up in a second or third repo),
 not something an agent does reflexively while fixing a bug.
+
+---
+
+## 22. SKILL_GRAPH.md — distilled intelligence (OPTIONAL surface)
+
+`SCARS.md` records what breaks. `SKILL.md` records how this repo works.
+**`SKILL_GRAPH.md` records distilled, executable procedures with a measured
+capability floor** — reasoning captured so precisely that a small,
+low-capability agent following one reproduces what a frontier model
+discovered once. This is where a project's INTELLIGENCE is stored: not in
+model weights, not in chat history — as procedure. Discovery is paid once,
+by whoever is smartest that day; execution is cheap forever, by whoever is
+available — any runtime, any vendor, offline included. It is the
+token-economy endgame of capsules (§17.1) and the org overlay (§21).
+
+### 22.1 The registry and the 1B bar
+
+The file carries a **Registry** table (skill · file · status · certified ·
+created · updated · depends-on/anchors), skill bodies under
+`.agents/skill/<slug>/skills/<kebab-name>.md`, an honest **"Shipped but not
+yet distilled"** section (capability exists in code; the bar is not met —
+never dangling registry rows), and a typed mermaid **Graph** whose edges
+carry semantics (feeds · delegates-to · supersedes · cites).
+
+**The quality bar — the 1B-model test.** A skill is complete only if an
+agent with minimal reasoning can execute it: every step a concrete command
+or click path, every branch an explicit IF/THEN, every step with its VERIFY
+check, failure modes linked to `SCARS §ANCHORS`. Skills are never deleted —
+`status: superseded` links the replacement.
+
+### 22.2 Certification — measured, never asserted
+
+Every `active` skill carries an executable eval
+(`skills/<name>.eval.sh`, or an `## Eval` block: setup → execute the steps
+→ assert the outcome). `atlas skill test <name> [--tier T]` runs it and
+appends a record to `skills/certs.jsonl`
+(`{date, skill, tier, pass}`) — the `Certified` column may claim ONLY
+tiers with a passing record behind them (**names are claims**, applied to
+skills). A failing eval flips `status: broken` — loudly, never silently
+wrong. Certification is *living*: environment drift or repeated failures
+decay it (re-run evals on a schedule; the record trail IS the empirical
+success rate per tier). Each record can carry cost, so a skill's measured
+ROI = its discovery cost vs its execution-by-skill cost (§18.3 COST lines).
+
+### 22.3 Symptom-indexed retrieval
+
+Every skill registers the SYMPTOMS it cures — exact error strings, log
+signatures, visual descriptions. `atlas skill find --symptom "<paste>"`
+greps the graph by symptom **before debugging begins** — the
+highest-leverage retrieval path, because it fires exactly when rediscovery
+is about to be paid again. A miss is logged to
+`.atlas/retrieval-misses.jsonl` (§23's demand signal).
+
+### 22.4 The hardening ladder
+
+A skill's lifecycle does not end at certification; the endgame is
+COMPILATION: prose skill → certified procedure → deterministic script/tool
+(a `compiled_to:` pointer in the skill) → cron/runner. Each rung removes
+reasoning from the loop and drops marginal cost toward zero — intelligence
+condenses into software.
+
+### 22.5 Federation, security, and skills-as-products (conventions)
+
+- **Federation:** a repo's skills/scars/decisions/capsules export as typed,
+  content-addressed nodes with provenance (repo · commit · author-agent ·
+  eval status) into a personal/org global graph. **Markdown is the source
+  of truth; any database is a deterministic, rebuildable INDEX** — no
+  lock-in, offline-usable by construction. Serving is runtime-agnostic:
+  plain files + grep (the 1B/offline path), MCP, or a thin HTTP API — a
+  consumer never needs more than search → fetch → follow steps → run
+  VERIFYs.
+- **Security gate:** a skill is executable instruction, so poisoning is a
+  fleet's largest attack surface. Promotion to a shared graph requires
+  provenance complete + eval green + a review recorded in DECISION_GRAPH
+  (§20). Unreviewed skills stay repo-local; a skill requesting credentials
+  or destructive ops outside its declared scope is quarantined.
+- **Dead-end nodes:** explored-and-rejected design branches ("tried X for
+  Y — dead end, because Z, evidence link") are stored intelligence too —
+  distinct from SCARS (design paths, not production failures); they prune
+  the most expensive rediscovery: re-walking a dead branch with full
+  confidence.
+- **Skills are products:** a certified, compiled, high-ROI skill is a
+  sellable artifact exactly like a minted dataset — the §19 machinery
+  applies (catalog entry, output licence, price, API exposure). An org's
+  global graph becomes a portfolio of data + intelligence products, and
+  fleet scheduling falls out: task → required skills → cheapest certified
+  tier → route.
+
+### 22.6 Conformance & tooling
+
+`atlas init --skill-graph` scaffolds `SKILL_GRAPH.md` + the skills dir.
+`atlas check` validates **only when present**: `SKILL_GRAPH_DANGLING`
+(registry row → missing file), `SKILL_NO_EVAL` (`active` skill without an
+executable eval), `SKILL_CERT_UNBACKED` (a Certified claim with no passing
+`certs.jsonl` record). The SessionStart hook surfaces the two retrieval
+rules (search before building; symptom-grep before debugging). Update
+trigger (§6): a new reusable procedure is distilled + registered **in the
+same commit** as the work that proved it.

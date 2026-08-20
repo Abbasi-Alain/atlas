@@ -2054,6 +2054,58 @@ rm -rf "$TMP_FS2"
   && grep -qi 'COST line' "$ATLAS_HOME/docs/SPEC.md" ) \
   && _pass "SPEC §18.3 report contract (evidence per claim + COST line)" || _fail "SPEC §18.3"
 
+# --- BUG-22: SKILL_GRAPH — distilled intelligence (SPEC §22) ---
+echo ""
+echo "-- SKILL_GRAPH (SPEC §22) --"
+
+# init --skill-graph scaffolds with the real slug substituted; --strict clean;
+# hook surfaces the retrieval rules; the template's example row doesn't warn.
+TMP_SG1="$(mktemp -d)"; ( cd "$TMP_SG1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" init --skill-graph >/dev/null 2>&1
+  [[ -f SKILL_GRAPH.md ]] || exit 1
+  grep -q '{{PROJECT_SLUG}}' SKILL_GRAPH.md && exit 1
+  [[ -d ".agents/skill/$(basename "$TMP_SG1")/skills" || -d .agents/skill ]] || exit 1
+  "$CLI" check --strict >/dev/null 2>&1 || exit 1
+  bash "$ATLAS_HOME/hooks/atlas-skill-loader.sh" | grep -q 'symptom' ) \
+  && _pass "init --skill-graph scaffolds (slug substituted), strict clean, hook surfaces" || _fail "init --skill-graph"
+rm -rf "$TMP_SG1"
+
+# registry integrity: dangling file warns; active-without-eval warns;
+# unbacked Certified warns and 'atlas skill test' backs it.
+TMP_SG2="$(mktemp -d)"; ( cd "$TMP_SG2" && git init -q -b main 2>/dev/null && "$CLI" init --skill-graph >/dev/null 2>&1
+  slug_dir="$(find .agents/skill -mindepth 1 -maxdepth 1 -type d | head -1)"
+  printf '| ghost-skill | skills/ghost.md | active |  | 2026-08-20 | 2026-08-20 | — |\n' >> SKILL_GRAPH.md.tmp
+  awk '/^\| \*\(example\)\*/{print; print "| ghost-skill | skills/ghost.md | active |  | 2026-08-20 | 2026-08-20 | — |"; next}1' SKILL_GRAPH.md > s.tmp && mv s.tmp SKILL_GRAPH.md
+  rm -f SKILL_GRAPH.md.tmp
+  "$CLI" check --json | grep -q SKILL_GRAPH_DANGLING || exit 1
+  mkdir -p "$slug_dir/skills" && printf '# ghost skill\nsteps...\nsymptom: black globe with stars\n' > "$slug_dir/skills/ghost.md"
+  "$CLI" check --json | grep -q SKILL_GRAPH_DANGLING && exit 1
+  "$CLI" check --json | grep -q SKILL_NO_EVAL || exit 1
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$slug_dir/skills/ghost.eval.sh"
+  "$CLI" check --json | grep -q SKILL_NO_EVAL && exit 1
+  awk '{ sub(/\| ghost-skill \| skills\/ghost.md \| active \|  \|/, "| ghost-skill | skills/ghost.md | active | 1B |"); print }' SKILL_GRAPH.md > s.tmp && mv s.tmp SKILL_GRAPH.md
+  "$CLI" check --json | grep -q SKILL_CERT_UNBACKED || exit 1
+  "$CLI" skill test ghost --tier 1B >/dev/null 2>&1 || exit 1
+  grep -q '"skill":"ghost","tier":"1B","pass":true' "$slug_dir/skills/certs.jsonl" || exit 1
+  ! "$CLI" check --json | grep -q SKILL_CERT_UNBACKED ) \
+  && _pass "registry integrity: dangling → no-eval → unbacked-cert each fire and clear; skill test backs the claim" || _fail "SKILL_GRAPH integrity chain"
+rm -rf "$TMP_SG2"
+
+# a failing eval exits 1 and records pass:false; symptom find hits a skill;
+# a miss returns 1 and logs loop demand.
+TMP_SG3="$(mktemp -d)"; ( cd "$TMP_SG3" && git init -q -b main 2>/dev/null && "$CLI" init --skill-graph >/dev/null 2>&1
+  slug_dir="$(find .agents/skill -mindepth 1 -maxdepth 1 -type d | head -1)"
+  mkdir -p "$slug_dir/skills"
+  printf '# broken skill\nsymptom: tiles 200 but surface invisible\n' > "$slug_dir/skills/render-fix.md"
+  printf '#!/usr/bin/env bash\nexit 3\n' > "$slug_dir/skills/render-fix.eval.sh"
+  ! "$CLI" skill test render-fix --tier 8B >/dev/null 2>&1 || exit 1
+  grep -q '"skill":"render-fix","tier":"8B","pass":false' "$slug_dir/skills/certs.jsonl" || exit 1
+  "$CLI" skill find --symptom "surface invisible" | grep -q 'render-fix.md' || exit 1
+  ! "$CLI" skill find --symptom "totally novel failure xyz" >/dev/null 2>&1 || exit 1
+  grep -q '"query":"totally novel failure xyz"' .atlas/retrieval-misses.jsonl ) \
+  && _pass "failing eval records pass:false + exit 1; symptom find hits; a miss logs loop demand" || _fail "skill test/find behavior"
+rm -rf "$TMP_SG3"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

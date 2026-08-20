@@ -1,0 +1,87 @@
+# SKILL_GRAPH — {{PROJECT_NAME}}
+
+> **Purpose.** The living graph of *skills*: procedures this project has learned,
+> written so precisely that a small, low-capability agent following one can
+> reproduce the result a frontier model achieved. SCARS.md records what NOT to
+> do; a skill records **how to do it right, step by step, with checks**.
+>
+> This file is where the project's INTELLIGENCE is stored — not the model's
+> weights, not chat history: distilled reasoning as executable procedure.
+> Discovery is paid once, by whoever is smartest that day; execution is cheap
+> forever, by whoever is available — any runtime, any vendor, offline included.
+>
+> **Contract for every agent (any runtime).**
+> 1. Before building something, SEARCH this graph. If a skill exists, follow it
+>    and run its VERIFYs. Do not rediscover.
+> 2. When you learn a reusable procedure (≥30 min of discovery, or any solved
+>    bug/issue another agent could hit), write or extend a skill under
+>    [`.agents/skill/{{PROJECT_SLUG}}/skills/`](.agents/skill/{{PROJECT_SLUG}}/skills/)
+>    and register it here **in the same commit**.
+> 3. Update `updated:` on every substantive edit. Never delete a skill; mark it
+>    `status: superseded` and link its replacement.
+>
+> **Quality bar — the 1B-model test.** A skill is complete only if an agent with
+> minimal reasoning can execute it: every step is a concrete command or click
+> path, every branch an explicit IF/THEN, every step states its VERIFY check,
+> and failure modes link to SCARS anchors.
+>
+> **Certification — measured, never asserted.** `certified:` lists ONLY model
+> tiers that actually executed the skill end-to-end with its eval passing
+> (a name is a claim). A failing eval flips `status: broken` — loudly, never
+> silently wrong.
+
+## Registry
+
+| Skill | File | Status | Certified | Created | Updated | Depends on / relates to |
+|---|---|---|---|---|---|---|
+| *(example)* | `skills/<kebab-name>.md` | active | frontier, 8B | YYYY-MM-DD | YYYY-MM-DD | SCARS §…; other-skill |
+
+## Shipped but not yet distilled
+
+Capabilities that exist in code and run in production, but whose skill file is
+not written — the 1B bar is NOT met. Listed here honestly rather than as
+dangling registry rows. Each line: entry point to read + the SCARS anchors the
+future skill must encode.
+
+| Capability | Entry point | Anchors it must encode |
+|---|---|---|
+| | | |
+
+## Graph
+
+```mermaid
+graph TD
+  %% Nodes are skills; edges carry semantics: feeds / delegates-to /
+  %% supersedes / cites. SCARS and ATLAS are context nodes, dashed.
+```
+
+## Evals
+
+Every `active` skill has an executable eval beside it
+(`skills/<name>.eval.sh` or an `## Eval` block: setup → execute the skill's
+steps → assert the outcome). Run one: `atlas skill test <name>` (or execute the
+file). Record each certification run: date, model tier, pass/fail, cost —
+that record is what backs the `certified:` column, and the cost delta vs the
+original discovery is the skill's measured ROI.
+
+## Federation (optional)
+
+This graph can be exported (skills/scars/decisions as typed, content-addressed
+nodes with provenance: repo, commit, eval status) and merged into a global
+personal/org knowledge graph. Markdown is the source of truth; any database is
+a deterministic, rebuildable index. Promotion to a shared graph requires:
+provenance complete + eval green + a recorded review — a skill is executable
+instruction, so an unreviewed skill from elsewhere is treated as untrusted
+input, never followed blindly.
+
+## How to add a skill (held to its own bar)
+
+1. Create `.agents/skill/{{PROJECT_SLUG}}/skills/<kebab-name>.md` with
+   frontmatter `name / status: active|draft / certified: [] / created /
+   updated / owner: any-agent`, then sections: **When to use · Prerequisites ·
+   Decision tree · Procedures (numbered; each step = action + VERIFY) ·
+   Failure modes (→ SCARS links) · Eval · Sources**.
+2. Write the eval; run it; record the run.
+3. Add one Registry row and the graph edges it earns. Same commit.
+4. VERIFY: another agent (ideally a smaller model) executes the skill from the
+   file alone. Whatever tier succeeds is what `certified:` may claim.

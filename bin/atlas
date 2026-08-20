@@ -137,6 +137,12 @@
 #                                     handoffs; delete the file on completion.
 #   atlas claim ["<glob>" --by <agent> | --release "<glob>" | --list]
 #                                     file-ownership claims (SPEC §17.3).
+#   atlas skill test <name> [--tier T]  run a skill's executable eval and
+#                                     append the certification record —
+#                                     measured, never asserted (SPEC §22)
+#   atlas skill find --symptom "<s>"  grep the SKILL_GRAPH by symptom/error
+#                                     string BEFORE debugging; a miss is
+#                                     logged as loop demand (SPEC §22/§23)
 #   atlas remember "<note>" --kind scar|skill|bug|faq [--name NAME]
 #                                     the write side (SPEC §16): distill a
 #                                     durable mid-session learning back into
@@ -388,8 +394,9 @@ _render() {
   fi
   mkdir -p "$(dirname "$out")"
 
-  local project src_dir build_file test_cmd date_now
+  local project slug src_dir build_file test_cmd date_now
   project="$(_project_name)"
+  slug="$(_project_slug)"
   src_dir="src"
   if [[ -d "src" ]]; then
     local subs
@@ -412,6 +419,7 @@ _render() {
   date_now="$(date +%Y-%m-%d)"
 
   sed -e "s|{{PROJECT_NAME}}|${project}|g" \
+      -e "s|{{PROJECT_SLUG}}|${slug}|g" \
       -e "s|{{SRC_DIR}}|${src_dir}|g" \
       -e "s|{{PRIMARY_BUILD_FILE}}|${build_file}|g" \
       -e "s|{{TEST_CMD}}|${test_cmd}|g" \
@@ -615,7 +623,7 @@ _write_tools_json() {
 }
 
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 faq=0 tools=0 ladder=0 asop=0 akigi=0 frq=0 brd=0 srd=0 decisions=0
+  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 faq=0 tools=0 ladder=0 asop=0 akigi=0 frq=0 brd=0 srd=0 decisions=0 skillgraph=0
   local surface_requested=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -627,6 +635,7 @@ cmd_init() {
       --faq)       faq=1; surface_requested=1; shift ;;
       --tools)     tools=1; surface_requested=1; shift ;;
       --data-ladder) ladder=1; surface_requested=1; shift ;;
+      --skill-graph) skillgraph=1; surface_requested=1; shift ;;
       --asop)      asop=1; surface_requested=1; shift ;;
       --akigi)     akigi=1; surface_requested=1; shift ;;
       --frq)       frq=1; surface_requested=1; shift ;;
@@ -761,6 +770,12 @@ EOF
         _say "re-mirrored AGENTS.md (was in sync before the append)"
       fi
     fi
+  fi
+  # Optional distilled-skills graph (SPEC §22): the registry of procedures
+  # written to the 1B bar, with measured (never asserted) certification.
+  if [[ $skillgraph -eq 1 ]]; then
+    _render "$(_src SKILL_GRAPH.md.tmpl)" "$PWD/SKILL_GRAPH.md" "$force"
+    mkdir -p "$PWD/.agents/skill/${slug}/skills"
   fi
   # Optional machine-readable tool context contract (SPEC §14). The file is a
   # generated LOCAL snapshot (records HEAD at generation time; graph/index
@@ -1511,6 +1526,51 @@ $(grep -oE '<a id="[a-z0-9-]+">' "$skill" 2>/dev/null | sed -E 's/.*"([a-z0-9-]+
       [[ -n "$stale_decisions" ]] \
         && _ck_warn DECISION_PENDING_STALE "pending decision(s) older than 14 days: $stale_decisions — a rotting pending decision is a silent blocker (SPEC §20)" "§20"
     fi
+  fi
+
+  # --- SKILL_GRAPH.md (SPEC §22): only-when-present. Three integrity rules:
+  # registry rows point at files that exist (a dangling row is a lie about
+  # capability); an `active` skill has an executable eval (certification is
+  # measured, not asserted); a non-empty Certified cell is backed by at least
+  # one passing record in the certs ledger (names are claims).
+  if [[ -f "$PWD/SKILL_GRAPH.md" ]]; then
+    _ck_ok "SKILL_GRAPH.md present (distilled skills registry)"
+    local sg_dir="$PWD/.agents/skill/${slug}"
+    local sg_dangling="" sg_noeval="" sg_unbacked=""
+    local sg_row sk_cell f_cell st_cell cert_cell sg_path sg_name
+    while IFS= read -r sg_row; do
+      sk_cell="$(printf '%s' "$sg_row" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$2); print $2}')"
+      f_cell="$(printf '%s' "$sg_row"  | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$3); gsub(/`/,"",$3); print $3}')"
+      st_cell="$(printf '%s' "$sg_row" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$4); print $4}')"
+      cert_cell="$(printf '%s' "$sg_row" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$5); print $5}')"
+      # skip header/separator/placeholder/empty rows
+      [[ -z "$sk_cell" || "$sk_cell" == "Skill" || "$sk_cell" == ---* ]] && continue
+      case "$sk_cell" in \**\(*) continue ;; esac
+      case "$f_cell" in *'<'*) continue ;; esac
+      [[ -z "$f_cell" ]] && continue
+      sg_path="$PWD/$f_cell"
+      [[ -f "$sg_path" ]] || sg_path="$sg_dir/$f_cell"
+      if [[ ! -f "$sg_path" ]]; then
+        sg_dangling="${sg_dangling}${sg_dangling:+, }${sk_cell} (${f_cell})"
+        continue
+      fi
+      if [[ "$st_cell" == active* ]]; then
+        sg_name="$(basename "$f_cell" .md)"
+        if [[ ! -f "$(dirname "$sg_path")/${sg_name}.eval.sh" ]] && ! grep -q '^## Eval' "$sg_path" 2>/dev/null; then
+          sg_noeval="${sg_noeval}${sg_noeval:+, }${sk_cell}"
+        fi
+        if [[ -n "$cert_cell" && "$cert_cell" != "—" && "$cert_cell" != "-" ]]; then
+          grep -q "\"skill\":\"$(_json_esc "$sg_name")\".*\"pass\":true" "$sg_dir/skills/certs.jsonl" 2>/dev/null \
+            || sg_unbacked="${sg_unbacked}${sg_unbacked:+, }${sk_cell}"
+        fi
+      fi
+    done < <(awk '/^## Registry/{x=1;next} x&&/^## /{exit} x&&/^\|/{print}' "$PWD/SKILL_GRAPH.md" 2>/dev/null)
+    [[ -n "$sg_dangling" ]] \
+      && _ck_warn SKILL_GRAPH_DANGLING "SKILL_GRAPH.md registry row(s) point at missing files: ${sg_dangling} — a dangling row is a capability lie; fix the path or move the row to 'Shipped but not yet distilled' (SPEC §22)" "§22"
+    [[ -n "$sg_noeval" ]] \
+      && _ck_warn SKILL_NO_EVAL "active skill(s) without an executable eval: ${sg_noeval} — certification is measured, never asserted; add skills/<name>.eval.sh or an '## Eval' block (SPEC §22)" "§22"
+    [[ -n "$sg_unbacked" ]] \
+      && _ck_warn SKILL_CERT_UNBACKED "Certified column claims with no passing record in skills/certs.jsonl: ${sg_unbacked} — a name is a claim; run 'atlas skill test <name> --tier <T>' to back it (SPEC §22)" "§22"
   fi
 
   # --- Multi-agent operations (SPEC §17): capsules + handoff. Validated only
@@ -3721,6 +3781,83 @@ cmd_loop() {
 #
 # --badge prints a shields.io badge with the savings %, for the README.
 # ---------------------------------------------------------------------------
+# skill — operate the SKILL_GRAPH (SPEC §22): certification is measured by
+# running the eval (never asserted), and retrieval is symptom-first at
+# failure time — the graph serves itself exactly when rediscovery is about
+# to be paid again.
+cmd_skill() {
+  local sub="${1:-}"; shift || true
+  local slug; slug="$(_project_slug)"
+  local sdir="$PWD/.agents/skill/${slug}/skills"
+  case "$sub" in
+    test)
+      local name="${1:-}"; [[ $# -gt 0 ]] && shift
+      [[ -n "$name" && "$name" != --* ]] || _die "usage: atlas skill test <name> [--tier fast|strong|frontier|<model-id>]"
+      local tier="unspecified"
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --tier)   tier="${2:-unspecified}"; shift 2 ;;
+          --tier=*) tier="${1#--tier=}"; shift ;;
+          *) shift ;;
+        esac
+      done
+      local eval_sh="$sdir/${name}.eval.sh"
+      [[ -f "$eval_sh" ]] || _die "no eval for '${name}' (expected ${eval_sh#"$PWD"/}) — a skill without an executable eval cannot be certified (SPEC §22)"
+      _banner "🧪" "atlas skill test ${name}  $(_c_dim "(tier: ${tier})")"
+      local rc=0
+      bash "$eval_sh" || rc=$?
+      local ledger="$sdir/certs.jsonl" d
+      d="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      if [[ $rc -eq 0 ]]; then
+        printf '{"date":"%s","skill":"%s","tier":"%s","pass":true}\n' \
+          "$d" "$(_json_esc "$name")" "$(_json_esc "$tier")" >> "$ledger"
+        _ok "eval PASSED — certification record appended to ${ledger#"$PWD"/}"
+        _say "the registry's Certified column may now claim '${tier}' — a name is a claim, and this record backs it (SPEC §22)"
+      else
+        printf '{"date":"%s","skill":"%s","tier":"%s","pass":false}\n' \
+          "$d" "$(_json_esc "$name")" "$(_json_esc "$tier")" >> "$ledger"
+        _fail "eval FAILED (exit $rc) — flip the registry row to status: broken until fixed; a skill is loudly broken, never silently wrong (SPEC §22)"
+        exit 1
+      fi
+      ;;
+    find)
+      local sym=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --symptom)   sym="${2:-}"; shift 2 ;;
+          --symptom=*) sym="${1#--symptom=}"; shift ;;
+          *) [[ -z "$sym" ]] && sym="$1"; shift ;;
+        esac
+      done
+      [[ -n "$sym" ]] || _die 'usage: atlas skill find --symptom "<paste the exact error/log line>"'
+      local hits="" f
+      for f in "$PWD/SKILL_GRAPH.md" "$sdir"/*.md; do
+        [[ -f "$f" ]] || continue
+        if grep -qiF -- "$sym" "$f"; then
+          hits="${hits}${hits:+
+}  ${f#"$PWD"/}"
+        fi
+      done
+      if [[ -n "$hits" ]]; then
+        _banner "🧭" "symptom match — read + follow the skill BEFORE debugging"
+        printf '%s\n' "$hits"
+        return 0
+      fi
+      _say "no skill matches that symptom."
+      # Retrieval-miss telemetry (SPEC §23): a miss IS the demand signal —
+      # the literal list of intelligence the fleet needed and didn't have.
+      if [[ -f "$PWD/SKILL_GRAPH.md" ]]; then
+        mkdir -p "$PWD/.atlas"
+        printf '{"date":"%s","kind":"symptom","query":"%s"}\n' \
+          "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(_json_esc "$sym")" >> "$PWD/.atlas/retrieval-misses.jsonl"
+        _say "miss logged to .atlas/retrieval-misses.jsonl — if you solve it, distill the skill (the loop drafts from misses, SPEC §23)"
+      fi
+      return 1
+      ;;
+    *) _die "usage: atlas skill <test <name> [--tier T] | find --symptom \"<text>\">" ;;
+  esac
+}
+
 # capsule — emit a domain capsule (SPEC §17.1). ATLAS.md §0 orients the REPO;
 # a subagent on one mission needs its DOMAIN: files, gates, anchors, deploy —
 # in ≤200 tokens. The optional '## Capsules' ATLAS section holds one '### '
@@ -5314,6 +5451,7 @@ main() {
     capsule)  cmd_capsule "$@" ;;
     handoff)  cmd_handoff "$@" ;;
     claim)    cmd_claim "$@" ;;
+    skill)    cmd_skill "$@" ;;
     mcp)      cmd_mcp "$@" ;;
     doctor)   cmd_doctor "$@" ;;
     badge)    cmd_badge "$@" ;;
