@@ -416,4 +416,4 @@ command's — `bash tests/... | tail -3 && git commit` gates on `tail`
 
 **Where.** any agent's commit chain; tests/bootstrap.test.sh consumers.
 
-**Shipped in.** <pending>
+**Shipped in.** a545beb
