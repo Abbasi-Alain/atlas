@@ -1,0 +1,50 @@
+# DECISION_GRAPH — {{PROJECT_NAME}}
+
+> **Purpose.** The graph of *judgments*: what was decided, why, what was
+> rejected, and what each decision constrains. The third leg of the knowledge
+> fabric — SKILL_GRAPH stores *how*, SCARS stores *what breaks*, this file
+> stores *why*. A project's intelligence is procedures + failures + judgments;
+> without the third, every new agent re-litigates the past.
+>
+> **Contract for every agent (any runtime).**
+> 1. NEVER re-open a `decided` node. If new evidence truly changes the picture,
+>    add a `pending` node that PROPOSES superseding it — the decider flips it.
+> 2. NEVER act silently where a `pending` node exists on your path — act on its
+>    recorded default if one is stated, otherwise escalate to the decider.
+> 3. When your work surfaces a decision only the owner can make, APPEND a
+>    `pending` node with the options and evidence — in the same slice as the
+>    work that surfaced it.
+> 4. Cite decision ids (`D-<slug>`) in commits that implement them.
+>
+> **Status flow:** `pending → decided → superseded` (never deleted).
+
+## Pending — the decision inbox
+
+| Id | Since | Decision needed | Options (with evidence links) | Default while pending |
+|---|---|---|---|---|
+| | | | | |
+
+## Decided
+
+| Id | Date | Decider | Statement (one sentence) | Why / evidence | Rejected |
+|---|---|---|---|---|---|
+| | | | | | |
+
+## Graph
+
+```mermaid
+graph TD
+  %% Edges carry semantics:
+  %% supersedes / constrains(feature|catalog|skill) / motivated-by(SCARS §…)
+  %% licenses(skill) / forbids(approach) / blocks(decision)
+```
+
+## Conventions
+
+- Node id: `D-<kebab-slug>`, stable forever.
+- `constrains` edges are the blast radius: before proposing to supersede a
+  node, walk them and list what must change — put that list in the proposal.
+- Org-level decisions (doctrine that binds every repo) are marked `scope: org`
+  and exported to the global graph; repo-level stay local.
+- A `pending` node older than its `review_by` (or N days) is a silent blocker —
+  surface it in every report until decided.

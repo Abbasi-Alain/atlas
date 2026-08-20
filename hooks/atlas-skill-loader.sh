@@ -25,6 +25,8 @@
 #              at FAQ.md or docs/FAQ.md)
 #   - AKIGI:   a one-line pointer (only if the repo has a purpose contract;
 #              mentions FRQ.md when the feature-request queue is present too)
+#   - DECISION_GRAPH: the two agent laws + a pending-count pointer (only if
+#              the repo has DECISION_GRAPH.md, SPEC §20)
 #
 # Sub-agents do NOT inherit this hook; their parent must include a
 # "read ATLAS.md, SCARS.md, and SKILL.md first" instruction in the prompt.
@@ -154,6 +156,30 @@ if [[ -f "$FAQ" ]]; then
   echo "check the FAQ before asking or re-deriving — questions a human already"
   echo "asked are answered there once, with pointers. Append new answered"
   echo "questions (stable FAQ-NNN ids) as they come up."
+  echo ""
+fi
+
+DECISIONS="$CWD/DECISION_GRAPH.md"
+if [[ -f "$DECISIONS" ]]; then
+  HAS_OUTPUT=1
+  PENDING_COUNT="$(awk -F'|' '
+    /^## Pending/ { intbl=1; next }
+    intbl && /^## / { intbl=0 }
+    intbl && /^\|/ {
+      id=$2; gsub(/^[[:space:]]+|[[:space:]]+$/,"",id)
+      if (id != "" && id !~ /^-+$/) n++
+    }
+    END { print n+0 }
+  ' "$DECISIONS")"
+  echo "================================================================"
+  echo "decision graph (what was decided and why) detected at $DECISIONS"
+  echo "================================================================"
+  echo "NEVER re-open a 'decided' node — propose superseding it instead."
+  echo "NEVER act silently where a 'pending' node exists on your path — act"
+  echo "on its recorded default, or escalate to the decider."
+  if [[ "${PENDING_COUNT:-0}" -gt 0 ]]; then
+    echo "pending decisions: ${PENDING_COUNT} — the owner's decision inbox"
+  fi
   echo ""
 fi
 

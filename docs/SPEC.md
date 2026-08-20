@@ -1004,3 +1004,67 @@ the abbreviated law (with a link to the full file) to the contract
 validates only-when-present: a repo carrying the ladder file whose contract
 does not link it warns `DATA_LADDER_NO_LAW` — the law must live where every
 agent reads it, not only in a doc nobody is pointed at.
+
+## 20. DECISION_GRAPH.md — the judgment graph (OPTIONAL surface)
+
+A project's intelligence is procedures + failures + judgments. SKILL.md
+stores *how*; SCARS.md stores *what breaks*; neither stores *why a choice
+was made* or *what re-opening it would touch*. Without that third leg,
+every new agent (or the same agent three months later) re-litigates a
+decision that was already made — burning context to re-derive an answer
+that exists, or worse, silently reversing it because nothing on the path
+said "this is settled."
+
+A flat decision **log** is not enough. A log answers "what did we decide,
+in order" — it does not answer *"if I change this, what breaks?"* That
+second question needs a **graph**: decision nodes joined by typed edges,
+so blast radius is a traversal, not an archaeology dig.
+
+**Node schema.** Each decision is `D-<kebab-slug>` (stable forever) with:
+`date`, `status` (`pending | decided | superseded`), `decider`, a
+one-sentence `statement`, `why` (rationale + evidence links),
+`options_rejected`, and an optional `review_by` date for pending items.
+
+**Edge types.** `supersedes` (this decision replaces that one) ·
+`constrains` (this decision bounds what that feature/catalog/skill may do
+— the blast-radius edge: before proposing to supersede a node, walk its
+`constrains` edges and list what must change) · `motivated-by` (points at
+a SCARS `§ANCHOR` — the failure that forced this call) · `licenses` /
+`forbids` (this decision permits or bans an approach) · `blocks` (this
+decision cannot land until that one does).
+
+**The two agent laws** (any runtime, no exceptions):
+1. NEVER re-open a `decided` node. New evidence doesn't get to silently
+   flip a settled call — it gets to *propose* a `pending` node that
+   supersedes it, and the decider flips it.
+2. NEVER act silently where a `pending` node exists on your path. Act on
+   its recorded default if one is stated; otherwise escalate to the
+   decider. Guessing past an open decision is exactly the failure mode
+   CLAUDE.md §0 already forbids for code — this is its judgment-layer twin.
+
+**The pending queue is the owner's decision inbox.** Anything an agent
+surfaces that only a human/owner can decide gets appended as a `pending`
+row — in the same slice as the work that surfaced it — with options and
+evidence, not resolved by guessing. A `pending` row that sits past its
+`review_by` (or a 14-day default) is a rotting, silent blocker; `atlas
+check` warns `DECISION_PENDING_STALE` so it surfaces in every run, not
+just when someone remembers to look.
+
+**Status flow never deletes.** `pending → decided → superseded` only —
+history is the point. A superseded node stays, with a `supersedes` edge
+from whatever replaced it, so the graph answers "what did we used to
+think, and why did that change" as well as "what do we think now."
+
+**Org scope.** A decision marked `scope: org` is doctrine meant to bind
+every repo, not just this one — it is a candidate for promotion to the
+global overlay (§17 covers the other shared cross-repo surfaces; §21
+covers the org-wide overlay + promotion mechanics). Repo-scoped decisions
+stay local.
+
+**Wiring.** `atlas init --decisions` scaffolds `DECISION_GRAPH.md` at the
+repo root (scaffold-missing-only, like every other optional surface).
+`atlas check` validates only-when-present — a repo without the file is
+fully unaffected — and warns `DECISION_PENDING_STALE` on stale pending
+rows. The SessionStart hook prints the two agent laws plus a pending-count
+line whenever `DECISION_GRAPH.md` exists, so the laws are read at the top
+of every session, not discovered by re-deriving them from a bug report.

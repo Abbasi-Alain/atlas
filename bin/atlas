@@ -4,6 +4,7 @@
 # Subcommands:
 #   atlas init [--style <preset>] [--stack <a,b,c>] [--force] [--analyze] [--loop] [--bugs] [--critics]
 #              [--faq] [--tools] [--data-ladder] [--asop] [--akigi] [--frq] [--brd] [--srd] [--intake]
+#              [--decisions]
 #                                     (--loop also scaffolds LOOP.md + ROADMAP.md,
 #                                     the optional autonomous-loop 5th surface)
 #                                     (--bugs scaffolds BUGS.md, the optional
@@ -20,6 +21,8 @@
 #                                     abbreviated law to the contract, SPEC §19)
 #                                     (--asop scaffolds ASOP.md + ASOP-EXECUTOR.md,
 #                                     the operating methodology, SPEC §12)
+#                                     (--decisions scaffolds DECISION_GRAPH.md,
+#                                     the judgment graph, SPEC §20)
 #                                     (--akigi scaffolds AKIGI.md, the purpose
 #                                     contract; --frq/--brd/--srd scaffold the
 #                                     EXTERNAL intake trio — feature requests /
@@ -53,7 +56,10 @@
 #                                     messages for cited §ANCHOR tokens that
 #                                     don't exist (CITED_ANCHOR_MISSING);
 #                                     warns (always) UNMAPPED_TOPLEVEL_DIR when
-#                                     a top-level dir isn't linked from ATLAS.md
+#                                     a top-level dir isn't linked from ATLAS.md;
+#                                     warns DECISION_PENDING_STALE when
+#                                     DECISION_GRAPH.md's Pending table has a
+#                                     row older than 14 days (SPEC §20)
 #   atlas fix                         auto-resolve conformance warnings: kebab the
 #                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
 #   atlas measure [--badge]           estimate orientation-token savings (with
@@ -596,7 +602,7 @@ _write_tools_json() {
 }
 
 cmd_init() {
-  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 faq=0 tools=0 ladder=0 asop=0 akigi=0 frq=0 brd=0 srd=0
+  local force=0 style="default" stacks="" analyze=0 loop=0 bugs=0 critics=0 faq=0 tools=0 ladder=0 asop=0 akigi=0 frq=0 brd=0 srd=0 decisions=0
   local surface_requested=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -613,6 +619,7 @@ cmd_init() {
       --frq)       frq=1; surface_requested=1; shift ;;
       --brd)       brd=1; surface_requested=1; shift ;;
       --srd)       srd=1; surface_requested=1; shift ;;
+      --decisions) decisions=1; surface_requested=1; shift ;;
       --intake)    akigi=1; frq=1; brd=1; srd=1; surface_requested=1; shift ;;
       --style)     style="${2:-default}"; shift 2 ;;
       --style=*)   style="${1#--style=}"; shift ;;
@@ -706,6 +713,13 @@ cmd_init() {
       printf '\n> Project Q&A: [`%s`](%s) — questions answered once, with pointers (SPEC §13).\n' "$faq_rel" "$faq_rel" >> "$PWD/ATLAS.md"
       _say "linked $faq_rel from ATLAS.md"
     fi
+  fi
+  # Optional judgment graph (SPEC §20) — decided/pending/superseded nodes with
+  # blast-radius edges. Opt-in via --decisions; scaffold-missing-only like the
+  # quartet. No auto-link needed — DECISION_GRAPH.md is a root file `atlas
+  # check` looks for directly.
+  if [[ $decisions -eq 1 ]]; then
+    _render "$(_src DECISION_GRAPH.md.tmpl)" "$PWD/DECISION_GRAPH.md" "$force"
   fi
   # Optional data-source ladder (SPEC §19) — for data-product repos: the
   # four-rung licence law + catalog shape + minting checklist. The abbreviated
@@ -1410,6 +1424,30 @@ $(grep -oE '<a id="[a-z0-9-]+">' "$skill" 2>/dev/null | sed -E 's/.*"([a-z0-9-]+
     _ck_ok "docs/DATA_SOURCE_LADDER.md present (data-source ladder)"
     if [[ -f "$claude" ]] && ! _surface_linked "$claude" '(docs/)?DATA_SOURCE_LADDER'; then
       _ck_warn DATA_LADDER_NO_LAW "docs/DATA_SOURCE_LADDER.md present but CLAUDE.md doesn't carry/link the law — append the abbreviated four-rung law with a link ('atlas init --data-ladder' does it) so every runtime reads it (SPEC §19)" "§19"
+    fi
+  fi
+
+  # --- DECISION_GRAPH.md (SPEC §20): only-when-present. A rotting pending
+  # decision is a silent blocker — flag rows older than 14 days.
+  if [[ -f "$PWD/DECISION_GRAPH.md" ]]; then
+    _ck_ok "DECISION_GRAPH.md present (judgment graph)"
+    local dg_cutoff
+    if dg_cutoff="$(_days_ago 14)"; then
+      local stale_decisions
+      stale_decisions="$(awk -F'|' -v cut="$dg_cutoff" '
+        /^## Pending/ { intbl=1; next }
+        intbl && /^## / { intbl=0 }
+        intbl && /^\|/ {
+          id=$2; since=$3
+          gsub(/^[[:space:]]+|[[:space:]]+$/,"",id)
+          gsub(/^[[:space:]]+|[[:space:]]+$/,"",since)
+          if (id == "" || id ~ /^-+$/) next
+          if (since ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/ && since < cut)
+            printf "%s%s (%s)", (n++ ? ", " : ""), id, since
+        }
+      ' "$PWD/DECISION_GRAPH.md")" || stale_decisions=""
+      [[ -n "$stale_decisions" ]] \
+        && _ck_warn DECISION_PENDING_STALE "pending decision(s) older than 14 days: $stale_decisions — a rotting pending decision is a silent blocker (SPEC §20)" "§20"
     fi
   fi
 

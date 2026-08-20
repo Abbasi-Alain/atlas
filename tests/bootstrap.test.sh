@@ -1925,6 +1925,37 @@ TMP_UD="$(mktemp -d)"; ( cd "$TMP_UD" && git init -q -b main 2>/dev/null && "$CL
   && _pass "UNMAPPED_TOPLEVEL_DIR fires on an unmapped dir, clears once linked" || _fail "UNMAPPED_TOPLEVEL_DIR"
 rm -rf "$TMP_UD"
 
+# --- DECISION_GRAPH.md — the judgment graph (SPEC §20, BUG-16/BUG-24) ---
+echo ""
+echo "-- decision graph (SPEC §20) --"
+
+TMP_DG1="$(mktemp -d)"; ( cd "$TMP_DG1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" init --decisions >/dev/null 2>&1
+  [[ -f DECISION_GRAPH.md ]] || exit 1
+  "$CLI" check --strict >/dev/null 2>&1 || exit 1
+  HOOK_OUT="$("$ATLAS_HOME/hooks/atlas-skill-loader.sh")"
+  echo "$HOOK_OUT" | grep -q "NEVER re-open a 'decided' node" || exit 1
+  echo "$HOOK_OUT" | grep -q "NEVER act silently where a 'pending' node exists" || exit 1 ) \
+  && _pass "init --decisions scaffolds + --strict clean + hook prints the laws" || _fail "init --decisions"
+rm -rf "$TMP_DG1"
+
+TMP_DG2="$(mktemp -d)"; ( cd "$TMP_DG2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" init --decisions >/dev/null 2>&1
+  awk '{print} /^\| \| \| \| \| \|$/ { print "| D-test-thing | 2026-01-01 | pick a DB | a/b | none |" }' \
+    DECISION_GRAPH.md > DECISION_GRAPH.md.tmp && mv DECISION_GRAPH.md.tmp DECISION_GRAPH.md
+  "$CLI" check --json | grep -q DECISION_PENDING_STALE ) \
+  && _pass "DECISION_PENDING_STALE fires on a 2026-01-01 pending row" || _fail "DECISION_PENDING_STALE (stale)"
+rm -rf "$TMP_DG2"
+
+TMP_DG3="$(mktemp -d)"; ( cd "$TMP_DG3" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" init --decisions >/dev/null 2>&1
+  TODAY="$(date +%Y-%m-%d)"
+  awk -v today="$TODAY" '{print} /^\| \| \| \| \| \|$/ { print "| D-fresh-thing | " today " | pick a queue | a/b | none |" }' \
+    DECISION_GRAPH.md > DECISION_GRAPH.md.tmp && mv DECISION_GRAPH.md.tmp DECISION_GRAPH.md
+  ! "$CLI" check --json | grep -q DECISION_PENDING_STALE ) \
+  && _pass "a fresh-dated pending row does not fire DECISION_PENDING_STALE" || _fail "DECISION_PENDING_STALE (fresh)"
+rm -rf "$TMP_DG3"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1
