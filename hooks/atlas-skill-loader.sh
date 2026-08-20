@@ -146,6 +146,24 @@ if [[ -f "$FAQ" ]]; then
   echo ""
 fi
 
+HANDOFF_DIR="$CWD/.agents/handoff"
+if [[ -d "$HANDOFF_DIR" ]]; then
+  HANDOFFS="$(find "$HANDOFF_DIR" -name '*.md' 2>/dev/null | sort)"
+  if [[ -n "$HANDOFFS" ]]; then
+    HAS_OUTPUT=1
+    echo "================================================================"
+    echo "ACTIVE MISSION HANDOFFS (.agents/handoff/) — resume, don't rediscover"
+    echo "================================================================"
+    echo "An earlier agent's mission state lives in these files (MISSION/STATE/"
+    echo "NEXT/VERIFY/FORBIDDEN/COST). If you are picking up one of these"
+    echo "missions, READ the file first; delete it when the mission completes."
+    while IFS= read -r HF; do
+      echo "  - ${HF#"$CWD"/}"
+    done <<< "$HANDOFFS"
+    echo ""
+  fi
+fi
+
 AKIGI="$CWD/AKIGI.md"
 if [[ -f "$AKIGI" ]]; then
   HAS_OUTPUT=1

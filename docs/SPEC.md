@@ -867,3 +867,46 @@ Each kind writes directly into its target surface's existing schema; the
 graduation conventions already defined for that surface (§9 BUGS→SCARS, §13
 FAQ→SCARS/SKILL/BUGS) govern what happens to the entry next — `atlas
 remember` only handles the initial write.
+
+---
+
+## 17. Multi-agent operations (OPTIONAL module)
+
+Everything before this section serves ONE agent orienting in a repo. Real
+campaigns run MANY — concurrent agents, multiple runtimes, supervisors
+dispatching subagents, agents dying mid-mission at token/spend limits.
+(Evidence base: a 24 h production campaign — up to 6 concurrent agents, ~35
+deploys, real mid-mission agent deaths.) This module names the conventions
+that make that survivable. Every part is OPTIONAL and validated
+only-when-present; a single-agent repo is fully unaffected.
+
+### 17.1 Capsules — domain orientation for subagents
+
+`ATLAS.md` §0 orients the *repo*; a subagent on one mission needs its
+*domain* — and a hand-written mission brief re-derives 400-700 tokens of
+context per agent that the map already knows. A repo MAY carry a
+`## Capsules` section in `ATLAS.md`: one `### <domain>` block per domain,
+each **≤ ~200 tokens**, containing exactly what a mission in that domain
+needs first — the files, the gates to run, the relevant `SCARS §ANCHORS`,
+the deploy/verify command. `atlas capsule <domain>` prints one block (a
+supervisor — any runtime — prepends it to the brief); `atlas capsule --list`
+names them. `atlas check` warns `CAPSULE_OVERSIZED` when a capsule exceeds
+the budget (~1000 bytes): an oversized capsule is a doc every mission pays
+for, not a brief — move detail into linked files.
+
+### 17.2 Handoff — mission state that survives the agent
+
+Agents die mid-mission; state that lived only in their context dies with
+them, and the next agent pays a full reconstruction (reading stashes and
+diffs to guess intent). The convention: at mission start, an agent writes
+`.agents/handoff/<mission-slug>.md` and updates it at every checkpoint —
+sections **MISSION** (one line) · **STATE** (done steps, each with its
+commit hash) · **NEXT** (numbered, independently verifiable) · **VERIFY**
+(how to prove each step landed) · **FORBIDDEN** (files other agents own) ·
+**COST** (running tokens/compute, so an interrupted mission's spend is
+known — §18.3). Any runtime resumes by reading ONE file. The file is
+**deleted on mission completion** — the final report replaces it.
+`atlas handoff <slug>` scaffolds the skeleton; `atlas handoff --list` shows
+active ones; the SessionStart hook surfaces them ("resume, don't
+rediscover"). `atlas check` warns `HANDOFF_STALE` on a handoff untouched
+for 7+ days — a stale handoff is a dead mission nobody resumed.

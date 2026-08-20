@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Multi-agent operations module — capsules + handoff (SPEC §17, BUGS.md BUG-10/BUG-8, from the OrbiVigil 24 h multi-agent campaign).** *Capsules (§17.1):* an optional `## Capsules` section in `ATLAS.md` — one `### <domain>` block per domain, ≤ ~200 tokens each (files · gates · `SCARS §ANCHORS` · deploy command); `atlas capsule <domain>` prints one so a supervisor (any runtime) prepends it to a subagent brief instead of hand-authoring 400-700 tokens of re-derivable context per agent; `atlas capsule --list` names them; `atlas check` warns `CAPSULE_OVERSIZED` (> ~1000 bytes) — an oversized capsule is a doc every mission pays for, not a brief. *Handoff (§17.2):* agents die mid-mission at token/spend limits and state that lived only in context dies with them; `atlas handoff <mission-slug>` scaffolds `.agents/handoff/<slug>.md` (MISSION · STATE-with-commit-hashes · NEXT · VERIFY · FORBIDDEN · COST) which any runtime resumes from by reading one file; deleted on completion (the report replaces it); the SessionStart hook surfaces active handoffs ("resume, don't rediscover"); `atlas check` warns `HANDOFF_STALE` on a handoff untouched 7+ days (a dead mission nobody resumed). Both only-when-present — a single-agent repo is fully unaffected.
+
 ## [0.7.0] — 2026-07-26
 
 > **The knowledge-loop release** — the repo becomes a read-write memory for

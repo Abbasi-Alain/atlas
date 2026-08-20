@@ -1773,6 +1773,54 @@ TMP_RM7="$(mktemp -d)"; ( cd "$TMP_RM7" && git init -q -b main 2>/dev/null && "$
   && _pass "fresh init --faq scaffold numbers FAQ-001/002 (prose mentions don't inflate ids)" || _fail "FAQ id inflated by template prose"
 rm -rf "$TMP_RM7"
 
+# --- BUG-10: domain capsules (atlas capsule + CAPSULE_OVERSIZED) ---
+echo ""
+echo "-- capsules (SPEC §17.1) --"
+
+# capsule --list + extraction; unknown name dies; a repo without the section dies with guidance.
+TMP_CP1="$(mktemp -d)"; ( cd "$TMP_CP1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  printf '\n## Capsules\n\n### wind-chain\nfiles: src/wind/*, gate: make wind-test, SCARS §PIPE-HEAD-SIGPIPE\n\n### alerts\nfiles: src/alerts/*\n' >> ATLAS.md
+  "$CLI" capsule --list | grep -qx 'wind-chain' || exit 1
+  "$CLI" capsule wind-chain | grep -q 'make wind-test' || exit 1
+  "$CLI" capsule alerts | grep -q 'wind-chain' && exit 1
+  ! "$CLI" capsule nope >/dev/null 2>&1 ) \
+  && _pass "capsule --list + single-capsule extraction + unknown-name dies" || _fail "atlas capsule"
+rm -rf "$TMP_CP1"
+
+# CAPSULE_OVERSIZED fires only on a >1000-byte capsule.
+TMP_CP2="$(mktemp -d)"; ( cd "$TMP_CP2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  { printf '\n## Capsules\n\n### small\nok\n\n### fat\n'; for i in $(seq 1 60); do printf 'a twenty-byte line ...\n'; done; } >> ATLAS.md
+  "$CLI" check --json | grep -q CAPSULE_OVERSIZED || exit 1
+  "$CLI" check --json | grep 'CAPSULE_OVERSIZED' | grep -q 'fat' || exit 1
+  ! "$CLI" check --json | grep 'CAPSULE_OVERSIZED' | grep -q 'small,' ) \
+  && _pass "CAPSULE_OVERSIZED names only the >1000-byte capsule" || _fail "CAPSULE_OVERSIZED"
+rm -rf "$TMP_CP2"
+
+# --- BUG-8: mission handoff (atlas handoff + HANDOFF_STALE + hook) ---
+echo ""
+echo "-- handoff (SPEC §17.2) --"
+
+# scaffold shape + no-overwrite + fresh handoff doesn't warn.
+TMP_HF1="$(mktemp -d)"; ( cd "$TMP_HF1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" handoff "Fix The Wind Chain" >/dev/null 2>&1
+  [[ -f .agents/handoff/fix-the-wind-chain.md ]] || exit 1
+  grep -q '^## MISSION' .agents/handoff/fix-the-wind-chain.md || exit 1
+  grep -q '^## FORBIDDEN' .agents/handoff/fix-the-wind-chain.md || exit 1
+  grep -q '^## COST' .agents/handoff/fix-the-wind-chain.md || exit 1
+  ! "$CLI" handoff "fix-the-wind-chain" >/dev/null 2>&1 || exit 1
+  ! "$CLI" check --json | grep -q HANDOFF_STALE ) \
+  && _pass "handoff scaffolds MISSION/…/COST, refuses overwrite, fresh file doesn't warn" || _fail "atlas handoff"
+rm -rf "$TMP_HF1"
+
+# HANDOFF_STALE fires on a 7+-day-old handoff; hook surfaces active handoffs.
+TMP_HF2="$(mktemp -d)"; ( cd "$TMP_HF2" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  "$CLI" handoff old-mission >/dev/null 2>&1
+  touch -t 202601010000 .agents/handoff/old-mission.md
+  "$CLI" check --json | grep -q HANDOFF_STALE || exit 1
+  bash "$ATLAS_HOME/hooks/atlas-skill-loader.sh" | grep -q 'ACTIVE MISSION HANDOFFS' ) \
+  && _pass "HANDOFF_STALE fires on an old handoff; hook surfaces active handoffs" || _fail "HANDOFF_STALE / hook"
+rm -rf "$TMP_HF2"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

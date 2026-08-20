@@ -97,6 +97,17 @@
 #                                     codex|copilot|gemini|cursor|llms-txt|all
 #   atlas anchors                     list every SCARS anchor (machine-readable)
 #   atlas anchor add NAME "summary"   append a stub anchor to SCARS.md
+#   atlas capsule [<domain>|--list]   emit one ≤200-token DOMAIN capsule from
+#                                     ATLAS.md's optional '## Capsules' section
+#                                     (SPEC §17.1) — a supervisor prepends it
+#                                     to a subagent brief instead of hand-
+#                                     authoring context. --list names them.
+#   atlas handoff [<mission>|--list]  scaffold .agents/handoff/<mission>.md —
+#                                     the mission-state file any runtime
+#                                     resumes from when an agent dies mid-work
+#                                     (SPEC §17.2: MISSION/STATE/NEXT/VERIFY/
+#                                     FORBIDDEN/COST). --list shows active
+#                                     handoffs; delete the file on completion.
 #   atlas remember "<note>" --kind scar|skill|bug|faq [--name NAME]
 #                                     the write side (SPEC §16): distill a
 #                                     durable mid-session learning back into
@@ -1310,6 +1321,32 @@ cmd_check() {
     [[ -n "$t_ih" && "$t_ih" != "null" ]] && t_ih_json="\"$(_json_esc "$t_ih")\""
     [[ "$t_head" != "null" ]] && t_head_json="\"$(_json_esc "$t_head")\""
     q_tools_json="{\"present\":true,\"project_id\":\"$(_json_esc "$t_pid")\",\"indexed_head\":${t_ih_json},\"head\":${t_head_json},\"fresh\":${t_fresh},\"dirty\":${t_dirty}}"
+  fi
+
+  # --- Multi-agent operations (SPEC §17): capsules + handoff. Validated only
+  # when present; a repo using neither is fully unaffected.
+  # A capsule that outgrows ~250 tokens (~1000 bytes) has stopped being a
+  # capsule — it's a doc the subagent must pay for on every mission.
+  if [[ -f "$atlas" ]] && grep -q '^## Capsules' "$atlas"; then
+    local fat_capsules
+    fat_capsules="$(awk '
+      /^## Capsules/ { x=1; next }
+      x && /^## /    { x=0 }
+      x && /^### /   { if (n != "" && sz > 1000) printf "%s%s (~%d tok)", (out++ ? ", " : ""), n, sz/4
+                       n = substr($0,5); sz = 0; next }
+      x && n != ""   { sz += length($0) + 1 }
+      END            { if (n != "" && sz > 1000) printf "%s%s (~%d tok)", (out++ ? ", " : ""), n, sz/4 }
+    ' "$atlas" 2>/dev/null)" || fat_capsules=""
+    [[ -n "$fat_capsules" ]] \
+      && _ck_warn CAPSULE_OVERSIZED "ATLAS.md capsule(s) exceed the ~200-token budget: ${fat_capsules} — a capsule is a brief, not a doc; move detail into linked files (SPEC §17.1)" "§17"
+  fi
+  # A handoff file that hasn't moved in 7+ days is a dead mission nobody
+  # resumed — exactly the state loss the convention exists to prevent.
+  if [[ -d "$PWD/.agents/handoff" ]]; then
+    local stale_handoffs
+    stale_handoffs="$(find "$PWD/.agents/handoff" -name '*.md' -mtime +7 2>/dev/null | sed "s|^$PWD/||" | tr '\n' ' ')" || stale_handoffs=""
+    [[ -n "${stale_handoffs// /}" ]] \
+      && _ck_warn HANDOFF_STALE "handoff file(s) untouched for 7+ days: ${stale_handoffs}— a stale handoff is a dead mission; resume it or delete it (its report replaces it, SPEC §17.2)" "§17"
   fi
 
   # --- emit -------------------------------------------------------------------
@@ -3412,6 +3449,84 @@ cmd_loop() {
 #
 # --badge prints a shields.io badge with the savings %, for the README.
 # ---------------------------------------------------------------------------
+# capsule — emit a domain capsule (SPEC §17.1). ATLAS.md §0 orients the REPO;
+# a subagent on one mission needs its DOMAIN: files, gates, anchors, deploy —
+# in ≤200 tokens. The optional '## Capsules' ATLAS section holds one '### '
+# block per domain; this prints exactly one so a supervisor (any runtime)
+# prepends it instead of hand-authoring a 400-700-token brief per agent.
+cmd_capsule() {
+  local atlas="$PWD/ATLAS.md"
+  [[ -f "$atlas" ]] || _die "no ATLAS.md in $PWD — run 'atlas init' first"
+  grep -q '^## Capsules' "$atlas" \
+    || _die "ATLAS.md has no '## Capsules' section (SPEC §17.1) — add one with a '### <domain>' block per domain"
+  local want="${1:-}"
+  if [[ -z "$want" || "$want" == "--list" ]]; then
+    awk '/^## Capsules/{x=1;next} x&&/^## /{exit} x&&/^### /{sub(/^### /,"");print}' "$atlas"
+    return 0
+  fi
+  local out
+  out="$(awk -v w="$want" '
+    /^## Capsules/ { insec=1; next }
+    insec && /^## / { exit }
+    insec && /^### / { incap = (substr($0,5) == w); if (incap) { print; next } }
+    incap { print }
+  ' "$atlas")"
+  [[ -n "$out" ]] || _die "no capsule '${want}' in ATLAS.md ## Capsules — 'atlas capsule --list' shows what exists"
+  printf '%s\n' "$out"
+}
+
+# handoff — mission-state files for multi-agent continuity (SPEC §17.2).
+# Agents die mid-mission (token/spend limits, crashes); state that lived only
+# in context dies with them. A handoff file is what the NEXT agent — any
+# runtime — resumes from, instead of reconstructing intent from diffs/stashes.
+cmd_handoff() {
+  local dir="$PWD/.agents/handoff"
+  local arg="${1:-}"
+  if [[ -z "$arg" || "$arg" == "--list" ]]; then
+    if [[ ! -d "$dir" ]] || ! find "$dir" -name '*.md' 2>/dev/null | grep -q .; then
+      _say "no active handoffs — 'atlas handoff <mission-slug>' starts one"
+      return 0
+    fi
+    _banner "🤝" "active mission handoffs"
+    local f
+    while IFS= read -r f; do
+      printf '  %s\n' "${f#"$PWD"/}"
+    done < <(find "$dir" -name '*.md' 2>/dev/null | sort)
+    _say "resume one by READING it; delete it when its mission completes."
+    return 0
+  fi
+  local slug; slug="$(_kebab "$arg")"
+  local out="$dir/${slug}.md"
+  [[ -e "$out" ]] && _die "handoff exists: ${out#"$PWD"/} — read + resume it (don't overwrite a live mission)"
+  mkdir -p "$dir"
+  cat > "$out" <<EOF
+# HANDOFF — ${slug}
+
+> For whoever resumes this mission — any agent, any runtime. Update at every
+> checkpoint. DELETE this file when the mission completes (the final report
+> replaces it); a stale handoff is a dead mission nobody resumed (SPEC §17.2).
+
+## MISSION
+_(one line)_
+
+## STATE (done steps, each with its commit hash)
+-
+
+## NEXT (numbered, each independently verifiable)
+1.
+
+## VERIFY (how to prove each step landed — command, test, or URL)
+-
+
+## FORBIDDEN (files/paths other agents own — check .agents/claims.md too)
+-
+
+## COST (running: agent tokens / compute minutes, so interrupted spend is known)
+-
+EOF
+  _say "wrote ${out#"$PWD"/} — update at every checkpoint, delete on completion"
+}
+
 # measure --tools — report the tool context contract's state (SPEC §14): the
 # canonical identity externals should use, index freshness vs the live HEAD,
 # worktree drift, dead session-temporary preloads in the caller env, and the
@@ -4853,6 +4968,8 @@ main() {
     hooks)    cmd_hooks "$@" ;;
     orient)   cmd_orient "$@" ;;
     context)  cmd_context "$@" ;;
+    capsule)  cmd_capsule "$@" ;;
+    handoff)  cmd_handoff "$@" ;;
     mcp)      cmd_mcp "$@" ;;
     doctor)   cmd_doctor "$@" ;;
     badge)    cmd_badge "$@" ;;
