@@ -48,7 +48,12 @@
 #                                     --deep adds SCARS anchor-schema validation
 #                                     (ToC↔body, labels, Where: paths) +
 #                                     EXECUTOR_PACK_MISSING (5+ SCARS anchors,
-#                                     ROADMAP.md present, no EXECUTOR PACK block)
+#                                     ROADMAP.md present, no EXECUTOR PACK block);
+#                                     --strict also scans the last 30 commit
+#                                     messages for cited §ANCHOR tokens that
+#                                     don't exist (CITED_ANCHOR_MISSING);
+#                                     warns (always) UNMAPPED_TOPLEVEL_DIR when
+#                                     a top-level dir isn't linked from ATLAS.md
 #   atlas fix                         auto-resolve conformance warnings: kebab the
 #                                     SKILL dir, re-mirror AGENTS.md, regenerate llms.txt
 #   atlas measure [--badge]           estimate orientation-token savings (with
@@ -1000,6 +1005,48 @@ cmd_check() {
       _ck_ok "$n unique anchors"
     fi
     [[ $deep -eq 1 ]] && _ck_anchors "$scars"
+  fi
+
+  # --- BUG-13 (strict-only): commit messages cite §ANCHOR tokens that don't
+  # exist in SCARS.md/SKILL.md. Scans the last 30 commit messages; letter-start
+  # (§[A-Z]...) excludes bare section refs like §14. Known set = <a id="..">
+  # ids from both files, lowercased for comparison.
+  if [[ $strict -eq 1 ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local cited_raw known_ids unknown_cited=""
+    cited_raw="$(git log -30 --format=%B 2>/dev/null | grep -oE '§[A-Z][A-Z0-9]*(-[A-Z0-9]+)*' | sort -u)" || cited_raw=""
+    if [[ -n "$cited_raw" ]]; then
+      known_ids=""
+      [[ -f "$scars" ]] && known_ids="$known_ids
+$(grep -oE '<a id="[a-z0-9-]+">' "$scars" 2>/dev/null | sed -E 's/.*"([a-z0-9-]+)".*/\1/')"
+      [[ -f "$skill" ]] && known_ids="$known_ids
+$(grep -oE '<a id="[a-z0-9-]+">' "$skill" 2>/dev/null | sed -E 's/.*"([a-z0-9-]+)".*/\1/')"
+      known_ids="$(printf '%s\n' "$known_ids" | grep -v '^$' | sort -u)"
+      local tok tok_id
+      while IFS= read -r tok; do
+        [[ -z "$tok" ]] && continue
+        tok_id="$(printf '%s' "${tok#§}" | tr '[:upper:]' '[:lower:]')"
+        printf '%s\n' "$known_ids" | grep -qxF "$tok_id" \
+          || unknown_cited="${unknown_cited}${unknown_cited:+, }${tok}"
+      done <<< "$cited_raw"
+      [[ -n "$unknown_cited" ]] \
+        && _ck_warn CITED_ANCHOR_MISSING "recent commit message(s) cite anchor(s) not found in SCARS.md/SKILL.md: $unknown_cited — a citation without an anchor is a dangling reference"
+    fi
+  fi
+
+  # --- BUG-15: top-level directories not mapped in ATLAS.md — a structural
+  # change without a map row (SCARS §ATLAS-IS-INDEX). Plain check (not
+  # strict-gated); only when ATLAS.md exists.
+  if [[ -f "$atlas" ]]; then
+    local toplevel_junk="node_modules target dist build vendor" unmapped_dirs="" d dname
+    while IFS= read -r d; do
+      [[ -z "$d" || "$d" == "$PWD" ]] && continue
+      dname="$(basename "$d")"
+      case "$dname" in .*) continue ;; esac
+      case " $toplevel_junk " in *" $dname "*) continue ;; esac
+      grep -qE "${dname}/|\]\(${dname}" "$atlas" || unmapped_dirs="${unmapped_dirs}${unmapped_dirs:+, }${dname}/"
+    done < <(find "$PWD" -maxdepth 1 -type d 2>/dev/null)
+    [[ -n "$unmapped_dirs" ]] \
+      && _ck_warn UNMAPPED_TOPLEVEL_DIR "top-level dir(s) not mapped in ATLAS.md: $unmapped_dirs — a structural change without a map row (SCARS §ATLAS-IS-INDEX)"
   fi
 
   # --- CLAUDE.md / AGENTS.md (SPEC §1/§5): the behavioral contract (warnings).

@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **`atlas check` verifies cited SCARS anchors + unmapped top-level dirs (BUG-13/BUG-15).** Two conformance gaps let the map and the failure-memory drift silently: (a) `--strict` now scans the last 30 commit messages for `§ANCHOR`-shaped tokens and warns `CITED_ANCHOR_MISSING` when a cited anchor doesn't exist in `SCARS.md` or `SKILL.md` — a citation to nothing is a dangling reference the next agent can't follow (BUG-13); (b) plain `check` (no flag needed) warns `UNMAPPED_TOPLEVEL_DIR` when a top-level directory isn't linked from `ATLAS.md` — the exact structural-drift class SCARS §ATLAS-IS-INDEX exists to prevent, caught even when nobody ran `--changed-files` (BUG-15). Dogfooding this on ATLAS itself found and fixed a real gap (`assets/` was never mapped) and surfaced two genuinely dangling historical citations (`§ANCHOR`, a line-wrapped `§BUGS-LINK-NOT-`) which are reported, not invented as anchors.
+
 ### Changed
 
 - **`AGENTS.md` drift is now an ERROR, guarded every session (BUG-7 🔴, SPEC §5/§6).** A real production drift shipped an `AGENTS.md` carrying the wrong content for days — every non-Claude runtime read file locations and ZERO behavioral laws, and nothing failed loudly because byte-equality was a warning and `atlas check` only runs when someone runs it. Now: (a) `AGENTS_DRIFT` is an **error** (exit 1) whose message advertises the one-command repair (`atlas fix` re-mirrors); (b) the SessionStart hook runs the cheap `cmp -s` guard at every session start and prints a loud drift banner with the fix line — the check no longer depends on being run.

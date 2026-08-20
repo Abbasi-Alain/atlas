@@ -1890,6 +1890,41 @@ TMP_SPEC="$ATLAS_HOME/docs/SPEC.md"
   && grep -qi 'worktree of HEAD' "$TMP_SPEC" ) \
   && _pass "SPEC §18.2 shipping doctrine present (slice-commit + worktree builds)" || _fail "SPEC §18.2"
 
+# --- BUG-13: CITED_ANCHOR_MISSING (--strict scans commit messages for §ANCHOR) ---
+echo ""
+echo "-- cited-anchor validation (BUG-13) --"
+
+TMP_CA1="$(mktemp -d)"; ( cd "$TMP_CA1" && git init -q -b main 2>/dev/null
+  git config user.email t@example.com; git config user.name test
+  "$CLI" init >/dev/null 2>&1
+  git add -A >/dev/null 2>&1
+  git commit -q -m "chore: cite a bogus anchor SCARS §NO-SUCH-ANCHOR-ZZZ" >/dev/null 2>&1
+  "$CLI" check --strict --json | grep -q CITED_ANCHOR_MISSING || exit 1
+  ! "$CLI" check --json | grep -q CITED_ANCHOR_MISSING ) \
+  && _pass "CITED_ANCHOR_MISSING fires under --strict, not on plain check" || _fail "CITED_ANCHOR_MISSING"
+rm -rf "$TMP_CA1"
+
+TMP_CA2="$(mktemp -d)"; ( cd "$TMP_CA2" && git init -q -b main 2>/dev/null
+  git config user.email t@example.com; git config user.name test
+  "$CLI" init >/dev/null 2>&1
+  git add -A >/dev/null 2>&1
+  git commit -q -m "chore: cite a real anchor SCARS §NO-COAUTHOR" >/dev/null 2>&1
+  "$CLI" check --strict >/dev/null 2>&1 ) \
+  && _pass "citing a real scaffolded anchor stays --strict clean" || _fail "CITED_ANCHOR_MISSING false positive"
+rm -rf "$TMP_CA2"
+
+# --- BUG-15: UNMAPPED_TOPLEVEL_DIR ---
+echo ""
+echo "-- unmapped top-level dir (BUG-15) --"
+
+TMP_UD="$(mktemp -d)"; ( cd "$TMP_UD" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  mkdir -p mystery && echo stuff > mystery/stuff.txt
+  "$CLI" check --json | grep -q UNMAPPED_TOPLEVEL_DIR || exit 1
+  printf '\n| [mystery/](mystery/) | stuff | — |\n' >> ATLAS.md
+  ! "$CLI" check --json | grep -q UNMAPPED_TOPLEVEL_DIR ) \
+  && _pass "UNMAPPED_TOPLEVEL_DIR fires on an unmapped dir, clears once linked" || _fail "UNMAPPED_TOPLEVEL_DIR"
+rm -rf "$TMP_UD"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

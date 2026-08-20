@@ -60,6 +60,7 @@
 | [`ASOP-EXECUTOR.md`](ASOP-EXECUTOR.md) | **Executor card** (SPEC §12) — role-based mechanical protocol (pre-flight · verify · **escalate** · report) any subagent runs | ASOP.md |
 | [`docs/FAQ.md`](docs/FAQ.md) | **Q&A knowledge ledger** (SPEC §13) — questions answered once, with pointers; check before asking/re-deriving; stable `FAQ-NNN` ids | ATLAS.md |
 | [`data/leaderboard.csv`](data/leaderboard.csv) | Leaderboard dataset — source of truth for [`docs/LEADERBOARD.md`](docs/LEADERBOARD.md) (`atlas leaderboard --render`) | docs/ |
+| [`assets/`](assets/) | README demo GIFs/tapes ([VHS](https://github.com/charmbracelet/vhs)), logo, social-card image — no runtime code | README.md |
 
 > **Not applicable** (deleted per spec convention): §3 service layer,
 > §4 front-end, §D data model, §R runtime topology, §O observability,
