@@ -40,7 +40,7 @@
 |---|---|---|
 | [`bin/atlas`](bin/atlas) | **The CLI.** Pure bash, zero deps. All subcommands live here. | templates/, adapters/, hooks/ |
 | [`bin/atlas-node`](bin/atlas-node) | npm/npx wrapper — execs `bin/atlas` via bash | bin/atlas |
-| [`bin/atlas-mcp`](bin/atlas-mcp) | **MCP server** (Python stdlib, zero-dep). `atlas mcp` serves the map (atlas_orient/find/scars/measure) to any MCP client; deep tools proxy to an opt-in backend | bin/atlas, ATLAS.md |
+| [`bin/atlas-mcp`](bin/atlas-mcp) | **MCP server** (Python stdlib, zero-dep) — serves the map to any MCP client | bin/atlas, ATLAS.md |
 | [`install.sh`](install.sh) | `curl \| bash` installer → `~/.atlas` + launcher on PATH | bin/atlas |
 | [`package.json`](package.json) | npm metadata; `bin: atlas → bin/atlas-node`; test script | §6 |
 | [`templates/`](templates/) | The `.tmpl` files `atlas init` renders (§3) | bin/atlas |
@@ -71,9 +71,9 @@
 
 ## 2. The CLI — `bin/atlas`
 
-A single `set -euo pipefail` bash script (~1.9k lines). One advantage:
-zero runtime dependencies (only `bash`, `git`, coreutils). The cost: it's
-a monolith — see SCARS §BASH-MONOLITH for the modularization plan.
+A single `set -euo pipefail` bash script (~5k lines), zero runtime
+dependencies (bash, git, coreutils). Deliberately one file — SCARS
+§BASH-MONOLITH; shellcheck-green always.
 
 ### 2.1 Shape & helpers
 
@@ -96,23 +96,13 @@ a monolith — see SCARS §BASH-MONOLITH for the modularization plan.
 
 ### 2.3 Command surface
 
-| Core | Purpose |
-|---|---|
-| `init [--style --stack --force]` | Scaffold the trio (+ style seeds / stack docs) |
-| `check` | Lint the trio; verify SCARS anchors are unique |
-| `measure [--badge]` | Estimate orientation-token savings (with vs without ATLAS) |
-| `doctor` | Diagnose install + project harness + runtime-export drift |
-| `badge` | Print a "Powered by ATLAS" README badge |
-| `export --to <runtime>` | Fan the trio out to AGENTS/Copilot/Gemini/Cursor/llms.txt |
-| `anchors` / `anchor add` | List / append SKILL failure-mode anchors |
-
-| Advanced | Purpose |
-|---|---|
-| `install --runtime <name>` | Wire ATLAS into a runtime (delegates to `adapters/<name>/install.sh`) |
-| `loop log [--json]` | Render the autonomous-loop ledger from `LOOP_HISTORY.md` + tracked `LOOP_REPORT.md` history |
-| `styles` / `stacks` | List style presets / per-style stack add-ons |
-| `adr` / `research` / `critique` | Decision records, research notes, hostile-review prompts |
-| `mirror` / `auth` / `repo` / `cost` / `gap-to-article` | GitLab→GitHub mirroring, login, repo create, cost audit, article scaffold |
+The authoritative, always-current command list is `bin/atlas`'s own header
+doc block (what `atlas help` prints) — don't duplicate it here. Families:
+`init / check / fix / measure` (conformance) · `orient / context / capsule`
+(read side) · `remember / anchor / handoff / claim / promote` (write +
+multi-agent) · `bench / loop / critique` (science + loop) ·
+`export / mcp / install / onboard` (distribution) · `mirror / auth / repo /
+adr / research / cost` (ops).
 
 ---
 
@@ -121,19 +111,12 @@ a monolith — see SCARS §BASH-MONOLITH for the modularization plan.
 `atlas init` renders these. Placeholders: `{{PROJECT_NAME}}`, `{{SRC_DIR}}`,
 `{{PRIMARY_BUILD_FILE}}`, `{{TEST_CMD}}`, `{{DATE}}` (see `_render`).
 
-| Path | Renders to |
-|---|---|
-| `ATLAS.md.tmpl` | `ATLAS.md` (this file's shape) |
-| `SKILL.md.tmpl` | `.agents/skill/<project>/SKILL.md` |
-| `CLAUDE.md.tmpl` | `CLAUDE.md` (then mirrored to `AGENTS.md`) |
-| `EXAMPLES.md.tmpl` | `EXAMPLES.md` |
-| `BUGS.md.tmpl` | `BUGS.md` — optional open-issues register, opt-in via `atlas init --bugs` |
-| `CRITICS.md.tmpl` | `CRITICS.md` — optional cross-vendor second-opinion log, opt-in via `atlas init --critics` |
-| `styles/<name>/` | Per-style overrides + `seeds/` + `stacks/`. Resolution: a style file wins over the root `.tmpl`; missing files fall back to root. |
-
-> The `abbasi` style is **private** (maintained in a sibling GitLab repo,
-> symlinked in by an overlay installer) and is `.gitignore`d here — never
-> commit it. SCARS §PRIVATE-STYLE-OVERLAY.
+One `.tmpl` per surface (quartet + every optional surface — BUGS, CRITICS,
+FAQ, LOOP/ROADMAP, DECISION_GRAPH, DATA_SOURCE_LADDER, SKILL_GRAPH, ASOP,
+intake quartet); each renders via its matching `atlas init --<flag>`.
+`styles/<name>/` overrides some/all templates (+ `seeds/`, `stacks/`);
+missing files fall back to root. The `abbasi` style is private +
+gitignored — never commit it (SCARS §PRIVATE-STYLE-OVERLAY).
 
 ---
 
@@ -148,12 +131,8 @@ Supported: `claude-code`, `codex`, `opencode`, `cursor`, `gemini`, `zed`,
 
 ## 5. Tests — `tests/`
 
-| Concern | Where |
-|---|---|
-| Bootstrap smoke (`init`→`check` in a tmpdir) | [`tests/bootstrap.test.sh`](tests/bootstrap.test.sh) |
-| Static analysis | `shellcheck bin/atlas hooks/*.sh install.sh adapters/*/install.sh` |
-| CI matrix (ubuntu + macos) | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
-
+[`tests/bootstrap.test.sh`](tests/bootstrap.test.sh) (tmpdir fixtures) +
+shellcheck + the CI matrix ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 **Smoke set** (after touching the CLI):
 ```
 shellcheck bin/atlas && bash tests/bootstrap.test.sh && (cd examples/sample-project && ../../bin/atlas check)
@@ -163,19 +142,11 @@ shellcheck bin/atlas && bash tests/bootstrap.test.sh && (cd examples/sample-proj
 
 ## 6. Packaging & release — `packaging/` + `.github/workflows/`
 
-Tag `vX.Y.Z` → `release.yml` cuts the GitHub release → four channel
-workflows fire on `release: published`:
-
-| Channel | Manifest | Workflow | Needs |
-|---|---|---|---|
-| npm | `package.json` | `release-npm.yml` | `NPM_TOKEN` |
-| Homebrew | `packaging/homebrew/atlas.rb` | `release-homebrew.yml` | `HOMEBREW_TAP_TOKEN` |
-| `.deb` (download) | `packaging/debian/build-deb.sh` | `release-deb.yml` | — (`GITHUB_TOKEN`) |
-| AUR | `packaging/aur/PKGBUILD` | `release-aur.yml` | `AUR_*` secrets |
-| Launchpad PPA | `packaging/ppa/` | (manual `dput`) | Launchpad account + GPG |
-
-Reusable CI badge for *other* repos: [`action.yml`](action.yml) → `uses: Abbasi-Alain/atlas@v1`.
-Release runbook + secret setup: [`docs/RELEASING.md`](docs/RELEASING.md).
+Tag `vX.Y.Z` (human-only, SCARS §TAG-TRIGGER-NOT-RELEASE) → channel
+workflows fan out: npm · Homebrew · `.deb` · AUR · PPA · Zenodo DOI. One
+manifest dir per channel under `packaging/`; the authoritative runbook +
+secret setup is [`docs/RELEASING.md`](docs/RELEASING.md). Reusable CI badge
+for other repos: [`action.yml`](action.yml).
 
 ---
 
@@ -191,37 +162,24 @@ Release runbook + secret setup: [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## A. Architecture references
 
-| File | What it covers |
-|---|---|
-| [`docs/SPEC.md`](docs/SPEC.md) | The ATLAS format: file locations, anchors, the one-commit rule |
-| [`docs/RELEASING.md`](docs/RELEASING.md) | Release pipeline + one-time secret setup |
-| [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | How to add adapters / styles / commands |
-| [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) | Per-runtime wiring details |
-
-### A3. ADR index
-
-| # | Title | Status | Date |
-|---|---|---|---|
-| — | _(none yet — use `atlas adr add "title"`)_ | | |
+[`docs/SPEC.md`](docs/SPEC.md) (the format) ·
+[`docs/RELEASING.md`](docs/RELEASING.md) (release pipeline + secrets) ·
+[`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) (adding adapters/styles/commands) ·
+[`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) (per-runtime wiring).
+ADRs: none yet — `atlas adr add "title"`.
 
 ---
 
 ## G. Glossary
 
-| Term | Definition |
-|---|---|
-| **the quartet** | `ATLAS.md` (map) + `SKILL.md` (task playbook) + `SCARS.md` (failure memory) + `CLAUDE.md`/`AGENTS.md` (behavioral contract) |
-| **anchor** | A stable `<a id="…">` failure-mode entry in SCARS.md; treated as load-bearing — never renumbered |
-| **style** | A preset under `templates/styles/<name>/` that overrides some/all templates (e.g. `minimal`, `strict`, `karpathy`, `google`) |
-| **stack** | A per-style add-on (`styles/<name>/stacks/<stack>/`) dropped into `docs/stacks/` via `--stack` |
-| **adapter** | A per-runtime installer that wires the trio into an agent (Claude/Codex/Cursor/…) |
-| **harness** | The full set of files + wiring an agent reads before doing work |
+**quartet** = map + playbook + failure memory + contract · **anchor** = a
+stable `<a id>` SCARS entry, never renumbered · **style/stack** = template
+preset / its add-on · **adapter** = per-runtime installer · **harness** =
+everything an agent reads before working.
 
 ---
 
 ## Maintenance
 
-This file is the **graph entry point**. Add a top-level module, a command,
-a package channel, or a runtime → update it **in the same commit**. A stale
-ATLAS forces every future agent to re-grep the tree. Validate: `atlas check`.
-Enumerate SCARS anchors: `atlas anchors`. Measure the payoff: `atlas measure`.
+The graph entry point: any structural change updates this file **in the
+same commit** (SCARS §ATLAS-IS-INDEX). Validate: `atlas check`.

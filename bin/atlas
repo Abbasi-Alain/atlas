@@ -1051,9 +1051,20 @@ $(grep -oE '<a id="[a-z0-9-]+">' "$skill" 2>/dev/null | sed -E 's/.*"([a-z0-9-]+
       local tok tok_id
       while IFS= read -r tok; do
         [[ -z "$tok" ]] && continue
+        # The documented placeholder tokens (doctrine text like "cite your
+        # §ANCHORS") are vocabulary, not citations — never flag them.
+        case "$tok" in '§ANCHOR'|'§ANCHORS'|'§ANCHOR-NAME'|'§ANCHOR-NAMES') continue ;; esac
         tok_id="$(printf '%s' "${tok#§}" | tr '[:upper:]' '[:lower:]')"
-        printf '%s\n' "$known_ids" | grep -qxF "$tok_id" \
-          || unknown_cited="${unknown_cited}${unknown_cited:+, }${tok}"
+        if ! printf '%s\n' "$known_ids" | grep -qxF "$tok_id"; then
+          # A long token that is an exact PREFIX of a real anchor is almost
+          # certainly a soft-wrap artifact (a commit body wrapped mid-token,
+          # e.g. "§BUGS-LINK-NOT⏎SUBSTRING") — a typo is rarely a clean
+          # prefix. Short prefixes still flag.
+          if [[ ${#tok_id} -ge 8 ]] && printf '%s\n' "$known_ids" | grep -q "^${tok_id}"; then
+            continue
+          fi
+          unknown_cited="${unknown_cited}${unknown_cited:+, }${tok}"
+        fi
       done <<< "$cited_raw"
       [[ -n "$unknown_cited" ]] \
         && _ck_warn CITED_ANCHOR_MISSING "recent commit message(s) cite anchor(s) not found in SCARS.md/SKILL.md: $unknown_cited — a citation without an anchor is a dangling reference"
