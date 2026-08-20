@@ -74,6 +74,12 @@
 #                                     breakdown (CLAUDE.md/ATLAS.md/SCARS ToC/
 #                                     SKILL ToC + total, SPEC §6); --badge
 #                                     prints a shield
+#   atlas measure --knowledge [--json]  the graph-health KPIs (SPEC §23):
+#                                     skills by status, certification
+#                                     coverage, eval runs/failures, retrieval
+#                                     misses (the demand signal), staleness
+#                                     debt — the system watches its own
+#                                     learning rate
 #   atlas measure --tools [--json]    report the tool context contract (SPEC §14):
 #                                     canonical project id, indexed commit vs
 #                                     HEAD, worktree drift, dead-preload env
@@ -3986,6 +3992,80 @@ EOF
   _say "wrote ${out#"$PWD"/} — update at every checkpoint, delete on completion"
 }
 
+# measure --knowledge — the graph-health KPIs (SPEC §23): the system watches
+# its own learning rate. Zero-dep counts over the ledgers the other surfaces
+# already write; when a KPI degrades, the loop's next cycle targets it.
+_measure_knowledge() {
+  local json="$1"
+  local sg="$PWD/SKILL_GRAPH.md"
+  local slug; slug="$(_project_slug)"
+  local certs="$PWD/.agents/skill/${slug}/skills/certs.jsonl"
+  local misses="$PWD/.atlas/retrieval-misses.jsonl"
+  # skills by status (registry rows; placeholder/example rows excluded)
+  local sk_active=0 sk_draft=0 sk_broken=0 sk_total=0
+  if [[ -f "$sg" ]]; then
+    local counts
+    counts="$(awk -F'|' '
+      /^## Registry/ { x=1; next }
+      x && /^## /    { exit }
+      x && /^\|/ {
+        sk=$2; f=$3; st=$4
+        gsub(/^[ \t]+|[ \t]+$/,"",sk); gsub(/^[ \t]+|[ \t]+$/,"",st)
+        if (sk == "" || sk == "Skill" || sk ~ /^-+$/ || sk ~ /^\*\(/ || f ~ /</) next
+        t++
+        if (st ~ /^active/) a++
+        else if (st ~ /^draft/) d++
+        else if (st ~ /^broken/) b++
+      }
+      END { printf "%d %d %d %d", t+0, a+0, d+0, b+0 }
+    ' "$sg" 2>/dev/null)" || counts="0 0 0 0"
+    read -r sk_total sk_active sk_draft sk_broken <<< "$counts"
+  fi
+  # certification coverage: active skills with ≥1 passing record
+  local certified=0
+  if [[ -f "$certs" && $sk_active -gt 0 ]]; then
+    certified="$(awk '
+      /"pass":true/ {
+        if (match($0, /"skill":"[^"]+"/)) { s = substr($0, RSTART+9, RLENGTH-10); seen[s]=1 }
+      }
+      END { n=0; for (s in seen) n++; print n }
+    ' "$certs" 2>/dev/null)" || certified=0
+  fi
+  # demand signal + staleness debt
+  local miss_count=0 stale_debt=0
+  if [[ -f "$misses" ]]; then
+    miss_count="$(grep -c . "$misses" 2>/dev/null)" || miss_count=0
+  fi
+  # staleness-class warnings from a full strict+deep pass (the *_STALE family
+  # + FAQ_STALE_VS_CODE) — the outstanding BUG-21-style triggers.
+  stale_debt="$( { cmd_check --deep --strict --json 2>/dev/null || true; } \
+    | grep -oE '"code":"[A-Z_]*STALE[A-Z_]*"' | grep -c . )" || stale_debt=0
+  local cert_runs=0 cert_fails=0
+  if [[ -f "$certs" ]]; then
+    cert_runs="$(grep -c . "$certs" 2>/dev/null)" || cert_runs=0
+    cert_fails="$(grep -c '"pass":false' "$certs" 2>/dev/null)" || cert_fails=0
+  fi
+
+  if [[ "$json" -eq 1 ]]; then
+    printf '{"skills":{"total":%d,"active":%d,"draft":%d,"broken":%d},"certification":{"active_certified":%d,"coverage_pct":%d,"eval_runs":%d,"eval_failures":%d},"retrieval_misses":%d,"staleness_debt":%d}\n' \
+      "$sk_total" "$sk_active" "$sk_draft" "$sk_broken" \
+      "$certified" "$(( sk_active > 0 ? certified * 100 / sk_active : 0 ))" \
+      "$cert_runs" "$cert_fails" "$miss_count" "$stale_debt"
+    return 0
+  fi
+  _banner "🧠" "atlas measure --knowledge  $(_c_dim '(graph-health KPIs, SPEC §23)')"
+  if [[ ! -f "$sg" ]]; then
+    _say "no SKILL_GRAPH.md — the knowledge KPIs measure a repo that stores skills ('atlas init --skill-graph')"
+  fi
+  printf "  %-28s %s\n" "skills (registry):" "$sk_total total · $sk_active active · $sk_draft draft · $sk_broken broken"
+  printf "  %-28s %s\n" "certification coverage:" "$certified/$sk_active active skills have a passing eval record ($(( sk_active > 0 ? certified * 100 / sk_active : 0 ))%)"
+  printf "  %-28s %s\n" "eval runs (pass+fail):" "$cert_runs runs · $cert_fails failures"
+  printf "  %-28s %s\n" "retrieval misses (demand):" "$miss_count logged — each is intelligence the fleet needed and didn't have"
+  printf "  %-28s %s\n" "staleness debt:" "$stale_debt outstanding *_STALE finding(s) from check --deep --strict"
+  echo ""
+  _say "when a KPI degrades, the loop's next cycle targets it (SPEC §23)."
+}
+
 # measure --tools — report the tool context contract's state (SPEC §14): the
 # canonical identity externals should use, index freshness vs the live HEAD,
 # worktree drift, dead session-temporary preloads in the caller env, and the
@@ -4086,13 +4166,14 @@ _measure_tools() {
 }
 
 cmd_measure() {
-  local want_badge=0 want_share=0 want_log=0 want_tools=0 want_json=0
+  local want_badge=0 want_share=0 want_log=0 want_tools=0 want_knowledge=0 want_json=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --badge) want_badge=1; shift ;;
       --share) want_share=1; shift ;;
       --log)   want_log=1; shift ;;
       --tools) want_tools=1; shift ;;
+      --knowledge) want_knowledge=1; shift ;;
       --json)  want_json=1; shift ;;
       *)       shift ;;
     esac
@@ -4101,6 +4182,11 @@ cmd_measure() {
   # --tools is its own report (SPEC §14) and doesn't need an ATLAS.md.
   if [[ $want_tools -eq 1 ]]; then
     _measure_tools "$want_json"
+    return $?
+  fi
+  # --knowledge: the graph-health KPIs (SPEC §23).
+  if [[ $want_knowledge -eq 1 ]]; then
+    _measure_knowledge "$want_json"
     return $?
   fi
 

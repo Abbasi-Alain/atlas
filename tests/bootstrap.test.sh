@@ -2116,6 +2116,37 @@ TMP_CA1="$(mktemp -d)"; ( cd "$TMP_CA1" && git init -q -b main 2>/dev/null && "$
   && _pass "citation scan ignores §A/§G vocabulary + placeholders, still flags hyphenated fakes" || _fail "citation-scan hardening"
 rm -rf "$TMP_CA1"
 
+# --- BUG-23: the closed loop — measure --knowledge KPIs (SPEC §23) ---
+echo ""
+echo "-- knowledge loop (SPEC §23) --"
+
+TMP_KL1="$(mktemp -d)"; ( cd "$TMP_KL1" && git init -q -b main 2>/dev/null && "$CLI" init --skill-graph >/dev/null 2>&1
+  slug_dir="$(find .agents/skill -mindepth 1 -maxdepth 1 -type d | head -1)"
+  mkdir -p "$slug_dir/skills"
+  printf '# fix-tiles\nsymptom: tiles 200 but invisible\n' > "$slug_dir/skills/fix-tiles.md"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$slug_dir/skills/fix-tiles.eval.sh"
+  printf '# probe-egress\n' > "$slug_dir/skills/probe-egress.md"
+  awk '/^\| \*\(example\)\*/{print; print "| fix-tiles | skills/fix-tiles.md | active | 1B | 2026-08-20 | 2026-08-20 | — |"; print "| probe-egress | skills/probe-egress.md | draft |  | 2026-08-20 | 2026-08-20 | — |"; next}1' SKILL_GRAPH.md > s.tmp && mv s.tmp SKILL_GRAPH.md
+  "$CLI" skill test fix-tiles --tier 1B >/dev/null 2>&1
+  ! "$CLI" skill find --symptom "never seen this" >/dev/null 2>&1
+  out="$("$CLI" measure --knowledge --json)"
+  echo "$out" | grep -q '"total":2' || exit 1
+  echo "$out" | grep -q '"active":1' || exit 1
+  echo "$out" | grep -q '"draft":1' || exit 1
+  echo "$out" | grep -q '"active_certified":1' || exit 1
+  echo "$out" | grep -q '"coverage_pct":100' || exit 1
+  echo "$out" | grep -q '"retrieval_misses":1' || exit 1
+  "$CLI" measure --knowledge | grep -q 'demand' ) \
+  && _pass "measure --knowledge KPIs: statuses, certification coverage, misses (SPEC §23)" || _fail "measure --knowledge"
+rm -rf "$TMP_KL1"
+
+# SPEC §23 carries the five mechanisms + the completeness test.
+( grep -q '^## 23\. The closed loop' "$ATLAS_HOME/docs/SPEC.md" \
+  && grep -qi 'Retrieval-miss telemetry' "$ATLAS_HOME/docs/SPEC.md" \
+  && grep -qi 'Meta-skills' "$ATLAS_HOME/docs/SPEC.md" \
+  && grep -qi 'disconnect the frontier models' "$ATLAS_HOME/docs/SPEC.md" ) \
+  && _pass "SPEC §23 closed loop (five mechanisms + completeness test)" || _fail "SPEC §23"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1

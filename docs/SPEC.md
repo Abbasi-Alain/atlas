@@ -1296,3 +1296,60 @@ executable eval), `SKILL_CERT_UNBACKED` (a Certified claim with no passing
 rules (search before building; symptom-grep before debugging). Update
 trigger (§6): a new reusable procedure is distilled + registered **in the
 same commit** as the work that proved it.
+
+---
+
+## 23. The closed loop — self-learning as a property, not a promise
+
+§§13-22 store intelligence (FAQ, SCARS, DECISION_GRAPH, SKILL_GRAPH),
+verify it (evals, certification records), and serve it (capsules, symptom
+retrieval, the hook, MCP). What closes the loop is the system **observing
+its own learning and directing it** — without this, curation stays a
+human/frontier chore and the graph grows only when someone remembers. Five
+mechanisms:
+
+1. **Retrieval-miss telemetry — the demand signal.** Every graph search
+   that finds nothing is logged (`.atlas/retrieval-misses.jsonl`,
+   `{date, kind, query}` — `atlas skill find` already writes it). Misses
+   are the curriculum: literally the list of intelligence the fleet needed
+   and did not have. The distiller prioritizes drafts by miss frequency ×
+   rediscovery cost. A system that knows WHAT it needs to learn is
+   self-directed by definition.
+2. **Graph-health KPIs — the system watches its own learning rate.**
+   `atlas measure --knowledge [--json]` reports: skills by status ·
+   certification coverage (active skills with a passing eval record) ·
+   eval runs and failures · retrieval misses · staleness debt (outstanding
+   `*_STALE` findings from `check --deep --strict`). When a KPI degrades,
+   the loop's next cycle targets it. Capture rate (discovery arcs in
+   transcripts vs skills actually drafted) is the KPI the distiller run
+   itself reports.
+3. **The knowledge-loop cron — the flywheel as a scheduled run** (§8's
+   LOOP is the seed). Nightly, cheap-model, unattended: mine new
+   transcripts/agent journals for discovery arcs (long debug loops that
+   converged; ≥N tool calls ending in a fix) → DRAFT skills
+   (`status: draft, certified: []`) for review — capture is a PIPELINE,
+   not a virtue (production evidence: under deadline, SCARS got 12 commits
+   while the skill registry got 0) → run all evals; decay stale
+   certifications (§22.2) → apply the §6 update triggers → ingest
+   retrieval misses → emit the KPI delta. Humans read a diff, not a
+   backlog.
+4. **The critic pass — adversarial QC inside the loop** (§10 is the seed).
+   Every drafted skill/scar gets one adversarial review before activation:
+   executable by a weak model? does the eval discriminate? duplicate or
+   contradiction? poisoning risk (§22.5)? The critic procedure is itself a
+   certified skill, so a cheap model can run it.
+5. **Meta-skills — the recursion base case.** The loop's own procedures —
+   "distill a skill from a transcript" · "review a skill" · "write an
+   eval" · "compile a skill to a script" · "run the knowledge loop" — are
+   themselves skills in the graph, held to the same 1B bar, certified the
+   same way. Once those five are certified for a small model, the entire
+   learning system runs on cheap agents: **the system that improves the
+   fleet is maintained by the fleet.** Frontier models are then spent only
+   on genuinely novel discovery, and everything they discover is pulled
+   down the hardening ladder (§22.4) behind them.
+
+**The completeness test:** disconnect the frontier models for a week. Does
+the fleet still capture what its cheap agents learn, keep its skills true
+(evals re-run, certifications decay honestly), and get measurably better
+at its recurring work? If yes, the system is self-learning. If no, the
+missing mechanism is one of the five above.
