@@ -6,7 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [Unreleased]
+## [0.8.0] — 2026-08-20
+
+> **The knowledge-fabric release** — everything the OrbiVigil multi-agent
+> campaign paid to learn, upstreamed as standard: the multi-agent operations
+> module (capsules · handoff · claims · supervisor, SPEC §17), operational
+> doctrine (runners · shipping · evidence-bearing reports, §18), the
+> data-source ladder (§19), DECISION_GRAPH (§20), the org-wide SCARS overlay
+> (§21), SKILL_GRAPH with measured certification and symptom retrieval (§22),
+> and the closed self-learning loop (§23) — plus AGENTS.md drift escalated to
+> a session-guarded error, cited-anchor and unmapped-dir verification, the
+> boot-context token budget, and per-file update triggers.
 
 ### Added
 
