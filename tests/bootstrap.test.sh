@@ -1088,14 +1088,18 @@ fi
 
 # MCP HTTP transport + token auth (start the server, assert 401 without / 200 with)
 if command -v python3 >/dev/null 2>&1; then
-  HPORT=7399
-  ATLAS_PROJECT="$TMP" "$CLI" mcp --http --port "$HPORT" --token testtok >/dev/null 2>&1 &
+  # Fixed ports collide with whatever the runner already has bound (BUG-11
+  # infra: red on macos-latest CI since 2026-07-11, always green locally) —
+  # ask the OS for a free ephemeral port instead of hardcoding one.
+  HPORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+  HLOG="$(mktemp)"
+  ATLAS_PROJECT="$TMP" "$CLI" mcp --http --port "$HPORT" --token testtok >"$HLOG" 2>&1 &
   HPID=$!
   if python3 - "$HPORT" testtok <<'PY'
 import sys, time, urllib.request as u
 port, token = sys.argv[1], sys.argv[2]
 base = "http://127.0.0.1:%s" % port
-for _ in range(25):
+for _ in range(50):
     try: u.urlopen(base + "/health", timeout=1); break
     except Exception: time.sleep(0.2)
 else: sys.exit(2)
@@ -1108,8 +1112,15 @@ except u.HTTPError as e:
 r = u.urlopen(u.Request(base + "/", data=body, headers={"Content-Type": "application/json", "Authorization": "Bearer " + token}), timeout=3)
 sys.exit(0 if b"atlas_orient" in r.read() else 4)
 PY
-  then _pass "mcp --http: token auth (401 without, 200+tools with)"; else _fail "mcp --http auth"; fi
+  then _pass "mcp --http: token auth (401 without, 200+tools with)"
+  else
+    _fail "mcp --http auth"
+    echo "  -- server log ($HLOG) --" >&2
+    cat "$HLOG" >&2
+  fi
   kill "$HPID" 2>/dev/null
+  wait "$HPID" 2>/dev/null
+  rm -f "$HLOG"
 else
   _pass "mcp --http test skipped (no python3)"
 fi
