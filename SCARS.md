@@ -13,6 +13,7 @@
 ---
 
 ## Table of contents
+- [§PIPE-EATS-EXIT-CODE — a gate piped into tail/grep gates on the pipe's LAST status, not the gate's](#pipe-eats-exit-code)
 
 **Process / hygiene**
 - [§NO-COAUTHOR — never add AI-assistant attribution to commits](#no-coauthor)
@@ -393,3 +394,26 @@ as turns (same cache caveat as [[§BENCH-TOKEN-SUM-CACHE]] → headline **turns*
 
 Scaffold with `atlas anchor add NAME "summary"`, fill in Symptom / Root cause /
 Do NOT / Do / Where, and cite the anchor in the commit that fixes it.
+
+---
+
+<a id="pipe-eats-exit-code"></a>
+### §PIPE-EATS-EXIT-CODE — a gate piped into tail/grep gates on the pipe's LAST status
+
+**Symptom.** A failing test suite or `atlas check` "passes" its gate and the
+commit lands anyway — twice in one session (2026-08-20): the suite printed
+`1 failed` and the strict check printed a warning, yet the `&&`-chained
+`git commit` still ran.
+
+**Root cause.** Without `pipefail`, a pipeline's exit status is the LAST
+command's — `bash tests/... | tail -3 && git commit` gates on `tail`
+(always 0), not the tests.
+
+**Do NOT.** `test-or-check | tail/grep && commit` as a done-gate.
+
+**Do.** Capture the real status: `cmd > /tmp/out 2>&1; rc=$?; tail /tmp/out;
+[[ $rc -eq 0 ]] && commit` — or run the gate un-piped.
+
+**Where.** any agent's commit chain; tests/bootstrap.test.sh consumers.
+
+**Shipped in.** <pending>

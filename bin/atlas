@@ -1055,7 +1055,10 @@ cmd_check() {
   # ids from both files, lowercased for comparison.
   if [[ $strict -eq 1 ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     local cited_raw known_ids unknown_cited=""
-    cited_raw="$(git log -30 --format=%B 2>/dev/null | grep -oE '§[A-Z][A-Z0-9]*(-[A-Z0-9]+)*' | sort -u)" || cited_raw=""
+    # Anchors are kebab (§3.3: "uppercase, kebab-separated"), so require at
+    # least one hyphen — single capitals (§A, §G, §B…) are ATLAS.md's own
+    # section vocabulary, and bare words (§14) are SPEC refs, not citations.
+    cited_raw="$(git log -30 --format=%B 2>/dev/null | grep -oE '§[A-Z][A-Z0-9]*(-[A-Z0-9]+)+' | sort -u)" || cited_raw=""
     if [[ -n "$cited_raw" ]]; then
       known_ids=""
       [[ -f "$scars" ]] && known_ids="$known_ids

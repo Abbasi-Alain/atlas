@@ -2106,6 +2106,16 @@ TMP_SG3="$(mktemp -d)"; ( cd "$TMP_SG3" && git init -q -b main 2>/dev/null && "$
   && _pass "failing eval records pass:false + exit 1; symptom find hits; a miss logs loop demand" || _fail "skill test/find behavior"
 rm -rf "$TMP_SG3"
 
+# BUG-13 hardening: single-letter §A/§G (ATLAS section vocabulary) and the
+# §ANCHOR placeholder never flag; a hyphenated fake still does.
+TMP_CA1="$(mktemp -d)"; ( cd "$TMP_CA1" && git init -q -b main 2>/dev/null && "$CLI" init >/dev/null 2>&1
+  git add -A >/dev/null 2>&1 && git -c user.email=t@t -c user.name=t commit -qm "docs: trimmed §A and §G; cite your §ANCHORS" >/dev/null 2>&1
+  ! "$CLI" check --strict --json | grep -q CITED_ANCHOR_MISSING || exit 1
+  git -c user.email=t@t -c user.name=t commit -q --allow-empty -m "fix per §TOTALLY-FAKE-ONE" >/dev/null 2>&1
+  "$CLI" check --strict --json | grep -q CITED_ANCHOR_MISSING ) \
+  && _pass "citation scan ignores §A/§G vocabulary + placeholders, still flags hyphenated fakes" || _fail "citation-scan hardening"
+rm -rf "$TMP_CA1"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]] || exit 1
