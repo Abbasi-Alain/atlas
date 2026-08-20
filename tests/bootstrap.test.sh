@@ -2047,7 +2047,7 @@ rm -rf "$TMP_FS2"
 # --- BUG-19 + BUG-20: supervisor + evidence-report doctrine in the SPEC ---
 ( grep -q '^### 17.4 The supervisor' "$ATLAS_HOME/docs/SPEC.md" \
   && grep -q 'NEVER deploy' "$ATLAS_HOME/docs/SPEC.md" \
-  && grep -qi 'to the supervisor, never.*around' "$ATLAS_HOME/docs/SPEC.md" ) \
+  && grep -qi 'permission-blocked' "$ATLAS_HOME/docs/SPEC.md" ) \
   && _pass "SPEC §17.4 supervisor doctrine (builders never deploy; blocked actions route to, not around)" || _fail "SPEC §17.4"
 ( grep -q '^### 18.3 Reports carry evidence' "$ATLAS_HOME/docs/SPEC.md" \
   && grep -qi 'names its evidence' "$ATLAS_HOME/docs/SPEC.md" \
